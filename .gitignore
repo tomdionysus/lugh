@@ -1,0 +1,29 @@
+# CMake build trees. Built on the target at deploy time, never committed.
+/build/
+/build-*/
+
+# The editor's view of the build: a link into build/, and clangd's index.
+/compile_commands.json
+/.cache/
+
+# The dashboard's dependencies and build output, produced at deploy time.
+/dashboard/node_modules/
+/dashboard/build/
+/dashboard/.react-router/
+
+# The development certificate and key that scripts/dev-cert.sh writes.
+/config/dev/
+
+# macOS directory metadata.
+.DS_Store
+._*
+
+# Never commit secrets. secrets.yaml lives only on a node.
+.env
+.env.*
+secrets.yaml
+*.pem
+*.cred
+
+# Personal, per-machine agent rules (basemind block lives here)
+CLAUDE.local.md

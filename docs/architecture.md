@@ -1,0 +1,381 @@
+# Architecture
+
+Lugh is an authentication and directory server, and the single sign-on for every Blackraven project (T.O.M.S, blackraven-admin, Macha, AthenaSIP and those that follow). It holds the identities of people and services, authenticates people with two factors (a password and a second factor, or a passkey), and issues tokens that the applications it has been told to allow can trust. It speaks OAuth 2 (with OpenID Connect on top) to applications, a RESTful management API to administrators and automation, and a limited, read-mostly LDAP to legacy software that only knows how to bind and search. It also ships a native C++20 library, so a C++ project that includes Lugh as a subproject can authenticate users and verify tokens in process. Several Lugh nodes form one cluster over a replicated, encrypted table store built on the same technology as Macha. Lugh is a security product first: every byte is encrypted in flight and at rest, every parser is fuzzed, and the process runs with the least privilege the host can give it.
+
+This is the design as understood on 2026-10-18, before any code exists. Nothing here is decided until it moves to "Decided" below; the open questions are at the end.
+
+## What it does
+
+| Surface | Who uses it | What it offers |
+|---|---|---|
+| OAuth 2 / OIDC | Allowed applications, browsers, services | Single sign-on, second factor, consent, access/ID/refresh tokens, back-channel logout, token introspection and revocation, discovery and JWKS |
+| Management API | The dashboard, administrators, automation | CRUD over users, groups, applications, factors, keys, policies; sessions; the audit log; cluster health |
+| Dashboard | Administrators | A React admin interface over the management API, served by Lugh itself |
+| LDAP | Legacy software (mail servers, NAS boxes, VPNs, Linux PAM/SSSD) | Simple bind over TLS, search over users and groups, rootDSE. Read only |
+| `lugh` C++ library | C++ projects that add Lugh as a subproject, first of all the Blackraven projects | A drop-in OIDC relying party (sign-in, callback, token verification against cached JWKS, back-channel logout), the other OAuth client flows, and optionally in-process authentication against an embedded store |
+
+Lugh is not a general-purpose LDAP server, a certificate authority for the outside world, or a SAML IdP (SAML stays out unless it is asked for).
+
+## Components
+
+```
+               browsers / apps          admins           legacy clients
+                     |                    |                    |
+                 HTTPS :443          HTTPS :443           LDAPS :636
+                     |                    |                    |
+             +-------+--------------------+-------+     +------+------+
+             |  http (Beast, TLS 1.3)             |     | ldap (BER)  |
+             |  /oauth2  /.well-known  /api  /    |     | bind search |
+             +--+-----------+----------+-----+----+     +------+------+
+                |           |          |     |                 |
+             oauth        api     dashboard (from disk)        |
+                |           |                                  |
+             +--+-----------+----------------------------------+--+
+             |  authn: passwords, TOTP, WebAuthn, lockout, policy  |
+             |  directory: users, groups, apps, attributes         |
+             |  tokens: signing keys, JWT, opaque handles          |
+             |  audit: hash-chained, append only                   |
+             +-------------------------+---------------------------+
+                                       |
+             +-------------------------+---------------------------+
+             |  store: sealed tables on Macha's journal + packs     |
+             |  keys: master key -> KEKs -> per-table DEKs          |
+             +-------------------------+---------------------------+
+                                       |
+             +-------------------------+---------------------------+
+             |  cluster: gossip membership, replication, merge      |
+             |  mTLS between nodes  :7443                           |
+             +-----------------------------------------------------+
+```
+
+### Backend (`lugh`)
+
+One C++20 binary, built from a static library `lugh_core` and a `main.cpp` composition root, in the same shape as blackraven-admin.
+
+| Subsystem | Does |
+|---|---|
+| `src/http/` | Boost.Beast server over Asio with OpenSSL, TLS 1.3 only. Router, rate limiter, security headers, request size and time limits, the static file handler for the dashboard |
+| `src/oauth/` | Authorisation, token, introspection, revocation, PAR, device and userinfo endpoints; discovery and JWKS |
+| `src/api/` | The management API, `/api/v1/...` |
+| `src/ldap/` | LDAPv3 listener: a bounded BER decoder, bind, search, rootDSE, unbind. Nothing else |
+| `src/authn/` | Credential verification and the sign-in state machine (password, then second factor), lockout, rate limits, password policy |
+| `src/directory/` | Users, groups, applications, attributes, membership, the mapping to LDAP DNs and OIDC claims |
+| `src/tokens/` | Signing keys and their rotation, JWT encoding and verification, opaque token handles |
+| `src/audit/` | The append-only, hash-chained audit log |
+| `src/store/` | The table store: sealed records, indexes, compaction. Lifted from Macha |
+| `src/crypto/` | AEAD, HKDF, Argon2id, Ed25519/ECDSA, random, constant-time compare, secure memory. One thin layer over OpenSSL 3 |
+| `src/keys/` | The key hierarchy: unsealing the master key at start, KEKs, DEKs, rotation |
+| `src/cluster/` | Node identity, membership, the inter-node transport, replication, merge. Lifted from Macha |
+| `src/system/` | Ports (`Clock`, `Random`, `Environment`, `WorkPool`) and their real adapters |
+| `src/loggers/` | The logger from blackraven-admin |
+
+### Library (`lugh_client`, and optionally `lugh_embedded`)
+
+A separate, installable target with real public headers under `include/lugh/` and a CMake package config, so another project can `add_subdirectory(lugh)` or `find_package(lugh)`. Here Lugh deliberately differs from its siblings: Macha's `macha_core` is private and installs no headers, and blackraven-admin has no `include/` directory. A library for others needs a stable public face.
+
+- **`lugh_client`** (always): fetches and caches discovery and JWKS from a Lugh cluster; verifies access and ID tokens locally (signature, `iss`, `aud`, `exp`, `nbf`, sender constraint); runs the authorisation code + PKCE, client credentials and device flows; introspects opaque tokens; calls the management API. It depends on OpenSSL and Boost only.
+- **`lugh_embedded`** (option, open question): the host process joins the cluster as a non-serving node holding a replica of the directory, so it can authenticate a user name and password locally with no network round trip. That replicates sealed credentials into another process, so it would need its own threat model before anyone builds it.
+
+### Frontend (`dashboard/`)
+
+React 19, React Router 7 in SPA mode, Vite 7 and TypeScript 5.9, laid out like blackraven-admin's `dashboard/app/` (`screens/`, `components/` with paired `.css`, `layouts/`, `hooks/`, `lib/API.ts`). The look follows T.O.M.S:
+
+- Plain CSS on custom properties in `app.css`, with no component library: `--bg #0c0e10`, `--surface #15181c`, `--surface-raised #1c2026`, `--border #272c33`, `--text #e8ebee`, `--text-muted #939da7`, `--good #00cc44`, `--warn #ffb020`, `--bad #ff4d4d`, with `--radius 14px` and `--gap 16px`.
+- Self-hosted Roboto Variable for body text, one display face for the wordmark only, translucent cards, pill navigation, uppercase letter-spaced section labels, and `color-mix()` tints. Dark only.
+- An admin tool needs things T.O.M.S never had, mainly dense tables, forms, confirmation dialogs and diffs of policy changes. They are built in the same tokens and idioms.
+
+The dashboard is same-origin with Lugh, so it does not hold a token in the browser at all. It sends the user through the ordinary `/signin` flow, which sets the Lugh session cookie, and calls `/api/v1` with that cookie plus a CSRF token. The API treats a session the same as a bearer token: the caller's groups and `acr` decide what it may do, and the dashboard requires `phr`. The same `/api/v1` accepts bearer and DPoP tokens from automation. There is no private back door and no token for a cross-site script to steal, which is the same backend-for-frontend shape the Blackraven projects use (see Single sign-on).
+
+The dashboard is served from disk, as in T.O.M.S and blackraven-admin (the maintainer, 2026-10-18):
+
+- `npm ci && npm run build` writes `dashboard/build/client/`, and `cmake --install` copies it to `/usr/local/share/lugh/dashboard`. Install fails with an explanation if the build is missing, and it deletes the old copy first, because Vite fingerprints its assets.
+- The static handler serves only that directory, configured by `static.directory`. `/api`, `/oauth2`, `/signin`, `/.well-known`, `/health` and `/ready` are reserved, so a wrong path there gets a JSON 404, never `index.html`.
+- The installed copy is owned by root and read-only to the `lugh` user. `ProtectSystem=strict` makes it read-only to the service in any case.
+- The handler refuses symlinks, dot-files and any path that resolves outside the directory.
+- Every response carries a strict CSP (`default-src 'self'`, no inline script), `X-Content-Type-Options: nosniff` and `frame-ancestors 'none'`.
+
+In development, Lugh runs with the static handler off, Vite runs on its own and proxies the reserved paths to it, as blackraven-admin does.
+
+## Data
+
+### The store
+
+Lugh reuses Macha's storage and replication technology, not Macha's filesystem:
+
+| From Macha | Use in Lugh |
+|---|---|
+| `SealedJournal`: AES-GCM frames, fsync per append, truncate at the first bad frame | The write-ahead log for every table |
+| `LocalStore`: encrypted append-only packs, tombstones, compaction by rewrite and swap | Table records at rest |
+| AEAD sealing of every record | Every record sealed, with the table name, key and version bound in as associated data, so a record cannot be moved or replayed into another slot. Records are keyed by table key, not content hash, because they are mutable |
+| The replicated user table: full replica on every node, sealed at rest | The model for every table |
+| Gossip membership, node identity, CONTROL and DATA lanes | Cluster membership and replication. The transport is TLS 1.3 with per-node certificates over Asio and OpenSSL, not Macha's X25519 + HKDF handshake: Lugh already needs TLS, and one less hand-rolled protocol is one less thing to get wrong (proposed, with open question 1) |
+| Repair: background convergence of replica counts | Anti-entropy: each node checks it holds every extent and pulls the ones it is missing |
+| Commit DAG with per-author clocks ("dots") and deterministic merge | Merging concurrent writes after a partition |
+
+Tables are `users`, `credentials`, `factors` (TOTP secrets, WebAuthn credentials, recovery codes), `app_passwords`, `groups`, `memberships`, `apps`, `app_access`, `consents`, `sessions`, `grants` (codes, refresh tokens, device codes), `signing_keys`, `policies` and `audit`. Secondary indexes (user name, email, client ID, group name) are derived and rebuilt from the tables, never trusted as authoritative.
+
+**The one change from Macha: every node holds every extent** (the maintainer, 2026-10-18). In Lugh an extent is a sealed pack of table records, and the term is kept so the lifted code reads the same. A Lugh cluster has only a few nodes and the data is small, so there is no DHT placement, no preferred owners, and no `dht.replicas` or `write_copies` setting. The replica count is always every node. That means:
+
+- Placement and `replica_selector` are not lifted. A write is replicated to every live node, and a node that was away catches up from any peer.
+- Any node can serve any read from local disk, with no read ever crossing the network.
+- Losing a node loses no data while one node survives. Adding a node means a full copy, which is cheap at this size.
+- Retention and GC are simpler: an extent is garbage only when it is unreferenced on every node's view of the merged metadata, with no off-node owners to consult.
+
+The code is copied out of Macha and adapted, not linked. `macha_core` is a monolithic private shared library that bundles HTTP, media and FUSE with storage, so it cannot be linked as it stands. `src/storage`, `src/ledger`, `src/contract`, the crypto, membership, the transport and the metadata merge go into Lugh's `src/store` and `src/cluster`, rewritten to blackraven-admin's conventions (IoC ports, `Status`/`Result`, `_` members). Macha's licence headers are stripped, because the maintainer owns the code (the maintainer, 2026-10-18). The "What is lifted, from where" table in `code-style.md` will record each file.
+
+### Consistency, and where eventual is not good enough
+
+Macha is availability-first: every node accepts writes and partitions merge later, by last-write-wins for the user table. That is right for most of a directory, such as a user's display name or a group's description. It is wrong for anything where a lost or merged write is a security hole:
+
+| Data | Rule |
+|---|---|
+| Ordinary attributes | Merge as Macha does, with deterministic last-write-wins per field |
+| Revocations, disabled accounts, deleted keys and clients | A grow-only tombstone set. A merge can never undo a revocation or bring a deleted thing back |
+| Password and credential changes | Versioned. The merge keeps the newest version and also revokes the sessions of every losing branch |
+| Authorisation codes, refresh token rotation, device codes, WebAuthn challenges, TOTP replay windows | Single-use, so they must not be redeemable twice on two sides of a partition. Each is owned by the node that issued it (its node ID is in the handle) and redeemed only there, with other nodes forwarding the request. If the owner is unreachable, the grant fails closed |
+| Lockout counters, rate limits | Per node, summed by gossip. A partition loosens lockout to at most N times the limit, never removes it |
+| Signing keys | Created on one node and published to the others before use, then announced in JWKS before any token is signed with them |
+
+This needs testing hardest of anything here, using Macha's in-process `TestCluster` approach.
+
+### Encryption at rest
+
+- **Master key:** never stored in clear. It is unsealed at start from a systemd credential (`LoadCredentialEncrypted=`, ideally bound to a TPM), or from an operator passphrase via Argon2id on hosts without one. It lives in `mlock`ed memory, is excluded from core dumps, and is wiped on exit.
+- **Keys under it:** each node has its own master key and derives its own KEK from it. The DEKs (one per table and epoch) are cluster-wide, because every node must read every record; each node stores them wrapped under its own KEK. DEKs move between nodes only once, inside the mTLS join handshake when a new node enrols.
+- **Rotation:** rotating a DEK starts a new epoch, and compaction re-seals old records into it. Rotating a node's master key re-wraps only that node's copy of the DEKs. Macha has no rotation, so this part is new.
+- **Credentials:** password hashes are Argon2id (OpenSSL 3.2+), stored inside the sealed record. A copy of the store without the master key therefore gives an attacker neither records nor hashes.
+- **Signing keys:** private signing keys are sealed in the same store. Using a PKCS#11 HSM instead is an option for later.
+
+## Applications
+
+An application is an OAuth client that an administrator has registered and allowed. Only allowed applications can send a user to Lugh to sign in, and Lugh will only ever redirect a user back to an address it has on file for that application.
+
+### What an application has
+
+| Field | Meaning |
+|---|---|
+| `client_id` | Random and public, e.g. `app_7f3k...`. Never reused after deletion |
+| Name, icon, home URL | Shown on the sign-in and consent pages, so the user can see who is asking |
+| Kind | `web` (a server-side backend: confidential), `spa` or `native` (public, PKCE only), `service` (machine to machine, no user), `api` (a resource server: it defines scopes and is an `aud`, and does not sign users in itself). One registration can be both a client and an `api`, as T.O.M.S is |
+| Client authentication | Confidential clients use `private_key_jwt` (preferred; the app holds the private key and Lugh holds the public one) or `tls_client_auth`. `client_secret_basic` is allowed only if policy permits; the secret is shown once, stored as an Argon2id hash, and rotated with an overlap period |
+| Redirect URIs | Exact matches only: no wildcards, no prefix matches. `https` only, except loopback `http://127.0.0.1/...` for native apps, where RFC 8252 requires the port to be ignored because the app picks it at run time |
+| Post-logout and back-channel logout URIs | Where Lugh sends the user after sign-out, and where it POSTs the signed logout token |
+| Grants | The subset of authorisation code, refresh token, device code and client credentials the app may use |
+| Scopes and audience | What the app may ask for (`openid`, `profile`, `email`, `groups`, `offline_access`, plus app-defined API scopes) and the `aud` its access tokens carry |
+| Who may sign in | `app_access`: the groups whose members may use this app. Anyone else is refused after authenticating, and no code or token is issued |
+| Role mapping | Groups mapped to the app's own role names, sent as a `roles` claim for that audience only. Each project keeps its own role model: Macha's `media_viewer` and `manage_users`, AthenaSIP's `manage-realms`, T.O.M.S's `operator` and `hub` |
+| Assurance | The minimum `acr` the app requires (see Two-factor authentication) and a `max_age` after which the user must sign in again |
+| First party | First-party apps skip the consent screen, because the administrator granted consent by registering them. Third-party apps always show it |
+| Sender constraint | Whether tokens must be bound by DPoP or mTLS |
+| Token lifetimes | Access token (default 5 minutes), refresh token (idle and absolute), ID token |
+| State | `enabled` or `disabled`. Disabling an app revokes every grant and token issued to it |
+
+### Rules
+
+- Applications are created only by an administrator, through the dashboard or `/api/v1/apps`. Dynamic client registration (RFC 7591) is off, and there is no way to turn it on.
+- An unknown `client_id`, a disabled app, or a `redirect_uri` that does not match exactly gets an error page on Lugh. Lugh never redirects to an address it cannot vouch for.
+- Every application change is audited, with a before-and-after diff shown in the dashboard.
+- Each app sees a stable `sub` for a user that never changes, even if the user name or email changes. Applications key their local user records on `sub`, never on email.
+
+## Single sign-on for Blackraven projects
+
+The user signs in once, at Lugh. Lugh keeps its own session (`__Host-lugh_session`), and every other allowed app the user opens bounces through `/oauth2/authorize` and back without a prompt, provided:
+
+- the user is still allowed into that app;
+- the session's `acr` meets the app's minimum;
+- the session is younger than the app's `max_age`.
+
+If any of these fails, Lugh asks for exactly what is missing (usually the second factor) and no more.
+
+### How a project plugs in
+
+Every Blackraven server is C++, so each one links `lugh_client` as a subproject and uses `lugh::client::RelyingParty`. It does the OIDC work:
+
+- builds the authorisation request with `state`, `nonce` and PKCE;
+- handles the callback and redeems the code using the app's `private_key_jwt`;
+- verifies the ID token against cached JWKS and checks `iss`, `aud`, `exp`, `nonce` and `acr`;
+- verifies back-channel logout tokens.
+
+The project then does what it already does after a password login: mint its own opaque session and set its own cookie. For these server-side projects the browser never sees a Lugh token. This "backend for frontend" shape fits every project's existing session design, so the change is to the login step only. Macha's browser, mobile and TV clients are the exception: they are public clients that hold a Lugh token themselves and present it to a node:
+
+| Project | Kind of app | How it signs in through Lugh | Notes |
+|---|---|---|---|
+| T.O.M.S dashboard | `web` | OIDC code flow in `toms_api`, which then sets `toms_session`. It fits the existing `IAuthProvider` `Method::redirect` path | The build node kiosk keeps loopback trust and never touches Lugh. The site is plain HTTP over WireGuard, so redirect URIs need TLS on the site (open question) |
+| T.O.M.S `hub` account | `service` calling T.O.M.S as an `api` | Client credentials from blackraven-admin, with an access token for `aud=toms` scoped `toms:dns` | Replaces the hub password that blackraven-admin keeps in `secrets.yaml`. toms verifies the JWT offline with `lugh_client` |
+| blackraven-admin | `web` | OIDC code flow in the backend, which then sets `blackraven_session` | `Caller` needs a `service` kind for client-credentials callers |
+| Macha nodes | `api` (`aud=macha`) | A Macha client gets a Lugh access token for `aud=macha`, then presents it to any Macha node at `POST /api/v1/session`. The node verifies it offline with `lugh_client` through a new `CredentialValidator` and mints a Macha session | The user is provisioned into Macha's gossiped user table on first sign-in, keyed by `sub`. Anonymous sessions are unchanged; Lugh only upgrades an anonymous session to a named one |
+| macha-client (browser) | `spa` | Authorisation code and PKCE, then hand the token to a node as above | |
+| macha-client-rn (mobile) | `native` | Authorisation code and PKCE through the system browser (AppAuth), returning on a claimed HTTPS redirect (universal or app link) | The token stays in `expo-secure-store` |
+| macha-client-rn-tv (Android TV) | `native`, device grant enabled | Device authorisation grant: the TV shows a code and a QR, and the user approves on a phone, with 2FA, at `/signin/device` | This also gets rid of typing a password with a remote. Its token should move to the Android Keystore |
+| AthenaSIP admin API and athenasip-admin | `web` | OIDC code flow in AthenaSIP, which then mints its existing admin Bearer session | |
+| AthenaSIP subscribers (phones, softphone) | none | Unchanged: SIP Digest against HA1 | OAuth cannot replace Digest for phones. Lugh could later provision SIP credentials, but that is not planned |
+
+### Signing out and revocation
+
+- **Signing out:** signing out at Lugh, or at any app that calls Lugh's end-session endpoint, ends the Lugh session. Lugh then sends an OIDC back-channel logout token to every app the session signed into, and each app deletes its own session for that `sid`. Every ID token carries `sid` so the app can make that link. There is no front-channel logout, because it depends on third-party iframes.
+- **Disabling and resets:** disabling a user, removing them from an app's groups, or resetting their factors sends the same logout to every app and revokes their refresh tokens.
+- **Bounded app sessions:** an app must not let its own session outlive the Lugh session it came from. The projects' sessions today last 7 days idle and 30 absolute, which is far longer than a Lugh session. So `RelyingParty` keeps the refresh token server-side and refreshes it on a bounded interval (default 15 minutes); a refresh that fails because the Lugh session or grant is gone ends the app session. Back-channel logout makes this prompt; the refresh makes it certain.
+
+### When Lugh is unreachable
+
+Each project keeps one break-glass local account, created from its own command line as today (e.g. AthenaSIP's `--add-user`), for when Lugh is down. Local password login is off for everyone else once a project is on Lugh. Sign-ins with the break-glass account are audited by the project and should alert.
+
+## Two-factor authentication
+
+Every person signs in with two factors: a password and a second factor, or a passkey with user verification, which is two factors in one. Service accounts, which use client credentials, have no password and no second factor; their key is their credential.
+
+### Factors
+
+| Factor | Details |
+|---|---|
+| WebAuthn and passkeys | Security keys and platform authenticators. With user verification, a passkey counts as phishing-resistant multi-factor on its own, so the user can skip the password entirely. Lugh stores the credential ID, public key, sign count, AAGUID and transports. A sign count that goes backwards is refused and flagged |
+| TOTP | RFC 6238, SHA-1, 6 digits, 30-second steps, for compatibility with every authenticator app. One step of drift either way. A code already used (same or earlier step) is refused, so codes cannot be replayed. The secret is sealed under its own table DEK and shown only once, at enrolment, as a QR code |
+| Recovery codes | Ten single-use codes, generated at enrolment, shown once, and stored as Argon2id hashes. Using one is audited and tells the user how many are left |
+| Not offered | SMS and email codes, because of SIM swaps and phishable inboxes |
+
+### Policy
+
+Policy is set globally, then per group, then per app, and the strictest wins:
+
+- **Assurance levels:** sessions carry an `acr` of `urn:lugh:acr:pwd` (password only), `urn:lugh:acr:mfa` (password and TOTP or recovery code) or `urn:lugh:acr:phr` (phishing-resistant: WebAuthn). The `amr` claim (RFC 8176: `pwd`, `otp`, `hwk`, `swk`, `user`, `pin`) records what was used.
+- **The default** is `mfa` for everyone. Lugh's own dashboard, blackraven-admin and anything else that administers infrastructure require `phr`.
+- **Step-up:** an app can ask for a higher level or a fresh sign-in with `acr_values` or `max_age`. Lugh prompts only for what is missing.
+
+### Enrolment and recovery
+
+- **Enrolment:** a new user signs in with a one-time enrolment link (from an administrator, or from the bootstrap credential for the first admin), sets a password, and must enrol a second factor before any app gets a token. While a user is enrolling, the session is limited to enrolment. The first admin must enrol a WebAuthn credential, because the dashboard requires `phr`, so `lugh init` is not finished until that has happened.
+- **Adding and removing factors:** adding or removing a factor requires re-authenticating with an existing factor, is audited, and notifies the user. Removing the last factor is refused while policy requires one.
+- **Lost factors:** a user who has lost every factor uses a recovery code. Without one, an administrator resets the factors; the administrator must step up to `phr` to do so, and the reset is audited, revokes every session and token the user has, and makes them enrol again.
+- **No device trust:** there is no "trust this browser for 30 days". The Lugh session is what carries the second factor, and it has an absolute lifetime.
+
+### Limits
+
+- **Attempts:** five wrong codes end the sign-in attempt, and the user starts again from the password. Repeated failures back off per account and per source address, as for passwords.
+- **Partitions:** the TOTP "last used step" is a single-use record, so it follows the single-use rule in Data. A code cannot be replayed on the other side of a partition.
+
+### LDAP and the second factor
+
+An LDAP simple bind cannot carry a second factor. So for any user whose policy requires one, Lugh refuses their main password over LDAP. Instead, the user (or an administrator) creates **app passwords**:
+
+- they are random, shown once and stored as Argon2id hashes;
+- each is limited to LDAP and, optionally, to named source networks;
+- each is named for the device that uses it, and can be revoked on its own.
+
+LDAP service accounts work the same way: a service account has no password of its own, so an app password is the only thing it can bind with.
+
+## Security
+
+### In flight
+
+- **Clients:** TLS 1.3 only on HTTPS, with HSTS. Certificates come from files the operator supplies, with ACME as an open question.
+- **LDAP:** LDAPS on 636, or StartTLS on 389 with every operation except StartTLS refused until TLS is up. Plain-text simple bind is never accepted.
+- **Between nodes:** TLS 1.3 with mutual authentication. Macha uses one shared cluster key and cannot revoke a single node, which is not acceptable for an identity server. Lugh gives each node its own key pair signed by a cluster CA that Lugh itself holds, so removing a node revokes its certificate and the others stop talking to it (proposed, open question 1).
+- **Outbound:** calls such as webhooks and federation are TLS-verified with no option to turn verification off.
+
+### OAuth profile
+
+The profile follows the OAuth 2.1 draft and the OAuth 2.0 Security BCP (RFC 9700):
+
+| Area | Rule |
+|---|---|
+| Grants | Authorisation code with mandatory PKCE (S256), client credentials, refresh token, device authorisation (RFC 8628). No implicit grant, no password grant |
+| Redirect URIs | Matched exactly against the registered list |
+| Requests | Pushed authorisation requests (RFC 9126) supported, and required for confidential clients if policy says so |
+| Token binding | DPoP (RFC 9449) or mTLS (RFC 8705), so a stolen token is useless |
+| Refresh tokens | Rotated on every use. Reusing an old one revokes the whole family |
+| Access tokens | Short-lived JWTs (RFC 9068), or opaque handles per client. Signed with ES256 by default, because every client library supports it; EdDSA (Ed25519) is available per app for clients that do |
+| Other endpoints | Introspection (RFC 7662), revocation (RFC 7009), discovery (RFC 8414 and OIDC Discovery), JWKS |
+| OIDC | Core: ID token, userinfo, `nonce`, `acr`/`amr`, `max_age`. RP-initiated logout and back-channel logout |
+| Client authentication | `private_key_jwt` or `tls_client_auth`, with `client_secret_basic` allowed only by policy. Public clients have no secret and must use PKCE |
+
+### Authentication
+
+- **Passwords:** Argon2id, with a minimum length and a breached-password check against a local list. The second factor is described in Two-factor authentication above.
+- **Lockout and rate limits:** per account and per source address, using back-off rather than hard lockout so an attacker cannot lock users out on purpose.
+- **Browser sessions:** `__Host-` cookies that are `Secure`, `HttpOnly` and `SameSite=Lax`, with server-side session records. CSRF tokens protect every form.
+- **Comparisons:** every comparison of a secret is constant time.
+
+### The process and the build
+
+- **Compiler and linker hardening:** `-D_FORTIFY_SOURCE=3`, `-D_GLIBCXX_ASSERTIONS`, `-fstack-protector-strong`, `-fstack-clash-protection`, PIE, `-Wl,-z,relro,-z,now,-z,noexecstack`, plus `-fcf-protection` on x86-64 and `-mbranch-protection=standard` on arm64. blackraven-admin has none of these; Lugh turns them all on by default.
+- **Warnings:** `-Wall -Wextra -Wpedantic -Werror`, plus Clang's `-Werror=thread-safety` as in Macha.
+- **Sanitisers and fuzzing:** ASan/UBSan and TSan presets that run routinely, not only before a release. Every parser has a libFuzzer target: BER, JSON, JWT, HTTP request line and headers, form bodies, the LDAP filter grammar and sealed record frames.
+- **systemd:** the unit uses everything blackraven-admin's does (`ProtectSystem=strict`, `NoNewPrivileges`, `MemoryDenyWriteExecute`, `SystemCallFilter`, `RestrictAddressFamilies` and the rest). It adds `CAP_NET_BIND_SERVICE` only for 443 and 636, `LoadCredentialEncrypted` for the master key (systemd 250 or later, which Ubuntu 26.04 has), `LimitCORE=0`, and a dedicated `StateDirectory`.
+- **Secrets in memory:** wiped with `OPENSSL_cleanse` and never logged. The logger has a redaction type that secrets are wrapped in, so passing one to a log call does not compile.
+- **Audit log:** every authentication, token issue, admin change and key operation goes to an append-only audit table. Each entry carries the hash of the one before, so deletion or editing is detectable, and the log can be exported for an external SIEM.
+- **Dependencies:** system `find_package` only, as in blackraven-admin, with nothing new added without asking.
+
+## HTTP surface
+
+| Path | What |
+|---|---|
+| `/.well-known/openid-configuration`, `/.well-known/oauth-authorization-server` | Discovery |
+| `/oauth2/jwks` | Public signing keys |
+| `/oauth2/authorize`, `/oauth2/par`, `/oauth2/token`, `/oauth2/introspect`, `/oauth2/revoke`, `/oauth2/device`, `/oauth2/userinfo`, `/oauth2/logout` | OAuth and OIDC |
+| `/signin/...` | The server-rendered sign-in, second factor, consent, enrolment and device-approval (`/signin/device`) pages. They are deliberately not part of the SPA, so they work with no JavaScript beyond one external WebAuthn script, which the CSP allows |
+| `/api/v1/...` | The management API: JSON; the Lugh session cookie with a CSRF token (the dashboard) or bearer and DPoP tokens (automation); scoped permissions; `{"error":{"code","message"}}` on failure; ETags for optimistic concurrency |
+| `/health`, `/ready` | Liveness and readiness, revealing nothing |
+| `/` | The dashboard, from `static.directory` |
+
+## LDAP surface
+
+| Item | Scope |
+|---|---|
+| Operations | `BindRequest` (simple, over TLS only), `SearchRequest`, `UnbindRequest`, `ExtendedRequest` for StartTLS and "Who am I?". Everything else gets `unwillingToPerform` |
+| Tree | Fixed and generated from the directory: `dc=<domain>` with `ou=people` and `ou=groups`. Entries use `inetOrgPerson`, `posixAccount` and `groupOfNames` attributes, including `memberOf`. `posixAccount` needs `uidNumber`, `gidNumber` and `homeDirectory`, so Lugh allocates each user and group a stable number from a configured range and never reuses one |
+| Filters | Equality, presence, substring, and/or/not, with bounded depth and size |
+| Limits | Size, time and paging limits on searches |
+| Access | Anonymous bind is off. Service accounts that may search are granted it explicitly. Users whose policy requires a second factor bind with an app password, never their main password |
+
+## Configuration
+
+YAML, layered as in blackraven-admin: `config.yaml`, then `secrets.yaml` beside it, then `LUGH_*` environment variables, then the CLI. Unknown keys are warned about and bad values are refused, naming their source. The master key never appears in any of these: it comes in as a systemd credential, or as a passphrase typed at start on a host without one (development on macOS, for instance), and nowhere else.
+
+## Install and the host
+
+`sudo cmake --install build-release` is the whole deployment, as in blackraven-admin:
+
+- the binary goes to `/usr/local/bin/lugh`, the config to `/usr/local/etc/lugh`, the dashboard to `/usr/local/share/lugh/dashboard`, state to `/var/lib/lugh` (0700, owned by user `lugh`) and the unit to `/etc/systemd/system/lugh.service`;
+- `deploy/host-setup.sh` then creates the user and sets permissions.
+
+Docker is not used. A first node is initialised with `lugh init`, which creates the node's master key, the cluster CA (if open question 1 goes that way) and the first admin's one-time enrolment credential. Further nodes join with a one-time enrolment token and receive the DEKs over the join handshake.
+
+## Repository layout
+
+```text
+src/<subsystem>/  the service: headers and sources side by side, and main.cpp
+include/lugh/     the public headers of the client library, and nothing else
+dashboard/        React admin dashboard (React Router in SPA mode), installed beside the binary
+config/           config.yaml, no secrets
+deploy/           the systemd unit and host setup
+tests/            GoogleTest, mirroring src/; cluster tests; the shutdown test
+fuzz/             libFuzzer targets, one per parser
+scripts/          the IoC check and other build-time checks
+docs/             how it works
+TODO/             now and next (ACTIVE.md), and what shipped (COMPLETE.md)
+```
+
+Conventions are blackraven-admin's: C++20 with no extensions; CMake presets `debug`, `release`, `asan`, `tsan`, plus `fuzz`; sources listed explicitly; `lugh::<subsystem>` namespaces; PascalCase types and snake_case everything else; `_`-prefixed private members; `#pragma once`; includes rooted at `src/`; constructor-injected ports with one composition root; `Status`/`Result<T>` with no exceptions across component boundaries; and `.clang-format` set to Google with a 160-column limit.
+
+## Decided, 2026-10-18
+
+- **The dashboard is served from disk**, installed to `/usr/local/share/lugh/dashboard`, as in T.O.M.S and blackraven-admin. It is not compiled into the binary.
+- **Macha's code is copied into Lugh and adapted**, not linked or split into a shared library. Macha's licence headers are stripped; the maintainer owns the code.
+- **Every node holds every extent.** Clusters are small and the data is small, so there is full replication with no DHT placement.
+
+## Still open
+
+1. **Node identity:** per-node certificates from a cluster CA (proposed), or Macha's shared cluster key with per-node keys added on top?
+2. **Single-use grants:** is "owned by the issuing node, fail closed if it is unreachable" acceptable? With every node holding everything and only a few nodes, a majority quorum write for just these tables is now cheap, and it would let any node redeem a grant while a majority is up.
+3. **OIDC:** in scope from the start (proposed), or plain OAuth 2 first?
+4. **The C++ library's embedded mode:** the client side (`RelyingParty`, token verification, flows) is now required for SSO. Is the embedded mode, which holds a replica of the directory in the host process, still wanted? Full replication makes it simpler, but it puts every sealed credential into that process.
+5. **LDAP:** read-only bind and search (proposed), or are password changes over LDAP (the Password Modify extended operation) needed? Is TLS 1.2 needed for old LDAP clients?
+6. **Federation:** should Lugh sign users in through upstream identity providers (Google, Microsoft, another OIDC provider)? It is not planned here.
+7. **Certificates:** ACME for the public TLS certificate, or operator-supplied files only?
+8. **Target platform:** Linux (Ubuntu 26.04, GCC 15) as for blackraven-admin, with macOS for development only?
+9. **Second factor for everyone:** `mfa` as the default for every person, with `phr` (WebAuthn) for infrastructure admin apps (proposed)? Or optional for some groups?
+10. **T.O.M.S sites:** sites run plain HTTP over WireGuard. Do they get TLS for the OIDC redirect, or does T.O.M.S sign in through Lugh only at the hub?
+11. **Break-glass accounts:** one local account per project with local login off for everyone else (proposed), or keep local login available as well?
+12. **Macha:** the client gets a Lugh token and exchanges it at a node for a Macha session (proposed), or Macha accepts Lugh access tokens directly on every request?
+13. **AthenaSIP subscribers:** leave SIP Digest entirely outside Lugh (proposed), or have Lugh hold and provision SIP credentials later?
+14. **Where Lugh lives:** one public hostname for the whole fleet (e.g. `id.blackraven.co.nz`)? Each Blackraven app's redirect URI and the `iss` claim depend on it.

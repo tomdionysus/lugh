@@ -1,0 +1,29 @@
+#pragma once
+
+#include <memory>
+#include <string>
+
+#include "loggers/logger.h"
+
+namespace lugh::loggers {
+
+// Prefixes every line with "(scope) ". Each component wraps the logger it is given in
+// one of these, so the journal says which part of the service spoke.
+class LoggerScoped : public Logger {
+ public:
+  LoggerScoped(std::string scope, std::shared_ptr<Logger> logger);
+
+  void debug(const std::string& log) override;
+  void info(const std::string& log) override;
+  void warn(const std::string& log) override;
+  void error(const std::string& log) override;
+  void raw(const std::string& log) override;
+  std::shared_ptr<Logger> base_logger() override;
+  void set_level(LogLevel level) override;
+
+ private:
+  std::string _scope;
+  std::shared_ptr<Logger> _logger;
+};
+
+}  // namespace lugh::loggers

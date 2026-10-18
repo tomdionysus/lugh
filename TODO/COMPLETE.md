@@ -1,0 +1,17 @@
+# Complete
+
+What shipped, newest first, with the date and why.
+
+## 2026-10-18: P1, skeleton (not committed)
+
+- **Build**: CMake 3.23+ with the presets `debug`, `release`, `asan`, `tsan` and `fuzz`; `lugh_core` (static), `lugh` and `lugh_tests`; `-Wall -Wextra -Wpedantic -Werror` and Clang's thread-safety errors on by default; hardening on by default (`_FORTIFY_SOURCE=3` outside Debug and sanitizers, `_GLIBCXX_ASSERTIONS`, libc++ fast hardening, `-fstack-protector-strong`, `-fstack-clash-protection` where it exists, CET or PAC/BTI by architecture, PIE, and `relro`/`now`/`noexecstack` on Linux), each flag probed under `-Werror` first because Apple's clang accepts some and then warns they did nothing. Boost 1.87+, OpenSSL 3, yaml-cpp, GoogleTest, Python 3.
+- **Service**: Beast over TLS 1.3 and nothing older, with no plaintext listener and the TLS pair required by the config loader; a handshake timeout; the security headers (HSTS, nosniff, CSP, Referrer-Policy) set on every response after the middleware; `Server: Lugh` and no version anywhere a stranger can read it. The router with open routes, path parameters, 404/405 and per-address rate limits; `/health` and `/ready` saying ok and nothing else. `ClientAddress` trusts no proxy unless `proxy.trusted_networks` names it. Layered config (file, `secrets.yaml`, `LUGH_*`, CLI) with unknown keys warned and bad values refused naming their source. `Secret` (`core/secret.h`): a type that converts to nothing, so a secret cannot reach a log line, with wiping and constant-time comparison. Ports `Clock`, `Random`, `Environment` with system adapters. Core dumps refused by `main`.
+- **Tests**: 89 unit tests; the shutdown test (makes its own certificate, speaks TLS, SIGTERM and SIGINT exit 0 within 5 s); the IoC check. All green under `debug`, `asan` and `tsan`. HTTP tests run the real server on port 0 over TLS with an in-process self-signed certificate (`tests/helpers/test_certificate.h`), and prove TLS 1.3 is negotiated, TLS 1.2 and plaintext are refused, and the headers are present. End to end: `scripts/dev-cert.sh` then `./build/lugh --config config/config.yaml`; `curl -sk` sees `{"status":"ok"}`, `--tls-max 1.2` fails the handshake, `http://` gets nothing.
+- **Fuzz**: `fuzz/cli_fuzz.cpp` and the `fuzz` preset with a short ctest run per target. Not built here (Apple's clang has no libFuzzer).
+- **Deploy**: `deploy/lugh.service` (user `lugh`, `CAP_NET_BIND_SERVICE` only, `StateDirectory=lugh`, `LimitCORE=0`, blackraven-admin's sandbox) and `deploy/host-setup.sh` (user, config and TLS directory permissions). `cmake --install` installs binary, config, docs and unit, runs host setup and restarts.
+- **Docs**: `docs/code-style.md` (the rules, the Secrets section, IoC, errors, logging, tests, build, and the lifted-from tables: blackraven-admin for nearly all of it, AthenaSIP's `tls_context` for TLS), `README.md`, `.gitignore` (build trees, `config/dev/`, `*.pem`, `*.cred`, `secrets.yaml`, `CLAUDE.local.md`).
+
+## 2026-10-18: P0, initial architecture (not committed)
+
+- **Docs**: `docs/architecture.md` sets out the design as understood: the OAuth 2/OIDC, management API, LDAP and C++ library surfaces; the store built on Macha's sealed journal, packs and replication; the T.O.M.S styling for the dashboard; blackraven-admin's conventions; the security model; and the open questions.
+- **TODO**: `ACTIVE.md` and `COMPLETE.md` created, with the phase plan P1 to P12.

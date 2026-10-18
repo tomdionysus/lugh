@@ -1,0 +1,5 @@
+#pragma once
+
+// Written by CMake from src/build_version.h.in, so the binary reports the version in
+// project() and nothing else.
+#define LUGH_VERSION "@PROJECT_VERSION@"

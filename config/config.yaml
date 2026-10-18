@@ -1,0 +1,39 @@
+#
+# Lugh configuration
+#
+# Installed to /usr/local/etc/lugh/config.yaml on a node. Secrets go in secrets.yaml beside
+# it, in the same shape, and win over this file; never here. The environment (LUGH_*) and
+# the command line win over both, which is how the unit sets the port and the installed
+# certificate paths without editing this file. The master key is in none of these: it
+# arrives as a systemd credential, or is typed at start on a host without one.
+#
+# Run from the repository root in development, after scripts/dev-cert.sh:
+#
+#   ./build/lugh --config config/config.yaml
+#
+
+log:
+  # debug, info, warn or error.
+  level: info
+  # text for the journal, json for a shipper.
+  format: text
+
+server:
+  # Every address. The unit sets port 443.
+  address: "0.0.0.0"
+  port: 8443
+  threads: 2
+
+tls:
+  # There is no plaintext listener: both are required. TLS 1.3 and nothing older. These
+  # are the development pair that scripts/dev-cert.sh writes; the unit points at the
+  # installed ones.
+  certificate: "config/dev/cert.pem"
+  key: "config/dev/key.pem"
+
+proxy:
+  # A request from one of these is taken at the last address in its X-Forwarded-For, the
+  # one that proxy appended. Anything else is taken at its socket's address, and any
+  # forwarding header it sends is ignored: anyone can write one. Empty, as here, means no
+  # proxy is trusted and every request is its socket's address.
+  trusted_networks: []
