@@ -55,7 +55,41 @@ TEST(Cli, AMissingValueIsAnError) {
 
 TEST(Cli, UsageNamesEverySetting) {
   const auto text = lugh::cli::usage();
-  for (const auto* flag : {"--config", "--address", "--port", "--tls-certificate", "--tls-key", "--log-level", "--log-format"}) {
+  for (const auto* flag : {"--config", "--address", "--port", "--tls-certificate", "--tls-key", "--log-level", "--log-format", "--state-directory",
+                           "--passphrase", "init", "systemd-creds"}) {
     EXPECT_NE(text.find(flag), std::string::npos) << flag;
   }
+}
+
+TEST(Cli, ServeIsTheDefault) { EXPECT_EQ(parse({}).command, lugh::cli::Command::serve); }
+
+TEST(Cli, Init) {
+  const auto options = parse({"init", "--config", "/a.yaml", "--state-directory=/var/lib/lugh"});
+  ASSERT_TRUE(options.ok) << options.error;
+  EXPECT_EQ(options.command, lugh::cli::Command::init);
+  EXPECT_FALSE(options.passphrase);
+  EXPECT_EQ(options.state_directory, "/var/lib/lugh");
+
+  const auto after = parse({"--config", "/a.yaml", "init", "--passphrase"});
+  ASSERT_TRUE(after.ok) << after.error;
+  EXPECT_EQ(after.command, lugh::cli::Command::init);
+  EXPECT_TRUE(after.passphrase);
+}
+
+TEST(Cli, PassphraseIsForInitOnly) {
+  const auto options = parse({"--passphrase"});
+  EXPECT_FALSE(options.ok);
+  EXPECT_EQ(options.error, "--passphrase is for init");
+}
+
+TEST(Cli, UnknownCommandsAndStrayWords) {
+  const auto unknown = parse({"serve"});
+  EXPECT_FALSE(unknown.ok);
+  EXPECT_EQ(unknown.error, "unknown command: serve");
+
+  const auto stray = parse({"init", "now"});
+  EXPECT_FALSE(stray.ok);
+  EXPECT_EQ(stray.error, "unexpected argument: now");
+
+  EXPECT_FALSE(parse({"init", "init"}).ok);
 }

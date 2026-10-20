@@ -2,9 +2,10 @@
 """The service stops on SIGTERM and SIGINT, promptly and cleanly.
 
 A shutdown that hangs would stall every deploy for systemd's stop timeout.
-This makes a certificate, starts the real binary on a config of its own on
-a free port, waits until /health answers over TLS, sends the signal, and
-requires it to exit with status 0 within 5 seconds, saying so in its log.
+This makes a certificate and a keyring (`lugh init`, with the master key as
+the credential systemd would load), starts the real binary on a config of its
+own on a free port, waits until /health answers over TLS, sends the signal,
+and requires it to exit with status 0 within 5 seconds, saying so in its log.
 Adapted from blackraven-admin.
 
 Usage: shutdown_test.py PATH_TO_LUGH
@@ -24,6 +25,7 @@ import urllib.request
 CONFIG = """
 log: {{ level: info }}
 tls: {{ certificate: "{cert}", key: "{key}" }}
+state: {{ directory: "{state}" }}
 """
 
 STOP_WITHIN_S = 5.0
@@ -55,10 +57,23 @@ def make_certificate(directory):
     return cert, key
 
 
-def run_once(binary, config_path, sig):
+def clean_environment():
+    return {k: v for k, v in os.environ.items() if not k.startswith("LUGH_") and k != "CREDENTIALS_DIRECTORY"}
+
+
+def initialise(binary, config_path, credentials):
+    """`lugh init`, its master key written where systemd would put the credential."""
+    os.makedirs(credentials, mode=0o700)
+    with open(os.path.join(credentials, "lugh-master-key"), "wb") as key:
+        subprocess.run([binary, "init", "--config", config_path], stdout=key, stderr=subprocess.DEVNULL,
+                       env=clean_environment(), check=True)
+
+
+def run_once(binary, config_path, credentials, sig):
     port = free_port()
     log = tempfile.TemporaryFile()
-    environment = {k: v for k, v in os.environ.items() if not k.startswith("LUGH_")}
+    environment = clean_environment()
+    environment["CREDENTIALS_DIRECTORY"] = credentials
     process = subprocess.Popen(
         [binary, "--config", config_path, "--address", "127.0.0.1", "--port", str(port)],
         stdout=log, stderr=subprocess.STDOUT, env=environment,
@@ -114,9 +129,11 @@ def main():
         cert, key = make_certificate(directory)
         config_path = os.path.join(directory, "config.yaml")
         with open(config_path, "w") as out:
-            out.write(CONFIG.format(cert=cert, key=key))
-        run_once(binary, config_path, signal.SIGTERM)
-        run_once(binary, config_path, signal.SIGINT)
+            out.write(CONFIG.format(cert=cert, key=key, state=os.path.join(directory, "state")))
+        credentials = os.path.join(directory, "credentials")
+        initialise(binary, config_path, credentials)
+        run_once(binary, config_path, credentials, signal.SIGTERM)
+        run_once(binary, config_path, credentials, signal.SIGINT)
     print("all checks passed" if failures == 0 else f"{failures} checks failed")
     return 1 if failures else 0
 

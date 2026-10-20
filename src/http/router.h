@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -7,6 +8,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "core/task.h"
+#include "http/caller.h"
 #include "http/http_types.h"
 #include "http/rate_limiter.h"
 
@@ -19,12 +22,16 @@ struct RouteContext {
   std::unordered_map<std::string, std::string> query;
   std::shared_ptr<const HttpRequest> request;
 
+  // The caller, resolved by the router before the handler runs. On an open route it is
+  // always Kind::none.
+  Caller caller;
+
   // The client's address, as ClientAddress decided it.
   std::string remote;
 
   std::shared_ptr<HttpResponse> response;
 
-  // Sends the response. Call exactly once, on any thread.
+  // Sends the response. Call once, on any thread; a second call does nothing.
   std::function<void()> done;
 
   // By value: callers read a parameter and move the context in the same call, and a
@@ -37,19 +44,29 @@ struct RouteContext {
   const std::string& body() const { return request->body(); }
 };
 
-// Method and path in one table. Routes that need a credential arrive with the session
-// model, declaring who may call them here, so that authorisation is part of declaring a
-// route and not something a handler remembers to do.
+// Method, path and the scope that admits it, in one table: authorisation is part of
+// declaring a route, not something a handler remembers to do. Every handler is a coroutine,
+// spawned on the router's executor once the credential, the limits and the scope have been
+// checked in memory; it awaits the store, the hashing pool or anything else without holding
+// a thread, and answers by calling done(). At most `most_in_flight` run at once: past that
+// a request is answered 503 at once, never queued.
 class Router : public std::enable_shared_from_this<Router> {
  public:
-  using Handler = std::function<void(RouteContext)>;
+  using Handler = std::function<Task<void>(RouteContext)>;
 
-  explicit Router(std::shared_ptr<Throttle> throttle);
+  static constexpr std::size_t kMostInFlight = 256;
+
+  // Without a resolver every protected route answers 401.
+  Router(Executor executor, std::shared_ptr<Throttle> throttle, std::shared_ptr<CallerResolver> resolver = nullptr, std::size_t most_in_flight = kMostInFlight);
 
   std::shared_ptr<Throttle> throttle() const { return _throttle; }
 
   // 429 with the wait in Retry-After (RFC 6585, RFC 9110 10.2.3) and in the message.
   static void write_too_many(const std::shared_ptr<HttpResponse>& response, std::chrono::seconds wait);
+
+  // A route for a caller holding `scope`. Limited by caller once resolved, and by client
+  // address while not.
+  void add(verb method, const std::string& pattern, std::string scope, Handler handler);
 
   // A route that needs no credential: the health check, discovery, and the sign-in that
   // hands credentials out. Limited by client address.
@@ -66,6 +83,9 @@ class Router : public std::enable_shared_from_this<Router> {
   struct Route {
     verb method;
     std::vector<std::string> pattern;
+    // Empty for an open route.
+    std::string scope;
+    bool open = false;
     Handler handler;
   };
 
@@ -78,6 +98,12 @@ class Router : public std::enable_shared_from_this<Router> {
   static std::unordered_map<std::string, std::string> _parse_query(const std::string& query);
 
   std::shared_ptr<Throttle> _throttle;
+  void _spawn(const Handler& handler, RouteContext context);
+
+  Executor _executor;
+  std::shared_ptr<CallerResolver> _resolver;
+  std::size_t _most_in_flight;
+  std::atomic<std::size_t> _in_flight{0};
   std::vector<Route> _routes;
 };
 

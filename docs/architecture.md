@@ -69,6 +69,10 @@ One C++20 binary, built from a static library `lugh_core` and a `main.cpp` compo
 | `src/system/` | Ports (`Clock`, `Random`, `Environment`, `WorkPool`) and their real adapters |
 | `src/loggers/` | The logger from blackraven-admin |
 
+### Concurrency
+
+Lugh is asynchronous from the socket to the disk (the maintainer, 2026-10-18). Every operation that waits is a C++20 coroutine on Boost.Asio, `co_await`ed by its caller, and no thread is held while anything waits. That covers the HTTP server, the route handlers, the directory, authn, the audit log, the store, the keyring and the files and console ports. The io_context's threads run the coroutines. Two small pools take the only work that cannot help but block: `blocking` for system calls on regular files and for the console, which have no readiness to wait on (io_uring could replace it on Linux), and `hashing` for Argon2id, whose two threads bound the memory sign-ins can take under the unit's `MemoryMax`. The store guards each table with an async lock held across its synced append and a plain mutex held only for moments. So a write waits only for earlier writes to the same table, a read never waits for the disk, and a write is not visible until it is durable. The rules are in `code-style.md`, "Errors".
+
 ### Library (`lugh_client`, and optionally `lugh_embedded`)
 
 A separate, installable target with real public headers under `include/lugh/` and a CMake package config, so another project can `add_subdirectory(lugh)` or `find_package(lugh)`. Here Lugh deliberately differs from its siblings: Macha's `macha_core` is private and installs no headers, and blackraven-admin has no `include/` directory. A library for others needs a stable public face.
@@ -112,7 +116,11 @@ Lugh reuses Macha's storage and replication technology, not Macha's filesystem:
 | Repair: background convergence of replica counts | Anti-entropy: each node checks it holds every extent and pulls the ones it is missing |
 | Commit DAG with per-author clocks ("dots") and deterministic merge | Merging concurrent writes after a partition |
 
+As built on one node (P3), each table is one log, `<state>/store/<table>.log`. It has a header sealed under the table's data key, then one AES-256-GCM frame per change, each bound to the table, its data key epoch and the frame before it. Every write is appended and synced before it is acknowledged. A torn tail is cut at the next open. Damage in the middle stops the open, because a record dropped from a security table might be a revocation. Records are held in memory sealed and opened on each read, the indexes are rebuilt at every open, and a table is compacted (rewritten under its current data key, then renamed over the old) once it is more than half superseded or its key is rotated. A removal leaves a tombstone kept for ever, and a removed key can never be written again. Every record has a version, which the API's ETags will use.
+
 Tables are `users`, `credentials`, `factors` (TOTP secrets, WebAuthn credentials, recovery codes), `app_passwords`, `groups`, `memberships`, `apps`, `app_access`, `consents`, `sessions`, `grants` (codes, refresh tokens, device codes), `signing_keys`, `policies` and `audit`. Secondary indexes (user name, email, client ID, group name) are derived and rebuilt from the tables, never trusted as authoritative.
+
+As built for the directory and authentication (P4): a user is keyed by a random 128-bit ID and found by name or address through the `users` table's unique indexes, both folded to lower case on the way in, so `Alice` and `alice` cannot both exist. A group is found by name the same way. Because a removal is final and its key is never used again, anything that can be removed and then made again gets a key of its own each time: a membership is `<group>/<user>/<instance>`, a factor `<user>/<kind>/<instance>`. A group's policy is never removed; clearing it writes "none". The password is one record per user in `credentials`, and its version is the credential version that P8's merge will compare. The audit log is one record per entry in `audit`, keyed by a zero-padded sequence number. Every write the directory makes carries the version it read, so two administrators editing one user cannot silently overwrite each other.
 
 **The one change from Macha: every node holds every extent** (the maintainer, 2026-10-18). In Lugh an extent is a sealed pack of table records, and the term is kept so the lifted code reads the same. A Lugh cluster has only a few nodes and the data is small, so there is no DHT placement, no preferred owners, and no `dht.replicas` or `write_copies` setting. The replica count is always every node. That means:
 
@@ -140,8 +148,9 @@ This needs testing hardest of anything here, using Macha's in-process `TestClust
 
 ### Encryption at rest
 
-- **Master key:** never stored in clear. It is unsealed at start from a systemd credential (`LoadCredentialEncrypted=`, ideally bound to a TPM), or from an operator passphrase via Argon2id on hosts without one. It lives in `mlock`ed memory, is excluded from core dumps, and is wiped on exit.
-- **Keys under it:** each node has its own master key and derives its own KEK from it. The DEKs (one per table and epoch) are cluster-wide, because every node must read every record; each node stores them wrapped under its own KEK. DEKs move between nodes only once, inside the mTLS join handshake when a new node enrols.
+- **Master key:** 32 bytes, never stored in clear. `lugh init` makes it and writes it to standard output, which is piped to `systemd-creds encrypt`; the unit unseals it at each start with `LoadCredentialEncrypted=lugh-master-key` (bound to the TPM where there is one), and Lugh reads it from `$CREDENTIALS_DIRECTORY`. On a host without systemd credentials, `lugh init --passphrase` stretches a typed passphrase with Argon2id instead, and every start asks for it. The master key is used once, to derive the KEK, and then wiped.
+- **Keys under it:** each node has its own master key and derives its own KEK from it (HKDF-SHA256, salted with the keyring's random id). The DEKs (one per table and epoch) are cluster-wide, because every node must read every record; each node stores them wrapped under its own KEK. DEKs move between nodes only once, inside the mTLS join handshake when a new node enrols.
+- **The keyring:** the DEKs live in `<state>/keyring`, a file of their own outside the store they protect, sealed whole with AES-256-GCM under the KEK. Its header (how to find the master key: credential, or passphrase with its Argon2id costs and salt) is bound in as associated data, so a wrong key and an altered file are refused alike. It is written to a temporary, synced and renamed, so a crash leaves the old file or the new one. `lugh init` never replaces one. The KEK and DEKs are held in locked memory (`core/secure_memory.h`), kept out of core dumps and wiped when freed.
 - **Rotation:** rotating a DEK starts a new epoch, and compaction re-seals old records into it. Rotating a node's master key re-wraps only that node's copy of the DEKs. Macha has no rotation, so this part is new.
 - **Credentials:** password hashes are Argon2id (OpenSSL 3.2+), stored inside the sealed record. A copy of the store without the master key therefore gives an attacker neither records nor hashes.
 - **Signing keys:** private signing keys are sealed in the same store. Using a PKCS#11 HSM instead is an option for later.
@@ -243,10 +252,20 @@ Policy is set globally, then per group, then per app, and the strictest wins:
 
 ### Enrolment and recovery
 
-- **Enrolment:** a new user signs in with a one-time enrolment link (from an administrator, or from the bootstrap credential for the first admin), sets a password, and must enrol a second factor before any app gets a token. While a user is enrolling, the session is limited to enrolment. The first admin must enrol a WebAuthn credential, because the dashboard requires `phr`, so `lugh init` is not finished until that has happened.
+- **Enrolment:** a new user signs in with a one-time enrolment link (from an administrator; the first administrator, root, comes from genesis instead), sets a password, and must enrol a second factor before any app gets a token. While a user is enrolling, the session is limited to enrolment. The first admin must enrol a WebAuthn credential, because the dashboard requires `phr`, so `lugh init` is not finished until that has happened.
 - **Adding and removing factors:** adding or removing a factor requires re-authenticating with an existing factor, is audited, and notifies the user. Removing the last factor is refused while policy requires one.
 - **Lost factors:** a user who has lost every factor uses a recovery code. Without one, an administrator resets the factors; the administrator must step up to `phr` to do so, and the reset is audited, revokes every session and token the user has, and makes them enrol again.
 - **No device trust:** there is no "trust this browser for 30 days". The Lugh session is what carries the second factor, and it has an absolute lifetime.
+
+As built (P4):
+
+- **Enrolment starts only from a link.** Signing in with only a password never opens enrolment. If it did, a stolen password would be enough to enrol the thief's own authenticator. A person who set a password through a link and stopped before enrolling a factor needs a new link. Spending the link and setting the password happen together. The password is checked first, so a refused password does not use up the link.
+- **TOTP:** a new secret counts only once a code from it has been typed back. Several TOTP factors may be enrolled. The last step used is stored in the factor's record. A second sign-in racing with the same code reads the same step and loses on the record's version.
+- **Recovery codes:** each is 16 base32 characters (80 bits), shown as `abcd-efgh-ijkl-mnop`, with dashes, spaces and case ignored when typed. They are hashed with Argon2id at OWASP's lightest costs (19 MiB, two passes), because 80 random bits need no slow hash against guessing. The first four characters select the code's slot, so checking a guess costs one hash, not ten. New codes replace the old set only once they are stored. Recovery codes do not count as a second factor; they stand in for one.
+- **Refusals look the same.** An unknown name, a wrong password, a disabled account, a service account and a person who is not enrolled all get the same refusal. Each still costs one Argon2id hash, so the time taken gives nothing away. The audit log records the reason. For an unknown name it records no name, because what is typed into the name box is sometimes a password.
+- **Back-off:** per account, five free failures, then a wait of 1 second that doubles up to 15 minutes. Per address the free failures are twenty, because an office may share one address. Both are forgotten after an hour without a failure. A waiting caller is answered before any hashing, so it costs nothing. A wrong code counts against both, as a wrong password does.
+- **Removing a factor:** a user's last confirmed TOTP factor cannot be removed while their policy needs more than a password. An administrator's reset first marks the user not enrolled, then removes their factors, so a reset that fails part way still stops sign-in. Re-authenticating before a change, notifying the user, and revoking sessions on a reset all need sessions, which arrive in P6.
+- **Not yet:** a password change by its owner and step-up need sessions (P6); WebAuthn and the `phr` level arrive in P11. Until then the highest level anyone can reach is `mfa`, and P6 must refuse an app that requires `phr`.
 
 ### Limits
 
@@ -302,7 +321,7 @@ The profile follows the OAuth 2.1 draft and the OAuth 2.0 Security BCP (RFC 9700
 - **Sanitisers and fuzzing:** ASan/UBSan and TSan presets that run routinely, not only before a release. Every parser has a libFuzzer target: BER, JSON, JWT, HTTP request line and headers, form bodies, the LDAP filter grammar and sealed record frames.
 - **systemd:** the unit uses everything blackraven-admin's does (`ProtectSystem=strict`, `NoNewPrivileges`, `MemoryDenyWriteExecute`, `SystemCallFilter`, `RestrictAddressFamilies` and the rest). It adds `CAP_NET_BIND_SERVICE` only for 443 and 636, `LoadCredentialEncrypted` for the master key (systemd 250 or later, which Ubuntu 26.04 has), `LimitCORE=0`, and a dedicated `StateDirectory`.
 - **Secrets in memory:** wiped with `OPENSSL_cleanse` and never logged. The logger has a redaction type that secrets are wrapped in, so passing one to a log call does not compile.
-- **Audit log:** every authentication, token issue, admin change and key operation goes to an append-only audit table. Each entry carries the hash of the one before, so deletion or editing is detectable, and the log can be exported for an external SIEM.
+- **Audit log:** every authentication, token issue, admin change and key operation goes to an append-only audit table. Each entry carries the hash of the one before, so deletion or editing is detectable, and the log can be exported for an external SIEM. As built (P4), each entry is SHA-256 over a context string, its fields and the previous entry's hash. `verify()` walks the whole chain and names the first entry that is missing, altered or out of order. For now there is one chain per node. P8 gives each node its own sequence, so that two nodes do not contend for one number. Long fields are cut to fit rather than refused, because an action that has happened is recorded whatever its detail says.
 - **Dependencies:** system `find_package` only, as in blackraven-admin, with nothing new added without asking.
 
 ## HTTP surface
@@ -316,6 +335,8 @@ The profile follows the OAuth 2.1 draft and the OAuth 2.0 Security BCP (RFC 9700
 | `/api/v1/...` | The management API: JSON; the Lugh session cookie with a CSRF token (the dashboard) or bearer and DPoP tokens (automation); scoped permissions; `{"error":{"code","message"}}` on failure; ETags for optimistic concurrency |
 | `/health`, `/ready` | Liveness and readiness, revealing nothing |
 | `/` | The dashboard, from `static.directory` |
+
+As built (P5), `/api/v1` covers users, groups, memberships, factors, enrolment links, policies and the audit log, and is described route by route in [api.md](api.md). Its scopes are `lugh:directory.read`, `lugh:directory.write`, `lugh:credentials.write`, `lugh:policies.write` and `lugh:audit.read`. Every route declares its scope in the router, so a handler never forgets to check one. Nothing resolves a caller until P6 brings sessions and OAuth tokens, so until then the API refuses everyone. `PATCH` and `DELETE` on a user or group need `If-Match`: `428` without it, `412` when it is stale. A field a route does not know is refused rather than ignored. Every route handler is a coroutine; see Concurrency below.
 
 ## LDAP surface
 
@@ -362,6 +383,7 @@ Conventions are blackraven-admin's: C++20 with no extensions; CMake presets `deb
 - **The dashboard is served from disk**, installed to `/usr/local/share/lugh/dashboard`, as in T.O.M.S and blackraven-admin. It is not compiled into the binary.
 - **Macha's code is copied into Lugh and adapted**, not linked or split into a shared library. Macha's licence headers are stripped; the maintainer owns the code.
 - **Every node holds every extent.** Clusters are small and the data is small, so there is full replication with no DHT placement.
+- **No static credentials** (the maintainer, 2026-10-18). There is no bootstrap token, no key or password in a file or setting, and nothing else built in. At genesis, which is `lugh init` on a new cluster's first node, Lugh makes the user `root`, in the group `administrators`, with a randomly generated password. It shows that password once and stores only its hash. That password is the only credential a cluster is born with. Root's first sign-in goes from that password straight to enrolling a second factor, once. That is the one exception to "enrolment starts from a link" (`authn/genesis.h`). Every other administrator is made by root or by another administrator.
 
 ## Still open
 

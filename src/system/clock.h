@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 
 namespace lugh::system {
 
@@ -16,5 +17,10 @@ class Clock {
   // For intervals: never goes backwards.
   virtual std::chrono::steady_clock::time_point steady_now() const = 0;
 };
+
+// Whole seconds since the epoch, as records store a time.
+inline std::uint64_t unix_seconds(const Clock& clock) {
+  return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(clock.wall_now().time_since_epoch()).count());
+}
 
 }  // namespace lugh::system

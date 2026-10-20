@@ -55,8 +55,15 @@ lifted from where.
 - **Error messages carry paths and settings, never values**: "tls.key /x does not match"
   is fine; echoing what the caller sent is not. A refusal says what was wanted, not what
   was given, where what was given might be a credential.
-- **Core dumps are off**, by `main` and by the unit, and the sealed store brings
-  `mlock` and a wiping allocator in P2.
+- **Key material is `SecureBytes`** (`core/secure_bytes.h`), never a `std::vector` or a
+  `std::string`: each block is pages of its own, locked into memory, kept out of core dumps
+  on Linux and wiped when freed (`core/secure_memory.h`). `Secret` keeps its bytes the
+  same way. A key is made where it will live: `Random::fill` into a `SecureBytes`, never
+  `Random::bytes` and a copy.
+- **OpenSSL's own secure heap is left off.** Its Argon2id takes the whole of its working
+  memory from that heap once it exists, which would mean locking 64 MiB and more per hash.
+  OpenSSL's private key numbers therefore sit in ordinary memory, wiped when freed.
+- **Core dumps are off**, by `main` and by the unit.
 
 ## Inversion of control
 
@@ -78,25 +85,55 @@ lifted from where.
   | `system::Clock` | `SystemClock` | `ManualClock` | blackraven-admin |
   | `system::Random` | `SystemRandom` | `FixedRandom` | blackraven-admin |
   | `system::Environment` | `SystemEnvironment` | `MapEnvironment` | blackraven-admin |
-  | `system::WorkPool` (P4) | `ThreadWorkPool` | `InlineWorkPool` | blackraven-admin |
-  | `store::Store` (P3) | the sealed table store | `MemoryStore` | Macha, rewritten |
+  | `system::Files` | `SystemFiles` | `MemoryFiles` | new: the keyring and the store on disk; awaited |
+  | `system::Console` | `SystemConsole` | `ScriptedConsole` | new: a passphrase typed without echo; awaited |
+  | `store::Store` | `SealedStore` | `MemoryStore` | Macha's journal and packs, rewritten; the contract tests run against both |
 
   Nothing outside an adapter calls `std::getenv`, `std::chrono::system_clock`, `fork`/`exec`,
   `std::filesystem` writes, `RAND_bytes` or a socket it was not handed.
 - **The IoC check**: a `ctest` that fails if a concrete adapter, a clock, `getenv`,
-  `fork`/`exec`/`popen`, a thread, `RAND_bytes` or a `std::filesystem` write is named
-  outside `main.cpp` and the adapters (`scripts/ioc-check.py`).
+  `fork`/`exec`/`popen`, a thread, `RAND_bytes`, a `std::filesystem` write, a POSIX file
+  call, a terminal call or the process's memory (`mlock`, `mmap`, `setrlimit`) is named
+  outside `main.cpp` and the adapters (`scripts/ioc-check.py`). `core/secure_memory.cpp`
+  counts as an adapter: it is the one place that locks memory.
 
 ## Errors
 
 - **No exceptions across a component boundary.** Async and fallible operations answer
   `Status{ok, error}` or `Result<T>{ok, error, value}`; a parse that can fail answers
-  `std::optional`.
+  `std::optional`. Whatever the API will turn into a status code answers
+  `Outcome<T>{fault, message, value}` (`core/outcome.h`), whose `Fault` (`not_found`,
+  `conflict`, `duplicate`, `invalid`, `refused`, `failed`) maps to one status each.
 - **Exceptions only at startup** (bad config, a missing file, a port in use), caught in
   `main`, which logs and exits 1, and inside a parser or an OpenSSL wrapper, caught next to
   where they are thrown.
 - **Async handlers are always posted, never called inline**, so a caller never re-enters
   itself.
+- **Async all the way down.** Anything that waits, on a disk, a hash, a person or (from P8)
+  the network, is a C++20 coroutine on Boost.Asio, `Task<T>` (`core/task.h`), and its
+  caller `co_await`s it. Nothing holds a thread while it waits. That covers the store, the
+  audit log, the directory, authn, the keyring, the files and console ports, and every
+  route handler. What does not wait (the clock, randomness, the in-memory back-off, the
+  record codecs, the cryptography short of Argon2id) stays a plain function.
+- **What must block runs on a pool, awaited.** A regular file has no readiness to wait on,
+  short of io_uring, and Argon2id is 64 MiB of work. `offload(executor, work)` runs it on a
+  pool kept for it and resumes the caller on its own executor. There are two pools:
+  `blocking` (files, the console), owned by `SystemFiles` and `SystemConsole` through
+  `main`, and `hashing` (Argon2id), whose size bounds the memory sign-ins can take.
+- **Never a `std::mutex` across a `co_await`.** State shared between coroutines is guarded
+  by a `std::mutex` only for moments that await nothing; what must be held across a
+  suspension (a table's write, the audit chain's next number, the keyring) is held with
+  `AsyncMutex` (`core/async_mutex.h`), whose waiters hold no thread.
+- **Arguments to a coroutine are owned**: `std::string`, not `std::string_view`; `Bytes` or
+  `SecureBytes`, not a span; a `Secret` by value. A reference may outlive what it refers to
+  across a suspension. A coroutine that steps a caller's state (a sign-in) takes it by
+  value and hands back the next.
+- **A forgotten `co_await` does not compile**: Asio's `awaitable` is `[[nodiscard]]`, and
+  `-Werror` turns ignoring one into an error.
+- **Route handlers are coroutines**, spawned by the router on the io_context once the
+  credential, the limits and the scope have been checked in memory. At most 256 are in
+  flight; past that a request is a `503 busy` with `Retry-After`, never a queue. A handler
+  that throws is answered `500` once.
 - One JSON error shape on the API, `{"error": {"code": "...", "message": "..."}}`
   (`http/api_json.h`). Codes are vocabulary and never change; messages are for a person.
 
@@ -117,7 +154,8 @@ blackraven-admin's loggers, lifted as they are (`src/loggers/`):
   with the lifted code. Nothing here may define a `DEBUG` or `ERROR` macro.
 - What a scanner does (a failed TLS handshake, an unknown path) is logged at debug, so
   that a scanner cannot fill the journal. What a person does (a sign-in, an admin change)
-  goes to the audit log, from P4, and is never only a log line.
+  goes to the audit log (`audit/audit_log.h`), and is never only a log line. A component records
+  its own changes, after making them; the audit log logs its own failures.
 
 ## Tests
 
@@ -126,6 +164,13 @@ blackraven-admin's loggers, lifted as they are (`src/loggers/`):
 - Run the binary, not `ctest`, for the unit suite. `ctest` runs it plus the shutdown test,
   the IoC check and (under the `fuzz` preset) a short run of every fuzz target, and gates
   the install.
+- A test that is not a coroutine runs one with `run(task)` (`tests/helpers/run.h`), on an
+  io_context of its own; work handed to a pool (`tests/helpers/pools.h`, real threads) comes
+  back to it. `tests/store/async_store_test.cpp` holds an append open and shows that
+  nothing else waits for it.
+- Route tests call the router's middleware directly with a request (`tests/helpers/route_call.h`,
+  and `tests/helpers/api_rig.h` for the whole API over a `MemoryStore`). The API is also
+  run end to end through the real binary by `tests/api_test.py`.
 - HTTP tests start the real server on port 0, over TLS with a certificate made for the
   test (`tests/helpers/test_certificate.h`), and send real Beast requests. No certificate is
   ever committed: it would expire.
@@ -137,8 +182,14 @@ blackraven-admin's loggers, lifted as they are (`src/loggers/`):
   `--preset tsan` are part of finishing a phase. This differs from blackraven-admin
   deliberately, because Lugh is a security product.
 - **Every parser Lugh owns gets a libFuzzer target** in `fuzz/`, built by the `fuzz` preset.
-  The CLI parser is the first; BER, JWT, JWKS, the OAuth form bodies, the LDAP filter grammar
-  and the sealed record frames follow with the code that parses them.
+  The CLI parser was the first, then the keyring file, the table log's frames, and the
+  directory's and authn's records with the text a person types (`fuzz/records_fuzz.cpp`); BER,
+  JWT, JWKS, the OAuth form bodies and the LDAP filter grammar follow with the code that
+  parses them.
+- **Cryptography is tested against the published vectors**, not against itself: the GCM
+  specification's AES-256 cases, RFC 5869 for HKDF, RFC 9106 for Argon2id, RFC 8032 for
+  Ed25519, RFC 6979 for ES256, RFC 2202 and RFC 4231 for HMAC, RFC 4226 and RFC 6238 for
+  TOTP, and RFC 4648 for base32 and base64url.
 
 ## Build
 
@@ -180,8 +231,9 @@ blackraven-admin's loggers, lifted as they are (`src/loggers/`):
 | `src/system/{clock,random,environment}.h` and adapters | `src/system/` | namespace |
 | `src/network/cidr.{h,cpp}` | `src/network/cidr.{h,cpp}` | namespace |
 | `src/api/http_server.{h,cpp}` | `src/http/http_server.{h,cpp}` | over `ssl_stream`, TLS 1.3 only; a handshake timeout; the security headers on every response; `Server: Lugh` |
-| `src/api/router.{h,cpp}` | `src/http/router.{h,cpp}` | open routes only until the session model arrives; the authenticator and roles return with it |
-| `src/api/rate_limiter.h` | `src/http/rate_limiter.h` | only the `open` policy for now |
+| `src/api/router.{h,cpp}` | `src/http/router.{h,cpp}` | scopes in place of roles; a synchronous `CallerResolver` in place of the asynchronous authenticator, because every credential Lugh takes is checked in memory |
+| `src/auth/caller.h` | `src/http/caller.h` | scopes, not roles |
+| `src/api/rate_limiter.h` | `src/http/rate_limiter.h` | the `open` and `caller` policies |
 | `src/api/client_address.{h,cpp}` | `src/http/client_address.{h,cpp}` | inverted: no proxy is trusted unless named; CloudFront's header is gone |
 | `src/api/api_json.h` | `src/http/api_json.h` | namespace; `uint_field` dropped until wanted |
 | `src/api/health_routes.{h,cpp}` | `src/http/health_routes.{h,cpp}` | says ok and nothing else: no version, no uptime; `/ready` added |
@@ -201,9 +253,26 @@ blackraven-admin's loggers, lifted as they are (`src/loggers/`):
 
 ### From Macha
 
-Nothing yet. P3 lifts `src/storage/sealed_journal.*`, `src/storage/local_store.*` and the
-ledger; P8 lifts membership and the metadata merge. Each goes in this table as it lands.
+| Source | Here | Change |
+|---|---|---|
+| `src/storage/sealed_journal.{hpp,cpp}` | `src/store/log_format.{h,cpp}`, `src/store/sealed_store.cpp` | the frame (length, nonce, tag, AES-GCM), fsync per append, replay that cuts at the first frame that will not open; now with a checked frame header, the data key's epoch, a sealed file header, frames chained by tag, and `Status`, not exceptions |
+| `src/storage/local_store.cpp`, pack recovery (`rebuild_pack_index`, `find_next_pack_header`) | `scan_log` in `src/store/log_format.cpp` | a torn tail told from damage by whether a valid header follows; damage now stops the open instead of being skipped, because a skipped record might be a revocation |
+| `src/storage/local_store.cpp`, `compact_packs_locked` | `SealedStore::_compact` | rewrite the live records to a new file, sync, rename over; now one file per table, and every record sealed again under the current data key |
+| `src/durable_file.cpp` | `SystemFiles::write` (P2) | temporary, fsync, rename, directory fsync |
+
+Not lifted, deliberately (2026-10-18): the rest of `LocalStore` (loose object files, the
+presence index, space accounting, the durability domain) and the ledger
+(`src/ledger/`: the held ledger and its object trie, retention, availability). They serve
+content-addressed objects placed on some nodes by a DHT: the ledger records which objects
+a node holds, so a restart need not walk its disk. Lugh keys mutable records by table key
+and holds every one on every node, so a table's log is itself the record of what is held.
+P8 lifts the commit DAG and merge, which is the part of Macha's metadata Lugh does need.
 
 ### Written new
 
-`core/secret.h`, the fuzz targets, and everything from P2 on that is not in a table above.
+`core/secret.h`, the fuzz targets, and everything from P2 on that is not in a table above:
+in P2, `core/secure_memory`, `core/secure_bytes.h`, `core/byte_io.h`, `crypto/`, `keys/`,
+and the `Files` and `Console` ports; in P3, the `Store` interface, the table indexes and
+`MemoryStore`; in P4, `audit/`, `directory/`, `authn/`, `crypto/hmac`, `core/encoding.h`
+and `core/outcome.h`; in P5, `api/` (the routes in the shape of blackraven-admin's
+`user_routes`), `authn/genesis`, `core/task.h` and `core/async_mutex.h`.

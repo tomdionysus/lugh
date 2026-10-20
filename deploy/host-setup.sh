@@ -1,12 +1,14 @@
 #!/bin/sh
 #
 # Prepares a node for lugh. Run by `cmake --install`, as root, on every install; every step
-# is safe to repeat. The certificate pair under /usr/local/etc/lugh/tls is the operator's
-# to put there; this only sets who may read it.
+# is safe to repeat. The certificate pair under /usr/local/etc/lugh/tls and the master key
+# credential are the operator's to put there; this only sets who may read them.
 
 set -eu
 
 CONFDIR=/usr/local/etc/lugh
+STATEDIR=/var/lib/lugh
+CREDSTORE=/etc/credstore.encrypted
 
 # The service's own user: no login, no home.
 if ! getent group lugh >/dev/null; then
@@ -40,4 +42,18 @@ if [ -f "$CONFDIR/tls/key.pem" ]; then
     chmod 0640 "$CONFDIR/tls/key.pem"
 else
     echo "host-setup: WARNING: no $CONFDIR/tls/key.pem; put the certificate pair there before the service can start" >&2
+fi
+
+# The state directory, before the first start, so `lugh init` can make the keyring in it.
+# systemd's StateDirectory= keeps it so afterwards.
+mkdir -p "$STATEDIR"
+chown lugh:lugh "$STATEDIR"
+chmod 0700 "$STATEDIR"
+
+# Where systemd-creds puts sealed credentials, readable by root alone: systemd decrypts the
+# master key for the service at each start.
+mkdir -p "$CREDSTORE"
+chmod 0700 "$CREDSTORE"
+if [ ! -f "$CREDSTORE/lugh-master-key" ]; then
+    echo "host-setup: WARNING: no master key credential; run lugh init (see the README) before the service can start" >&2
 fi

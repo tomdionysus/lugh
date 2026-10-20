@@ -2,13 +2,14 @@
 
 #include <openssl/rand.h>
 
+#include <climits>
+
 namespace lugh::system {
 
-std::vector<unsigned char> SystemRandom::bytes(std::size_t count) {
-  std::vector<unsigned char> out(count);
-  if (count == 0) return out;
-  if (RAND_bytes(out.data(), static_cast<int>(count)) != 1) return {};
-  return out;
+bool SystemRandom::fill(std::span<unsigned char> out) {
+  if (out.empty()) return true;
+  if (out.size() > static_cast<std::size_t>(INT_MAX)) return false;
+  return RAND_bytes(out.data(), static_cast<int>(out.size())) == 1;
 }
 
 }  // namespace lugh::system

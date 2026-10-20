@@ -27,9 +27,16 @@ struct Config {
   std::uint16_t port = 8443;
   unsigned threads = 2;
 
-  // Both required: there is no plaintext listener.
+  // Both required to serve: there is no plaintext listener. `lugh init` needs neither.
   std::string tls_certificate;
   std::string tls_key;
+
+  // Where the node keeps what is its own: the keyring now, the store from P3. systemd makes
+  // it, 0700 and owned by lugh; the unit names it.
+  std::string state_directory = "/var/lib/lugh";
+
+  // A list of passwords no one may set, one per line. Empty: none.
+  std::string breached_passwords;
 
   // A request from one of these is taken at the last X-Forwarded-For entry; everything else
   // at its socket's address. Empty by default: no proxy is trusted until named.

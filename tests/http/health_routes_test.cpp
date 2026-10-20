@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <boost/asio/io_context.hpp>
 #include <boost/json.hpp>
 
 #include "fakes/manual_clock.h"
@@ -14,8 +15,10 @@ namespace http = lugh::http;
 
 namespace {
 
+boost::asio::io_context io;
+
 std::shared_ptr<Router> router_with_health() {
-  auto router = std::make_shared<Router>(std::make_shared<Throttle>(std::make_shared<ManualClock>()));
+  auto router = std::make_shared<Router>(io.get_executor(), std::make_shared<Throttle>(std::make_shared<ManualClock>()));
   HealthRoutes health;
   health.register_routes(*router);
   return router;
@@ -24,7 +27,7 @@ std::shared_ptr<Router> router_with_health() {
 }  // namespace
 
 TEST(HealthRoutes, HealthIsOpenJsonSayingOkAndNothingElse) {
-  const auto result = call(router_with_health()->middleware("/health"), http::verb::get, "/health");
+  const auto result = call(io, router_with_health()->middleware("/health"), http::verb::get, "/health");
 
   ASSERT_EQ(result.response->result(), http::status::ok);
   EXPECT_EQ(result.response->at(http::field::content_type), "application/json");
@@ -36,7 +39,7 @@ TEST(HealthRoutes, HealthIsOpenJsonSayingOkAndNothingElse) {
 }
 
 TEST(HealthRoutes, ReadyIsOpenJson) {
-  const auto result = call(router_with_health()->middleware("/ready"), http::verb::get, "/ready");
+  const auto result = call(io, router_with_health()->middleware("/ready"), http::verb::get, "/ready");
 
   ASSERT_EQ(result.response->result(), http::status::ok);
   const auto body = boost::json::parse(result.response->body()).as_object();
@@ -45,6 +48,6 @@ TEST(HealthRoutes, ReadyIsOpenJson) {
 }
 
 TEST(HealthRoutes, OnlyGet) {
-  const auto result = call(router_with_health()->middleware("/health"), http::verb::post, "/health");
+  const auto result = call(io, router_with_health()->middleware("/health"), http::verb::post, "/health");
   EXPECT_EQ(result.response->result(), http::status::method_not_allowed);
 }

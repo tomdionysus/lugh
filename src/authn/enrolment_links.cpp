@@ -1,0 +1,154 @@
+#include "authn/enrolment_links.h"
+
+#include "core/byte_io.h"
+#include "core/encoding.h"
+#include "crypto/digest.h"
+
+namespace lugh::authn {
+
+namespace {
+
+constexpr std::uint8_t kFormat = 1;
+constexpr const char* kPrefix = "enrol/";
+const std::string kFirstSignIn = "first-sign-in/";
+
+}  // namespace
+
+EnrolmentLinks::EnrolmentLinks(std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random, std::shared_ptr<system::Clock> clock,
+                               std::shared_ptr<directory::Directory> directory, std::shared_ptr<audit::AuditLog> audit, std::chrono::seconds lifetime)
+    : _store(std::move(store)),
+      _random(std::move(random)),
+      _clock(std::move(clock)),
+      _directory(std::move(directory)),
+      _audit(std::move(audit)),
+      _lifetime(lifetime) {}
+
+Task<Outcome<Secret>> EnrolmentLinks::issue(audit::Actor actor, std::string user_id) {
+  using Answer = Outcome<Secret>;
+  const auto user = co_await _directory->user(user_id);
+  if (!user) co_return Answer::failure(Fault::not_found, "no such user");
+  if (user->kind != directory::Kind::person) co_return Answer::failure(Fault::refused, "a service does not enrol");
+  if (user->disabled) co_return Answer::failure(Fault::refused, "the user is disabled");
+  if (user->enrolled) co_return Answer::failure(Fault::refused, "the user is enrolled; reset their factors first");
+
+  for (const auto& record : co_await _store->list(kTable)) {
+    if (record.key.rfind(kPrefix, 0) != 0) continue;
+    const auto link = decode(record.value);
+    if (link && link->user_id == user_id) co_await _store->remove(kTable, record.key, record.version);
+  }
+
+  SecureBytes raw(kTokenBytes);
+  if (!_random->fill(raw)) co_return Answer::failure(Fault::failed, "no randomness for a token");
+  Secret token(encoding::base64url(raw));
+
+  Link link;
+  link.user_id = user_id;
+  link.issued = system::unix_seconds(*_clock);
+  link.expires = link.issued + static_cast<std::uint64_t>(_lifetime.count());
+
+  const auto written = co_await _store->put(kTable, *_key(token), encode(link), 0);
+  if (!written.ok()) co_return Answer::failure(directory::fault_of(written.error), written.message);
+  co_await _audit->record(audit::Event{"enrolment.issue", actor.id, link.user_id, actor.source, "expires " + std::to_string(link.expires)});
+  co_return Answer::success(std::move(token));
+}
+
+Task<Outcome<std::string>> EnrolmentLinks::peek(Secret token) const {
+  using Answer = Outcome<std::string>;
+  const auto key = _key(token);
+  if (!key) co_return Answer::failure(Fault::not_found, "no such link");
+  const auto live = co_await _live(*key);
+  if (!live.ok()) co_return Answer::from(live);
+  co_return Answer::success(live.value.first.user_id);
+}
+
+Task<Outcome<EnrolmentLinks::Link>> EnrolmentLinks::link(Secret token) const {
+  using Answer = Outcome<Link>;
+  const auto key = _key(token);
+  if (!key) co_return Answer::failure(Fault::not_found, "no such link");
+  const auto live = co_await _live(*key);
+  if (!live.ok()) co_return Answer::from(live);
+  co_return Answer::success(live.value.first);
+}
+
+Task<Outcome<std::string>> EnrolmentLinks::spend(Secret token, audit::Actor actor) {
+  using Answer = Outcome<std::string>;
+  const auto key = _key(token);
+  if (!key) co_return Answer::failure(Fault::not_found, "no such link");
+  const auto live = co_await _live(*key);
+  if (!live.ok()) co_return Answer::from(live);
+  const auto& [link, version] = live.value;
+
+  const auto removed = co_await _store->remove(kTable, *key, version);
+  if (!removed.ok()) {
+    if (removed.error == store::StoreError::conflict || removed.error == store::StoreError::removed) {
+      co_return Answer::failure(Fault::not_found, "no such link");
+    }
+    co_return Answer::failure(directory::fault_of(removed.error), removed.message);
+  }
+  co_await _audit->record(audit::Event{"enrolment.redeem", actor.id, link.user_id, actor.source, {}});
+  co_return Answer::success(link.user_id);
+}
+
+Task<Outcome<>> EnrolmentLinks::first_sign_in_allow(audit::Actor actor, std::string user_id) {
+  Link link;
+  link.user_id = std::move(user_id);
+  link.issued = system::unix_seconds(*_clock);
+  // Until it is spent.
+  link.expires = UINT64_MAX;
+  const auto written = co_await _store->put(kTable, kFirstSignIn + link.user_id, encode(link), 0);
+  if (!written.ok()) co_return Outcome<>::failure(directory::fault_of(written.error), written.message);
+  co_await _audit->record(audit::Event{"enrolment.first_sign_in", actor.id, link.user_id, actor.source, {}});
+  co_return Outcome<>::success();
+}
+
+Task<bool> EnrolmentLinks::first_sign_in_allowed(std::string user_id) const {
+  const auto record = co_await _store->get(kTable, kFirstSignIn + user_id);
+  const auto link = record ? decode(record->value) : std::nullopt;
+  co_return link && link->user_id == user_id;
+}
+
+Task<void> EnrolmentLinks::first_sign_in_spend(std::string user_id) {
+  const auto key = kFirstSignIn + user_id;
+  if (co_await _store->get(kTable, key)) co_await _store->remove(kTable, key);
+}
+
+SecureBytes EnrolmentLinks::encode(const Link& link) {
+  SecureBytes out;
+  ByteWriter<SecureBytes> writer(out);
+  writer.u8(kFormat);
+  writer.field(link.user_id);
+  writer.u64(link.issued);
+  writer.u64(link.expires);
+  return out;
+}
+
+std::optional<EnrolmentLinks::Link> EnrolmentLinks::decode(std::span<const unsigned char> value) {
+  ByteReader reader(value);
+  const auto format = reader.u8();
+  auto user = reader.field();
+  const auto issued = reader.u64();
+  const auto expires = reader.u64();
+  if (!format || *format != kFormat || !user || user->empty() || !issued || !expires || !reader.done()) return std::nullopt;
+  return Link{std::move(*user), *issued, *expires};
+}
+
+std::optional<std::string> EnrolmentLinks::_key(const Secret& token) {
+  // Exactly what issue() makes: 43 base64url characters.
+  const auto text = token.reveal();
+  if (text.size() != (kTokenBytes * 4 + 2) / 3) return std::nullopt;
+  for (const char c : text) {
+    if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_')) return std::nullopt;
+  }
+  return std::string(kPrefix) + encoding::hex(crypto::sha256(byte_span(text)));
+}
+
+Task<Outcome<std::pair<EnrolmentLinks::Link, std::uint64_t>>> EnrolmentLinks::_live(std::string key) const {
+  using Answer = Outcome<std::pair<Link, std::uint64_t>>;
+  const auto record = co_await _store->get(kTable, std::move(key));
+  auto link = record ? decode(record->value) : std::nullopt;
+  // An expired link is no different, to its holder, from one that never was.
+  if (!link || system::unix_seconds(*_clock) >= link->expires) co_return Answer::failure(Fault::not_found, "no such link");
+  co_return Answer::success(std::make_pair(std::move(*link), record->version));
+}
+
+}  // namespace lugh::authn

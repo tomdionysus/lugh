@@ -26,8 +26,13 @@ PATTERNS = {
     "fork/exec/popen": r"\b(?:fork|vfork|execv\w*|execl\w*|popen|posix_spawn\w*|system)\s*\(",
     "file write": r"std::ofstream\b|\bfopen\s*\(|std::filesystem::(?:rename|remove|remove_all|create_directories|create_directory|copy|copy_file|permissions)\b",
     "randomness": r"\bRAND_bytes\b|std::random_device\b",
+    # A POSIX call on a file, at global scope: ::open, ::write, ::rename and the rest.
+    "POSIX file call": r"(?<![\w.>:])::(?:open|creat|write|unlink|rename|link|mkdir|fsync|ftruncate)\s*\(",
+    "terminal": r"\b(?:isatty|tcgetattr|tcsetattr)\b",
+    # The process's own memory: locking, mapping and limits.
+    "process memory": r"\bCRYPTO_secure_malloc_init\b|\bmlock(?:all)?\b|\bmmap\b|\bsetrlimit\b",
     # The concrete adapters, by name: everything else takes the port.
-    "concrete adapter": r"\bSystem(?:Clock|Environment|Random)\b|\bLoggerStdIO\b",
+    "concrete adapter": r"\bSystem(?:Clock|Environment|Random|Files|Console)\b|\bLoggerStdIO\b",
 }
 
 # Exempt from every pattern: the composition root, and the adapters, whose job
@@ -43,6 +48,11 @@ ADAPTERS = {
     "src/loggers/logger_stdio.cpp",
     "src/system/system_random.h",  # SystemRandom: OpenSSL's CSPRNG
     "src/system/system_random.cpp",
+    "src/system/system_files.h",  # SystemFiles: the keyring on disk
+    "src/system/system_files.cpp",
+    "src/system/system_console.h",  # SystemConsole: a passphrase typed without echo
+    "src/system/system_console.cpp",
+    "src/core/secure_memory.cpp",  # locked pages for key material
 }
 
 # Exempt from one pattern only.

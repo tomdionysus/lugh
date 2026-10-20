@@ -240,3 +240,39 @@ TEST(Config, MalformedYamlIsAnError) {
   auto load = loader();
   EXPECT_FALSE(load.load(with_config(dir.write("config.yaml", "server: [unclosed\n").string())).ok);
 }
+
+TEST(Config, TheStateDirectory) {
+  auto defaults = loader();
+  EXPECT_EQ(defaults.load(with_tls()).value.state_directory, "/var/lib/lugh");
+
+  TempDirectory dir;
+  const auto path = dir.write("config.yaml", "state: { directory: /srv/lugh }\n");
+  auto from_file = loader();
+  EXPECT_EQ(from_file.load(with_config(path.string())).value.state_directory, "/srv/lugh");
+
+  auto from_environment = loader({{"LUGH_STATE_DIRECTORY", "/env/lugh"}});
+  EXPECT_EQ(from_environment.load(with_config(path.string())).value.state_directory, "/env/lugh");
+
+  auto options = with_config(path.string());
+  options.state_directory = "/cli/lugh";
+  auto from_cli = loader({{"LUGH_STATE_DIRECTORY", "/env/lugh"}});
+  EXPECT_EQ(from_cli.load(options).value.state_directory, "/cli/lugh");
+}
+
+TEST(Config, TheBreachedPasswordList) {
+  auto defaults = loader();
+  EXPECT_EQ(defaults.load(with_tls()).value.breached_passwords, "");
+
+  TempDirectory dir;
+  const auto path = dir.write("config.yaml", "authn: { breached_passwords: /etc/lugh/breached.txt }\n");
+  auto from_file = loader();
+  EXPECT_EQ(from_file.load(with_config(path.string())).value.breached_passwords, "/etc/lugh/breached.txt");
+}
+
+TEST(Config, InitNeedsNoTlsPair) {
+  Options options;
+  options.command = lugh::cli::Command::init;
+  auto load = loader();
+  const auto result = load.load(options);
+  EXPECT_TRUE(result.ok) << result.error;
+}

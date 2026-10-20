@@ -118,18 +118,47 @@ configure_file(src/build_version.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/bui
 # by accident.
 
 add_library(lugh_core STATIC
+    src/api/audit_routes.cpp
+    src/api/group_routes.cpp
+    src/api/policy_routes.cpp
+    src/api/user_routes.cpp
+    src/audit/audit_log.cpp
+    src/authn/authenticator.cpp
+    src/authn/enrolment_links.cpp
+    src/authn/factors.cpp
+    src/authn/genesis.cpp
+    src/authn/password_hash.cpp
+    src/authn/passwords.cpp
+    src/authn/policy.cpp
+    src/authn/totp.cpp
     src/boost_json.cpp
     src/config.cpp
+    src/core/secure_memory.cpp
+    src/crypto/aead.cpp
+    src/crypto/argon2.cpp
+    src/crypto/digest.cpp
+    src/crypto/hkdf.cpp
+    src/crypto/hmac.cpp
+    src/crypto/signing.cpp
+    src/directory/directory.cpp
+    src/directory/records.cpp
     src/http/client_address.cpp
     src/http/health_routes.cpp
     src/http/http_server.cpp
     src/http/router.cpp
     src/http/tls_context.cpp
+    src/keys/keyring.cpp
+    src/keys/keyring_format.cpp
+    src/keys/keyring_manager.cpp
     src/loggers/logger_scoped.cpp
     src/loggers/logger_stdio.cpp
     src/network/cidr.cpp
+    src/store/log_format.cpp
+    src/store/sealed_store.cpp
     src/system/system_clock.cpp
+    src/system/system_console.cpp
     src/system/system_environment.cpp
+    src/system/system_files.cpp
     src/system/system_random.cpp
 )
 
@@ -176,18 +205,53 @@ if (LUGH_BUILD_TESTING)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
     add_executable(lugh_tests
+        tests/api/audit_routes_test.cpp
+        tests/api/concurrency_test.cpp
+        tests/api/group_routes_test.cpp
+        tests/api/policy_routes_test.cpp
+        tests/api/user_routes_test.cpp
+        tests/audit/audit_log_test.cpp
+        tests/authn/authenticator_test.cpp
+        tests/authn/backoff_test.cpp
+        tests/authn/enrolment_links_test.cpp
+        tests/authn/factors_test.cpp
+        tests/authn/genesis_test.cpp
+        tests/authn/passwords_test.cpp
+        tests/authn/policy_test.cpp
+        tests/authn/totp_test.cpp
         tests/cli_test.cpp
         tests/config_test.cpp
+        tests/core/async_test.cpp
+        tests/core/byte_io_test.cpp
+        tests/core/encoding_test.cpp
         tests/core/secret_test.cpp
+        tests/core/secure_memory_test.cpp
+        tests/crypto/aead_test.cpp
+        tests/crypto/argon2_test.cpp
+        tests/crypto/compare_test.cpp
+        tests/crypto/digest_test.cpp
+        tests/crypto/hkdf_test.cpp
+        tests/crypto/hmac_test.cpp
+        tests/crypto/signing_test.cpp
+        tests/directory/directory_test.cpp
+        tests/directory/records_test.cpp
         tests/http/client_address_test.cpp
         tests/http/health_routes_test.cpp
         tests/http/http_server_test.cpp
         tests/http/rate_limiter_test.cpp
         tests/http/router_test.cpp
         tests/http/tls_context_test.cpp
+        tests/keys/keyring_format_test.cpp
+        tests/keys/keyring_manager_test.cpp
+        tests/keys/keyring_test.cpp
         tests/loggers/logger_scoped_test.cpp
         tests/loggers/logger_stdio_test.cpp
         tests/network/cidr_test.cpp
+        tests/store/async_store_test.cpp
+        tests/store/log_format_test.cpp
+        tests/store/sealed_store_test.cpp
+        tests/store/store_contract_test.cpp
+        tests/system/system_files_test.cpp
     )
 
     target_include_directories(lugh_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
@@ -206,6 +270,14 @@ if (LUGH_BUILD_TESTING)
     # The real binary stops on SIGTERM and SIGINT, promptly and with status 0.
     add_test(NAME shutdown
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/shutdown_test.py $<TARGET_FILE:lugh>)
+
+    # `lugh init` and the start that follows it, with a credential and with a passphrase.
+    add_test(NAME init
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/init_test.py $<TARGET_FILE:lugh>)
+
+    # /api/v1 through the real binary: after genesis, nothing opens it until P6.
+    add_test(NAME api
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/api_test.py $<TARGET_FILE:lugh>)
 
     # Outside main.cpp and the adapters, nothing names a clock, the environment, a thread,
     # a process or a file write.
@@ -237,6 +309,10 @@ if (LUGH_FUZZ)
     endfunction()
 
     lugh_fuzz_target(fuzz_cli fuzz/cli_fuzz.cpp)
+    lugh_fuzz_target(fuzz_keyring fuzz/keyring_fuzz.cpp)
+    lugh_fuzz_target(fuzz_store_log fuzz/store_log_fuzz.cpp)
+    lugh_fuzz_target(fuzz_records fuzz/records_fuzz.cpp)
+    lugh_fuzz_target(fuzz_api_request fuzz/api_request_fuzz.cpp)
 endif()
 
 # ----------------------------------------------------------------- install

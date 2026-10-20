@@ -16,16 +16,14 @@ namespace {
 
 // Every key a file may hold, by section. Anything else is reported, not read.
 const std::map<std::string, std::set<std::string>> kKnownKeys{
-    {"log", {"level", "format"}},
-    {"server", {"address", "port", "threads"}},
-    {"tls", {"certificate", "key"}},
-    {"proxy", {"trusted_networks"}},
+    {"log", {"level", "format"}}, {"server", {"address", "port", "threads"}}, {"tls", {"certificate", "key"}}, {"proxy", {"trusted_networks"}},
+    {"state", {"directory"}},     {"authn", {"breached_passwords"}},
 };
 
 // The environment variable for each setting the environment may override.
 const std::vector<std::pair<std::string, std::string>> kEnvironment{
-    {"LUGH_ADDRESS", "server.address"}, {"LUGH_PORT", "server.port"},    {"LUGH_TLS_CERTIFICATE", "tls.certificate"},
-    {"LUGH_TLS_KEY", "tls.key"},        {"LUGH_LOG_LEVEL", "log.level"}, {"LUGH_LOG_FORMAT", "log.format"},
+    {"LUGH_ADDRESS", "server.address"}, {"LUGH_PORT", "server.port"},      {"LUGH_TLS_CERTIFICATE", "tls.certificate"}, {"LUGH_TLS_KEY", "tls.key"},
+    {"LUGH_LOG_LEVEL", "log.level"},    {"LUGH_LOG_FORMAT", "log.format"}, {"LUGH_STATE_DIRECTORY", "state.directory"},
 };
 
 bool all_digits(const std::string& text) {
@@ -114,14 +112,15 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
       {options.tls_key, {"tls.key", "--tls-key"}},
       {options.log_level, {"log.level", "--log-level"}},
       {options.log_format, {"log.format", "--log-format"}},
+      {options.state_directory, {"state.directory", "--state-directory"}},
   };
   for (const auto& [value, where] : flags) {
     if (value.empty()) continue;
     if (const auto applied = _apply(config, where.first, value, where.second); !applied.ok) return Result<Config>::failure(applied.error);
   }
 
-  // No layer may leave these out: there is nothing to fall back to.
-  if (config.tls_certificate.empty() || config.tls_key.empty()) {
+  // No layer may leave these out when serving: there is nothing to fall back to.
+  if (options.command == cli::Command::serve && (config.tls_certificate.empty() || config.tls_key.empty())) {
     return Result<Config>::failure("tls.certificate and tls.key must both be set: Lugh has no plaintext listener");
   }
 
@@ -219,6 +218,11 @@ Status ConfigLoader::_apply(Config& config, const std::string& key, const std::s
   } else if (key == "tls.key") {
     if (value.empty()) return refuse("a path");
     config.tls_key = value;
+  } else if (key == "state.directory") {
+    if (value.empty()) return refuse("a path");
+    config.state_directory = value;
+  } else if (key == "authn.breached_passwords") {
+    config.breached_passwords = value;
   } else {
     return Status::failure(source + ": " + key + " is not a setting");
   }

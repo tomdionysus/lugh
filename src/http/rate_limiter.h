@@ -92,11 +92,12 @@ class RateLimiter {
   std::unordered_map<std::string, Bucket> _buckets;
 };
 
-// The limits for each kind of caller. Sign-in and session limits join these with the
-// session model.
+// The limits for each kind of caller. Sign-in limits join these with the sign-in pages.
 struct RateLimits {
   // Open routes, and requests whose credential did not resolve, per client address.
   RateLimiter::Policy open{30, 30};
+  // A resolved caller, per caller: room for the dashboard's bursts and a script's loops.
+  RateLimiter::Policy caller{120, 600};
 };
 
 // The limiter, the limits and the clock, shared by the router and by routes that limit

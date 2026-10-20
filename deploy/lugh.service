@@ -8,12 +8,13 @@ Wants=network-online.target
 Type=simple
 
 # The config ships verbatim from the repository. Only the deployment facts are overridden
-# here: the privileged port and the installed certificate pair.
+# here: the privileged port, the installed certificate pair and the state directory.
 ExecStart=/usr/local/bin/lugh \
     --config /usr/local/etc/lugh/config.yaml \
     --port 443 \
     --tls-certificate /usr/local/etc/lugh/tls/cert.pem \
-    --tls-key /usr/local/etc/lugh/tls/key.pem
+    --tls-key /usr/local/etc/lugh/tls/key.pem \
+    --state-directory /var/lib/lugh
 
 User=lugh
 Group=lugh
@@ -25,10 +26,19 @@ RestartSec=5s
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
-# /var/lib/lugh, made by systemd, 0700, the one place the service may write. The master
-# key arrives through LoadCredentialEncrypted= from P2; it is never on disk in clear.
+# /var/lib/lugh, made by systemd, 0700, the one place the service may write: the keyring
+# now, the store from P3.
 StateDirectory=lugh
 StateDirectoryMode=0700
+
+# The master key, never on disk in clear. `lugh init` makes it and systemd-creds seals it
+# here, to the TPM where the host has one; systemd decrypts it at each start into a ramfs
+# only this service can read, as $CREDENTIALS_DIRECTORY/lugh-master-key. Without it the
+# unit does not start.
+LoadCredentialEncrypted=lugh-master-key:/etc/credstore.encrypted/lugh-master-key
+
+# Key material is locked into memory, a page or so per key.
+LimitMEMLOCK=16M
 
 # A core dump of an identity server is a copy of its keys. The process sets this too.
 LimitCORE=0

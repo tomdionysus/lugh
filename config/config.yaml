@@ -7,9 +7,10 @@
 # certificate paths without editing this file. The master key is in none of these: it
 # arrives as a systemd credential, or is typed at start on a host without one.
 #
-# Run from the repository root in development, after scripts/dev-cert.sh:
+# Run from the repository root in development, after scripts/dev-cert.sh and
+# scripts/dev-init.sh:
 #
-#   ./build/lugh --config config/config.yaml
+#   CREDENTIALS_DIRECTORY=config/dev/credentials ./build/lugh --config config/config.yaml
 #
 
 log:
@@ -31,9 +32,20 @@ tls:
   certificate: "config/dev/cert.pem"
   key: "config/dev/key.pem"
 
+state:
+  # The keyring and the store. The development directory, which
+  # scripts/dev-init.sh fills; the unit points at /var/lib/lugh.
+  directory: "config/dev/state"
+
 proxy:
   # A request from one of these is taken at the last address in its X-Forwarded-For, the
   # one that proxy appended. Anything else is taken at its socket's address, and any
   # forwarding header it sends is ignored: anyone can write one. Empty, as here, means no
   # proxy is trusted and every request is its socket's address.
   trusted_networks: []
+
+authn:
+  # A list of passwords no one may set, one per line, folded to lower case when read; '#'
+  # starts a comment. Leave it out to check length and the user's own name and address
+  # only. Read once at start; a list that cannot be read stops the start.
+  # breached_passwords: "/usr/local/etc/lugh/breached-passwords.txt"

@@ -50,3 +50,17 @@ TEST(Secret, CopiesAndMovesKeepTheValue) {
 }
 
 TEST(Secret, TheRedactionIsWhatALogMaySay) { EXPECT_STREQ(Secret::kRedacted, "[redacted]"); }
+
+TEST(Secret, BuiltACharacterAtATime) {
+  Secret secret;
+  for (const char c : std::string("typed")) secret.push_back(c);
+  EXPECT_EQ(secret.reveal(), "typed");
+  EXPECT_TRUE(secret.equals(Secret("typed")));
+}
+
+TEST(Secret, LongValuesSurviveGrowth) {
+  Secret secret;
+  for (int i = 0; i < 1000; ++i) secret.push_back(static_cast<char>('a' + i % 26));
+  EXPECT_EQ(secret.size(), 1000u);
+  EXPECT_EQ(secret.reveal().substr(0, 3), "abc");
+}
