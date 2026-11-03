@@ -24,11 +24,11 @@ Step waiting(std::chrono::seconds wait, SignIn sign_in = {}) {
 
 }  // namespace
 
-Authenticator::Authenticator(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Clock> clock, std::shared_ptr<directory::Directory> directory,
+Authenticator::Authenticator(std::shared_ptr<loggers::Logger> logger, const dannan::contract::TimeSource& time, std::shared_ptr<directory::Directory> directory,
                              std::shared_ptr<Passwords> passwords, std::shared_ptr<Factors> factors, std::shared_ptr<Policies> policies,
                              std::shared_ptr<EnrolmentLinks> links, std::shared_ptr<audit::AuditLog> audit, Settings settings)
     : _logger(std::make_shared<loggers::LoggerScoped>("authn", std::move(logger))),
-      _clock(std::move(clock)),
+      _time(time),
       _directory(std::move(directory)),
       _passwords(std::move(passwords)),
       _factors(std::move(factors)),
@@ -78,7 +78,7 @@ Task<Step> Authenticator::password(std::string login, Secret password, std::stri
   SignIn sign_in;
   sign_in.user_id = user->id;
   sign_in.required = co_await _policies->required(user->id);
-  sign_in.started = _clock->steady_now();
+  sign_in.started = _time.now();
   sign_in.amr = {"pwd"};
 
   if (!user->enrolled && co_await _links->first_sign_in_allowed(user->id)) {
@@ -142,12 +142,12 @@ Task<Step> Authenticator::recovery(SignIn sign_in, Secret code, std::string sour
 
 Task<Step> Authenticator::redeem(Secret token, Secret password, std::string source) {
   const auto address = address_key(source);
-  if (const auto wait = _addresses.wait(address, _clock->steady_now())) co_return waiting(*wait);
+  if (const auto wait = _addresses.wait(address, _time.now())) co_return waiting(*wait);
 
   const auto peeked = co_await _links->peek(token);
   const auto user = peeked.ok() ? co_await _directory->user(peeked.value) : std::nullopt;
   if (!user || user->disabled || user->enrolled || user->kind != directory::Kind::person) {
-    _addresses.failed(address, _clock->steady_now());
+    _addresses.failed(address, _time.now());
     co_await _audit("enrolment.refused", "anonymous", user ? user->id : "", source, peeked.ok() ? "the user cannot enrol" : "no such link");
     co_return Step::of(Step::Kind::refused);
   }
@@ -168,7 +168,7 @@ Task<Step> Authenticator::redeem(Secret token, Secret password, std::string sour
   sign_in.user_id = user->id;
   sign_in.stage = SignIn::Stage::enrolment;
   sign_in.required = co_await _policies->required(user->id);
-  sign_in.started = _clock->steady_now();
+  sign_in.started = _time.now();
   sign_in.amr = {"pwd"};
   co_return Step::of(Step::Kind::next, std::move(sign_in));
 }
@@ -235,7 +235,7 @@ Task<Outcome<>> Authenticator::reset_factors(audit::Actor actor, std::string use
 
 bool Authenticator::_live(SignIn& sign_in, SignIn::Stage stage) const {
   if (sign_in.stage != stage) return false;
-  if (_clock->steady_now() - sign_in.started > _settings.lifetime) {
+  if (_time.now() - sign_in.started > _settings.lifetime) {
     sign_in.stage = SignIn::Stage::ended;
     return false;
   }
@@ -243,7 +243,7 @@ bool Authenticator::_live(SignIn& sign_in, SignIn::Stage stage) const {
 }
 
 std::optional<std::chrono::seconds> Authenticator::_waiting(const std::string& account, const std::string& address) const {
-  const auto now = _clock->steady_now();
+  const auto now = _time.now();
   const auto by_account = _accounts.wait(account, now);
   const auto by_address = _addresses.wait(address, now);
   if (by_account && by_address) return std::max(*by_account, *by_address);
@@ -251,7 +251,7 @@ std::optional<std::chrono::seconds> Authenticator::_waiting(const std::string& a
 }
 
 void Authenticator::_failed(const std::string& account, const std::string& address) {
-  const auto now = _clock->steady_now();
+  const auto now = _time.now();
   _accounts.failed(account, now);
   _addresses.failed(address, now);
 }

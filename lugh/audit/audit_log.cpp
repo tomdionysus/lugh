@@ -51,13 +51,13 @@ Hash hash_of(std::span<const unsigned char> body) {
 
 }  // namespace
 
-AuditLog::AuditLog(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Clock> clock)
-    : _logger(std::make_shared<loggers::LoggerScoped>("audit", std::move(logger))), _store(std::move(store)), _clock(std::move(clock)) {}
+AuditLog::AuditLog(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall)
+    : _logger(std::make_shared<loggers::LoggerScoped>("audit", std::move(logger))), _store(std::move(store)), _wall(wall) {}
 
 Task<Result<std::shared_ptr<AuditLog>>> AuditLog::open(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store,
-                                                       std::shared_ptr<system::Clock> clock) {
+                                                       const dannan::contract::WallClock& wall) {
   using Answer = Result<std::shared_ptr<AuditLog>>;
-  std::shared_ptr<AuditLog> log(new AuditLog(std::move(logger), std::move(store), std::move(clock)));
+  std::shared_ptr<AuditLog> log(new AuditLog(std::move(logger), std::move(store), wall));
 
   // Keys are zero-padded, so the last in key order is the newest.
   const auto all = co_await log->_store->list(kTable);
@@ -80,7 +80,7 @@ Task<Status> AuditLog::record(Event event) {
     entry.sequence = _next;
     entry.previous = _last;
   }
-  entry.time = system::unix_seconds(*_clock);
+  entry.time = (_wall.unix_ms() / 1000);
   entry.event.action = cut(std::move(event.action), kMostFieldBytes);
   entry.event.actor = cut(std::move(event.actor), kMostFieldBytes);
   entry.event.subject = cut(std::move(event.subject), kMostFieldBytes);

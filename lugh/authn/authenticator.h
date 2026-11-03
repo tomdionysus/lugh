@@ -15,6 +15,7 @@
 #include <string_view>
 #include <vector>
 
+#include "dannan/contract/time_source.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/backoff.h"
 #include "lugh/authn/enrolment_links.h"
@@ -26,7 +27,6 @@
 #include "lugh/core/task.h"
 #include "lugh/directory/directory.h"
 #include "lugh/loggers/logger.h"
-#include "lugh/system/clock.h"
 
 namespace lugh::authn {
 
@@ -109,7 +109,7 @@ class Authenticator {
     std::string issuer = "Lugh";
   };
 
-  Authenticator(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Clock> clock, std::shared_ptr<directory::Directory> directory,
+  Authenticator(std::shared_ptr<loggers::Logger> logger, const dannan::contract::TimeSource& time, std::shared_ptr<directory::Directory> directory,
                 std::shared_ptr<Passwords> passwords, std::shared_ptr<Factors> factors, std::shared_ptr<Policies> policies,
                 std::shared_ptr<EnrolmentLinks> links, std::shared_ptr<audit::AuditLog> audit, Settings settings);
 
@@ -146,7 +146,7 @@ class Authenticator {
   Task<void> _audit(std::string action, std::string actor, std::string subject, std::string source, std::string detail = {});
 
   std::shared_ptr<loggers::Logger> _logger;
-  std::shared_ptr<system::Clock> _clock;
+  const dannan::contract::TimeSource& _time;
   std::shared_ptr<directory::Directory> _directory;
   std::shared_ptr<Passwords> _passwords;
   std::shared_ptr<Factors> _factors;

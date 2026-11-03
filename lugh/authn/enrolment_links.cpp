@@ -21,14 +21,9 @@ const std::string kFirstSignIn = "first-sign-in/";
 
 }  // namespace
 
-EnrolmentLinks::EnrolmentLinks(std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random, std::shared_ptr<system::Clock> clock,
+EnrolmentLinks::EnrolmentLinks(std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random, const dannan::contract::WallClock& wall,
                                std::shared_ptr<directory::Directory> directory, std::shared_ptr<audit::AuditLog> audit, std::chrono::seconds lifetime)
-    : _store(std::move(store)),
-      _random(std::move(random)),
-      _clock(std::move(clock)),
-      _directory(std::move(directory)),
-      _audit(std::move(audit)),
-      _lifetime(lifetime) {}
+    : _store(std::move(store)), _random(std::move(random)), _wall(wall), _directory(std::move(directory)), _audit(std::move(audit)), _lifetime(lifetime) {}
 
 Task<Outcome<Secret>> EnrolmentLinks::issue(audit::Actor actor, std::string user_id) {
   using Answer = Outcome<Secret>;
@@ -50,7 +45,7 @@ Task<Outcome<Secret>> EnrolmentLinks::issue(audit::Actor actor, std::string user
 
   Link link;
   link.user_id = user_id;
-  link.issued = system::unix_seconds(*_clock);
+  link.issued = (_wall.unix_ms() / 1000);
   link.expires = link.issued + static_cast<std::uint64_t>(_lifetime.count());
 
   const auto written = co_await _store->put(kTable, *_key(token), encode(link), 0);
@@ -99,7 +94,7 @@ Task<Outcome<std::string>> EnrolmentLinks::spend(Secret token, audit::Actor acto
 Task<Outcome<>> EnrolmentLinks::first_sign_in_allow(audit::Actor actor, std::string user_id) {
   Link link;
   link.user_id = std::move(user_id);
-  link.issued = system::unix_seconds(*_clock);
+  link.issued = (_wall.unix_ms() / 1000);
   // Until it is spent.
   link.expires = UINT64_MAX;
   const auto written = co_await _store->put(kTable, kFirstSignIn + link.user_id, encode(link), 0);
@@ -154,7 +149,7 @@ Task<Outcome<std::pair<EnrolmentLinks::Link, std::uint64_t>>> EnrolmentLinks::_l
   const auto record = co_await _store->get(kTable, std::move(key));
   auto link = record ? decode(record->value) : std::nullopt;
   // An expired link is no different, to its holder, from one that never was.
-  if (!link || system::unix_seconds(*_clock) >= link->expires) co_return Answer::failure(Fault::not_found, "no such link");
+  if (!link || (_wall.unix_ms() / 1000) >= link->expires) co_return Answer::failure(Fault::not_found, "no such link");
   co_return Answer::success(std::make_pair(std::move(*link), record->version));
 }
 

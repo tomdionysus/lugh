@@ -140,11 +140,11 @@ std::optional<Secret> normal_recovery_code(std::string_view code) {
 }
 
 Factors::Factors(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
-                 std::shared_ptr<system::Clock> clock, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs recovery_params)
+                 const dannan::contract::WallClock& wall, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs recovery_params)
     : _logger(std::make_shared<loggers::LoggerScoped>("factors", std::move(logger))),
       _store(std::move(store)),
       _random(std::move(random)),
-      _clock(std::move(clock)),
+      _wall(wall),
       _audit_log(std::move(audit)),
       _hashing(std::move(hashing)),
       _recovery_params(recovery_params) {}
@@ -190,7 +190,7 @@ Task<Outcome<TotpSetup>> Factors::totp_begin(audit::Actor actor, std::string use
   if (!key) co_return Answer::failure(Fault::failed, "no randomness for an ID");
 
   TotpRecord record;
-  record.created = system::unix_seconds(*_clock);
+  record.created = (_wall.unix_ms() / 1000);
   record.secret.resize(kTotpSecretBytes);
   if (!_random->fill(record.secret)) co_return Answer::failure(Fault::failed, "no randomness for a secret");
 
@@ -214,7 +214,7 @@ Task<Outcome<>> Factors::totp_confirm(audit::Actor actor, std::string user_id, s
   if (!record) co_return Answer::failure(Fault::not_found, "no such factor");
   if (record->confirmed) co_return Answer::failure(Fault::refused, "the factor is already confirmed");
 
-  const auto step = totp_match(record->secret, code, system::unix_seconds(*_clock), std::nullopt);
+  const auto step = totp_match(record->secret, code, (_wall.unix_ms() / 1000), std::nullopt);
   if (!step) {
     co_await _audit(actor, "factor.totp.confirm.refused", user_id, factor_id);
     co_return Answer::failure(Fault::refused, "the code is not right");
@@ -230,7 +230,7 @@ Task<Outcome<>> Factors::totp_confirm(audit::Actor actor, std::string user_id, s
 
 Task<Outcome<>> Factors::totp_check(std::string user_id, std::string code) {
   using Answer = Outcome<>;
-  const auto now = system::unix_seconds(*_clock);
+  const auto now = (_wall.unix_ms() / 1000);
   for (const auto& stored : co_await _records(std::move(user_id), FactorKind::totp)) {
     auto record = decode_totp(stored.value);
     if (!record || !record->confirmed) continue;
@@ -258,7 +258,7 @@ Task<Outcome<std::vector<Secret>>> Factors::recovery_generate(audit::Actor actor
     RecoveryRecord record;
     std::vector<Secret> codes;
   };
-  auto made = co_await offload(_hashing, [random = _random, params = _recovery_params, created = system::unix_seconds(*_clock)] {
+  auto made = co_await offload(_hashing, [random = _random, params = _recovery_params, created = (_wall.unix_ms() / 1000)] {
     Made out;
     out.record.created = created;
     while (out.codes.size() < kRecoveryCodes) {

@@ -43,7 +43,6 @@ add_library(lugh STATIC
     node/config.cpp
     store/log_format.cpp
     store/sealed_store.cpp
-    system/system_clock.cpp
     system/system_console.cpp
     system/system_environment.cpp
     system/system_files.cpp

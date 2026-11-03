@@ -54,9 +54,9 @@ TEST_F(EnrolmentLinksTest, TheTableHoldsNoToken) {
 
 TEST_F(EnrolmentLinksTest, ALinkExpires) {
   const auto token = run(links.issue(rig.admin, alice.id)).value;
-  rig.clock->advance(std::chrono::hours(72) - std::chrono::seconds(1));
+  rig.advance(std::chrono::hours(72) - std::chrono::seconds(1));
   EXPECT_TRUE(run(links.peek(token)).ok());
-  rig.clock->advance(std::chrono::seconds(1));
+  rig.advance(std::chrono::seconds(1));
   EXPECT_EQ(run(links.peek(token)).fault, Fault::not_found);
   EXPECT_EQ(run(links.spend(token, {"anonymous", ""})).fault, Fault::not_found);
 }

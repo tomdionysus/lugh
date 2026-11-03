@@ -28,7 +28,7 @@ class FactorsTest : public ::testing::Test {
     auto setup = run(factors.totp_begin(rig.admin, alice.id, "Lugh", "alice"));
     EXPECT_TRUE(setup.ok()) << setup.message;
     EXPECT_TRUE(run(factors.totp_confirm(rig.admin, alice.id, setup.value.factor_id, rig.code_for(setup.value.secret))).ok());
-    rig.clock->advance(std::chrono::seconds(30));
+    rig.advance(std::chrono::seconds(30));
     return std::move(setup.value);
   }
 
@@ -73,7 +73,7 @@ TEST_F(FactorsTest, ACodeWorksOnce) {
   EXPECT_EQ(run(factors.totp_check(alice.id, code)).fault, Fault::refused);
 
   // Nor does the code before it, once a later one has been used.
-  rig.clock->advance(std::chrono::seconds(30));
+  rig.advance(std::chrono::seconds(30));
   EXPECT_EQ(run(factors.totp_check(alice.id, rig.code_for(setup.secret, -1))).fault, Fault::refused);
   EXPECT_TRUE(run(factors.totp_check(alice.id, rig.code_for(setup.secret))).ok());
 }
@@ -82,7 +82,7 @@ TEST_F(FactorsTest, TheUsedStepSurvivesARestart) {
   const auto setup = confirmed_totp();
   const auto code = rig.code_for(setup.secret);
   ASSERT_TRUE(run(factors.totp_check(alice.id, code)).ok());
-  Factors again(rig.logger, rig.store, rig.random, rig.clock, rig.audit, test_pool(), kTestArgon2);
+  Factors again(rig.logger, rig.store, rig.random, rig.wall, rig.audit, test_pool(), kTestArgon2);
   EXPECT_EQ(run(again.totp_check(alice.id, code)).fault, Fault::refused);
 }
 

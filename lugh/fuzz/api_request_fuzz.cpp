@@ -15,17 +15,18 @@
 #include <memory>
 #include <string>
 
+#include "dannan/contract/time_source.h"
 #include "lugh/api/api_support.h"
 #include "lugh/http/router.h"
-#include "lugh/system/clock.h"
 
 namespace {
 
-class StillClock : public lugh::system::Clock {
+class StillTime : public dannan::contract::TimeSource {
  public:
-  std::chrono::system_clock::time_point wall_now() const override { return {}; }
-  std::chrono::steady_clock::time_point steady_now() const override { return {}; }
+  dannan::contract::TimePoint now() const noexcept override { return {}; }
 };
+
+const StillTime still_time;
 
 class Everyone : public lugh::http::CallerResolver {
  public:
@@ -36,8 +37,8 @@ boost::asio::io_context io;
 
 std::shared_ptr<lugh::http::Router> make_router() {
   using namespace lugh;
-  auto router = std::make_shared<http::Router>(
-      io.get_executor(), std::make_shared<http::Throttle>(std::make_shared<StillClock>(), http::RateLimits{{0, 0}, {0, 0}}), std::make_shared<Everyone>());
+  auto router = std::make_shared<http::Router>(io.get_executor(), std::make_shared<http::Throttle>(still_time, http::RateLimits{{0, 0}, {0, 0}}),
+                                               std::make_shared<Everyone>());
   const auto handler = [](http::RouteContext context) -> Task<void> {
     const auto precondition = api::if_match(context);
     std::optional<std::string> name;

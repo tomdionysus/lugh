@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "dannan/test/fixtures/stepped_time.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/authenticator.h"
 #include "lugh/authn/totp.h"
@@ -19,7 +20,6 @@
 #include "lugh/store/tables.h"
 #include "lugh/test/fixtures/counting_random.h"
 #include "lugh/test/fixtures/logger_mock.h"
-#include "lugh/test/fixtures/manual_clock.h"
 #include "lugh/test/fixtures/memory_store.h"
 #include "lugh/test/fixtures/pools.h"
 #include "lugh/test/fixtures/run.h"
@@ -41,22 +41,22 @@ inline std::vector<lugh::store::TableSpec> all_tables() {
 // Costs small enough for a test to hash freely; the hashing is Argon2id all the same.
 inline constexpr lugh::crypto::Argon2Costs kTestArgon2{64, 1, 1};
 
-// The directory and authn, wired as main wires them, over a MemoryStore, a ManualClock and
+// The directory and authn, wired as main wires them, over a MemoryStore, stepped time and
 // CountingRandom, with hashing on a pool of real threads. The helpers here run their
 // coroutines to the end, for tests that are not coroutines.
 class AuthnRig {
  public:
   explicit AuthnRig(lugh::authn::BreachedPasswords breached = {}, lugh::authn::Authenticator::Settings settings = {}) {
-    audit = run(lugh::audit::AuditLog::open(logger, store, clock)).value;
-    directory = std::make_shared<lugh::directory::Directory>(logger, store, random, clock, audit);
-    passwords = std::make_shared<lugh::authn::Passwords>(logger, store, random, clock, audit, test_pool(), kTestArgon2, lugh::authn::PasswordRules{},
+    audit = run(lugh::audit::AuditLog::open(logger, store, wall)).value;
+    directory = std::make_shared<lugh::directory::Directory>(logger, store, random, wall, audit);
+    passwords = std::make_shared<lugh::authn::Passwords>(logger, store, random, wall, audit, test_pool(), kTestArgon2, lugh::authn::PasswordRules{},
                                                          std::move(breached));
-    factors = std::make_shared<lugh::authn::Factors>(logger, store, random, clock, audit, test_pool(), kTestArgon2);
+    factors = std::make_shared<lugh::authn::Factors>(logger, store, random, wall, audit, test_pool(), kTestArgon2);
     directory->dependent_add(passwords);
     directory->dependent_add(factors);
     policies = std::make_shared<lugh::authn::Policies>(store, directory, audit);
-    links = std::make_shared<lugh::authn::EnrolmentLinks>(store, random, clock, directory, audit);
-    authenticator = std::make_shared<lugh::authn::Authenticator>(logger, clock, directory, passwords, factors, policies, links, audit, settings);
+    links = std::make_shared<lugh::authn::EnrolmentLinks>(store, random, wall, directory, audit);
+    authenticator = std::make_shared<lugh::authn::Authenticator>(logger, time, directory, passwords, factors, policies, links, audit, settings);
   }
 
   lugh::directory::User person(const std::string& name) {
@@ -68,7 +68,7 @@ class AuthnRig {
   // The code an authenticator app would show now for a base32 secret.
   std::string code_for(const lugh::Secret& secret, std::int64_t steps_ahead = 0) const {
     const auto raw = lugh::encoding::base32_decode(secret.reveal());
-    const auto now = lugh::system::unix_seconds(*clock);
+    const auto now = wall.unix_ms() / 1000;
     return lugh::authn::totp_code(*raw, lugh::authn::totp_step(now) + static_cast<std::uint64_t>(steps_ahead));
   }
 
@@ -101,14 +101,21 @@ class AuthnRig {
     secret = setup.value.secret;
     recovery = std::move(done.recovery_codes);
     // Past the step the confirming code used, so the next code is a new one.
-    clock->advance(std::chrono::seconds(30));
+    advance(std::chrono::seconds(30));
     return *run(directory->user(user.id));
   }
 
   lugh::audit::Actor admin{"admin", "192.0.2.10"};
   std::shared_ptr<MockLogger> logger = std::make_shared<MockLogger>();
   std::shared_ptr<MemoryStore> store = std::make_shared<MemoryStore>(all_tables());
-  std::shared_ptr<ManualClock> clock = std::make_shared<ManualClock>();
+  // Steady and wall time, moved together; the wall starts at 2026-10-18T00:00:00Z.
+  void advance(std::chrono::milliseconds by) {
+    time.advance(by);
+    wall.advance(by);
+  }
+
+  dannan::test::SteppedTime time;
+  dannan::test::SteppedWall wall{1792281600000ull};
   std::shared_ptr<CountingRandom> random = std::make_shared<CountingRandom>();
   std::shared_ptr<lugh::audit::AuditLog> audit;
   std::shared_ptr<lugh::directory::Directory> directory;

@@ -18,7 +18,7 @@
 #include <unordered_map>
 #include <utility>
 
-#include "lugh/system/clock.h"
+#include "dannan/contract/time_source.h"
 
 namespace lugh::http {
 
@@ -111,16 +111,14 @@ struct RateLimits {
 // further.
 class Throttle {
  public:
-  explicit Throttle(std::shared_ptr<system::Clock> clock, RateLimits limits = {}) : _clock(std::move(clock)), _limits(limits) {}
+  explicit Throttle(const dannan::contract::TimeSource& time, RateLimits limits = {}) : _time(time), _limits(limits) {}
 
   const RateLimits& limits() const { return _limits; }
 
-  std::optional<std::chrono::seconds> take(const std::string& key, const RateLimiter::Policy& policy) {
-    return _limiter.take(key, policy, _clock->steady_now());
-  }
+  std::optional<std::chrono::seconds> take(const std::string& key, const RateLimiter::Policy& policy) { return _limiter.take(key, policy, _time.now()); }
 
  private:
-  std::shared_ptr<system::Clock> _clock;
+  const dannan::contract::TimeSource& _time;
   RateLimits _limits;
   RateLimiter _limiter;
 };

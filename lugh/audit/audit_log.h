@@ -16,13 +16,13 @@
 #include <string>
 #include <vector>
 
+#include "dannan/contract/time_source.h"
 #include "dannan/identity/crypto.h"
 #include "lugh/core/async_mutex.h"
 #include "lugh/core/status.h"
 #include "lugh/core/task.h"
 #include "lugh/loggers/logger.h"
 #include "lugh/store/store.h"
-#include "lugh/system/clock.h"
 
 namespace lugh::audit {
 
@@ -78,7 +78,7 @@ class AuditLog {
 
   // Reads the tail of the chain, to carry on from it.
   static Task<Result<std::shared_ptr<AuditLog>>> open(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store,
-                                                      std::shared_ptr<system::Clock> clock);
+                                                      const dannan::contract::WallClock& wall);
 
   // Appends one entry. A failure is logged here as well as answered: the caller has
   // usually already done what it is recording, and cannot undo it. Entries are appended
@@ -101,11 +101,11 @@ class AuditLog {
   static std::string key(std::uint64_t sequence);
 
  private:
-  AuditLog(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Clock> clock);
+  AuditLog(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall);
 
   std::shared_ptr<loggers::Logger> _logger;
   std::shared_ptr<store::Store> _store;
-  std::shared_ptr<system::Clock> _clock;
+  const dannan::contract::WallClock& _wall;
 
   // Held from taking a sequence number to its record being written, so the chain has no
   // gaps and no forks.

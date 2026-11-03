@@ -44,7 +44,6 @@
 #include "lugh/node/config.h"
 #include "lugh/store/sealed_store.h"
 #include "lugh/store/tables.h"
-#include "lugh/system/system_clock.h"
 #include "lugh/system/system_console.h"
 #include "lugh/system/system_environment.h"
 #include "lugh/system/system_files.h"
@@ -119,7 +118,8 @@ std::vector<store::TableSpec> all_tables() {
 
 struct Ports {
   std::shared_ptr<loggers::Logger> logger;
-  std::shared_ptr<system::Clock> clock;
+  const dannan::contract::TimeSource& time;
+  const dannan::contract::WallClock& wall;
   std::shared_ptr<system::Random> random;
   std::shared_ptr<system::Files> files;
   std::shared_ptr<system::Console> console;
@@ -150,13 +150,13 @@ Task<int> genesis(Ports ports, keys::Keyring keyring, std::string state_director
   const auto opened =
       co_await store::SealedStore::open(ports.logger, ports.files, ports.random, ports.keyrings, std::move(keyring), state_directory + "/store", all_tables());
   if (!opened.ok) co_return failed(opened.error);
-  const auto audit = co_await audit::AuditLog::open(ports.logger, opened.value, ports.clock);
+  const auto audit = co_await audit::AuditLog::open(ports.logger, opened.value, ports.wall);
   if (!audit.ok) co_return failed(audit.error);
 
-  auto directory = std::make_shared<directory::Directory>(ports.logger, opened.value, ports.random, ports.clock, audit.value);
-  auto passwords = std::make_shared<authn::Passwords>(ports.logger, opened.value, ports.random, ports.clock, audit.value, ports.hashing, crypto::Argon2Costs{},
+  auto directory = std::make_shared<directory::Directory>(ports.logger, opened.value, ports.random, ports.wall, audit.value);
+  auto passwords = std::make_shared<authn::Passwords>(ports.logger, opened.value, ports.random, ports.wall, audit.value, ports.hashing, crypto::Argon2Costs{},
                                                       authn::PasswordRules{}, authn::BreachedPasswords{});
-  auto links = std::make_shared<authn::EnrolmentLinks>(opened.value, ports.random, ports.clock, directory, audit.value);
+  auto links = std::make_shared<authn::EnrolmentLinks>(opened.value, ports.random, ports.wall, directory, audit.value);
   const auto password = co_await authn::Genesis(directory, passwords, links, ports.random, audit.value).run();
   if (!password.ok()) co_return failed(password.message);
 
@@ -225,7 +225,7 @@ Task<Result<Services>> start(Ports ports, Config config) {
 
   Services services;
   services.store = opened.value;
-  auto audit = co_await audit::AuditLog::open(logger, services.store, ports.clock);
+  auto audit = co_await audit::AuditLog::open(logger, services.store, ports.wall);
   if (!audit.ok) co_return Answer::failure(audit.error);
   services.audit = audit.value;
 
@@ -238,16 +238,16 @@ Task<Result<Services>> start(Ports ports, Config config) {
   }
 
   const auto& store = services.store;
-  services.directory = std::make_shared<directory::Directory>(logger, store, ports.random, ports.clock, services.audit);
-  auto passwords = std::make_shared<authn::Passwords>(logger, store, ports.random, ports.clock, services.audit, ports.hashing, crypto::Argon2Costs{},
+  services.directory = std::make_shared<directory::Directory>(logger, store, ports.random, ports.wall, services.audit);
+  auto passwords = std::make_shared<authn::Passwords>(logger, store, ports.random, ports.wall, services.audit, ports.hashing, crypto::Argon2Costs{},
                                                       authn::PasswordRules{}, std::move(breached));
-  services.factors = std::make_shared<authn::Factors>(logger, store, ports.random, ports.clock, services.audit, ports.hashing);
+  services.factors = std::make_shared<authn::Factors>(logger, store, ports.random, ports.wall, services.audit, ports.hashing);
   services.directory->dependent_add(passwords);
   services.directory->dependent_add(services.factors);
   services.policies = std::make_shared<authn::Policies>(store, services.directory, services.audit);
-  services.links = std::make_shared<authn::EnrolmentLinks>(store, ports.random, ports.clock, services.directory, services.audit);
+  services.links = std::make_shared<authn::EnrolmentLinks>(store, ports.random, ports.wall, services.directory, services.audit);
   // Reached by the API now, and by the sign-in routes from P6.
-  services.authenticator = std::make_shared<authn::Authenticator>(logger, ports.clock, services.directory, passwords, services.factors, services.policies,
+  services.authenticator = std::make_shared<authn::Authenticator>(logger, ports.time, services.directory, passwords, services.factors, services.policies,
                                                                   services.links, services.audit, authn::Authenticator::Settings{});
 
   logger->info(std::to_string((co_await services.directory->users()).size()) + " users, " + std::to_string((co_await services.directory->groups()).size()) +
@@ -258,7 +258,9 @@ Task<Result<Services>> start(Ports ports, Config config) {
 int run(const cli::Options& options) {
   auto logger = std::make_shared<loggers::LoggerStdIO>(loggers::INFO, std::cerr);
 
-  auto clock = std::make_shared<system::SystemClock>();
+  // The node's clocks: Dannan's, one of each for the process.
+  const auto& time = dannan::contract::steady_time_source();
+  const auto& wall = dannan::contract::system_wall_clock();
   auto environment = std::make_shared<system::SystemEnvironment>();
   auto random = std::make_shared<system::SystemRandom>();
 
@@ -293,7 +295,7 @@ int run(const cli::Options& options) {
   auto files = std::make_shared<system::SystemFiles>(blocking.get_executor());
   auto console = std::make_shared<system::SystemConsole>(blocking.get_executor());
   auto keyrings = std::make_shared<keys::KeyringManager>(logger, files, random, console, environment, config.state_directory, hashing.get_executor());
-  const Ports ports{logger, clock, random, files, console, keyrings, blocking.get_executor(), hashing.get_executor()};
+  const Ports ports{logger, time, wall, random, files, console, keyrings, blocking.get_executor(), hashing.get_executor()};
 
   if (options.command == cli::Command::init) return run_until(io_context, run_init(options, ports, config.state_directory));
 
@@ -317,7 +319,7 @@ int run(const cli::Options& options) {
 
   // Route handlers run on the io_context's own threads: they are coroutines, and suspend
   // on the pools rather than block.
-  auto throttle = std::make_shared<http::Throttle>(clock);
+  auto throttle = std::make_shared<http::Throttle>(time);
   auto router = std::make_shared<http::Router>(io_context.get_executor(), throttle, resolver);
   auto client_address = std::make_shared<http::ClientAddress>(config.trusted_proxies);
 

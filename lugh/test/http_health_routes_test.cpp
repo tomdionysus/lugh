@@ -10,8 +10,8 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/json.hpp>
 
+#include "dannan/test/fixtures/stepped_time.h"
 #include "lugh/http/health_routes.h"
-#include "lugh/test/fixtures/manual_clock.h"
 #include "lugh/test/fixtures/route_call.h"
 
 using lugh::http::HealthRoutes;
@@ -22,9 +22,10 @@ namespace http = lugh::http;
 namespace {
 
 boost::asio::io_context io;
+dannan::test::SteppedTime time;
 
 std::shared_ptr<Router> router_with_health() {
-  auto router = std::make_shared<Router>(io.get_executor(), std::make_shared<Throttle>(std::make_shared<ManualClock>()));
+  auto router = std::make_shared<Router>(io.get_executor(), std::make_shared<Throttle>(time));
   HealthRoutes health;
   health.register_routes(*router);
   return router;

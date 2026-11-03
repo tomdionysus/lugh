@@ -91,7 +91,7 @@ TEST_F(GenesisTest, RootsFirstSignInIsEnrolment) {
   EXPECT_TRUE(run(rig.directory->user_by_name("root"))->enrolled);
 
   // From then on, as anyone: the password, then a code.
-  rig.clock->advance(std::chrono::seconds(30));
+  rig.advance(std::chrono::seconds(30));
   const auto again = run(auth.password("root", password, kSource));
   ASSERT_EQ(again.kind, Kind::next);
   EXPECT_EQ(again.sign_in.stage, Stage::second_factor);

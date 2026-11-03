@@ -11,8 +11,8 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/json.hpp>
 
+#include "dannan/test/fixtures/stepped_time.h"
 #include "lugh/http/router.h"
-#include "lugh/test/fixtures/manual_clock.h"
 #include "lugh/test/fixtures/route_call.h"
 
 using lugh::http::RateLimits;
@@ -25,14 +25,14 @@ namespace {
 
 std::string error_code(const RouteCall& result) { return std::string(boost::json::parse(result.response->body()).at("error").at("code").as_string()); }
 
-// Each test's own router, throttle and clock, with limits loose enough not to interfere
+// Each test's own router, throttle and time, with limits loose enough not to interfere
 // unless the test is about them.
 struct Fixture {
   boost::asio::io_context io;
-  std::shared_ptr<ManualClock> clock = std::make_shared<ManualClock>();
+  dannan::test::SteppedTime time;
   std::shared_ptr<Router> router;
 
-  explicit Fixture(RateLimits limits = {{1000, 1000}}) { router = std::make_shared<Router>(io.get_executor(), std::make_shared<Throttle>(clock, limits)); }
+  explicit Fixture(RateLimits limits = {{1000, 1000}}) { router = std::make_shared<Router>(io.get_executor(), std::make_shared<Throttle>(time, limits)); }
 
   void ok_route(http::verb method, const std::string& pattern) {
     router->add_open(method, pattern, [](RouteContext context) -> lugh::Task<void> {
@@ -118,7 +118,7 @@ TEST(Router, OpenRoutesAreLimitedByClientAddress) {
   // Another client is not held up.
   EXPECT_EQ(call(f.io, middleware, http::verb::get, "/health", "198.51.100.4").response->result(), http::status::ok);
 
-  f.clock->advance(std::chrono::seconds(60));
+  f.time.advance(std::chrono::seconds(60));
   EXPECT_EQ(call(f.io, middleware, http::verb::get, "/health").response->result(), http::status::ok);
 }
 
@@ -151,13 +151,13 @@ class FixedResolver : public http::CallerResolver {
 
 struct Protected {
   boost::asio::io_context io;
-  std::shared_ptr<ManualClock> clock = std::make_shared<ManualClock>();
+  dannan::test::SteppedTime time;
   std::shared_ptr<Router> router;
   std::string seen;
   int ran = 0;
 
   explicit Protected(RateLimits limits = {{1000, 1000}, {1000, 1000}}, bool with_resolver = true, std::size_t most_in_flight = Router::kMostInFlight) {
-    router = std::make_shared<Router>(io.get_executor(), std::make_shared<Throttle>(clock, limits), with_resolver ? std::make_shared<FixedResolver>() : nullptr,
+    router = std::make_shared<Router>(io.get_executor(), std::make_shared<Throttle>(time, limits), with_resolver ? std::make_shared<FixedResolver>() : nullptr,
                                       most_in_flight);
     for (const auto* scope : {"read", "write"}) {
       router->add(http::verb::get, std::string("/api/") + scope, scope, [this](RouteContext context) -> lugh::Task<void> {

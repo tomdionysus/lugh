@@ -191,7 +191,7 @@ TEST_F(AuthenticatorTest, FailuresBackOffPerAccount) {
   EXPECT_EQ(step.kind, Kind::wait);
   EXPECT_EQ(step.retry_after, std::chrono::seconds(1));
 
-  rig.clock->advance(std::chrono::seconds(1));
+  rig.advance(std::chrono::seconds(1));
   EXPECT_EQ(password("alice", kPassword, "203.0.113.9").kind, Kind::next);
   // And a success starts the account again.
   EXPECT_EQ(password("alice", "wrong password here").kind, Kind::refused);
@@ -208,7 +208,7 @@ TEST_F(AuthenticatorTest, FailuresBackOffPerAddress) {
 TEST_F(AuthenticatorTest, ASignInHasALifetime) {
   rig.enrolled("alice");
   password("alice", kPassword);
-  rig.clock->advance(std::chrono::minutes(16));
+  rig.advance(std::chrono::minutes(16));
   EXPECT_EQ(totp(rig.code_for(rig.secret)).kind, Kind::ended);
 }
 

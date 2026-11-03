@@ -64,11 +64,11 @@ Fault fault_of(store::StoreError error) {
 }
 
 Directory::Directory(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
-                     std::shared_ptr<system::Clock> clock, std::shared_ptr<audit::AuditLog> audit)
+                     const dannan::contract::WallClock& wall, std::shared_ptr<audit::AuditLog> audit)
     : _logger(std::make_shared<loggers::LoggerScoped>("directory", std::move(logger))),
       _store(std::move(store)),
       _random(std::move(random)),
-      _clock(std::move(clock)),
+      _wall(wall),
       _audit_log(std::move(audit)) {}
 
 void Directory::dependent_add(std::shared_ptr<Dependent> dependent) { _dependents.push_back(std::move(dependent)); }
@@ -99,7 +99,7 @@ Task<Outcome<User>> Directory::create_user(audit::Actor actor, NewUser fresh) {
   user.name = *name;
   user.email = email;
   user.display_name = std::move(fresh.display_name);
-  user.created = user.updated = system::unix_seconds(*_clock);
+  user.created = user.updated = (_wall.unix_ms() / 1000);
   co_return co_await _put_user(actor, std::move(user), 0, "user.create", fresh.kind == Kind::service ? "service" : "person");
 }
 
@@ -174,7 +174,7 @@ Task<Outcome<User>> Directory::update_user(audit::Actor actor, std::string id, U
   }
 
   if (changed.empty()) co_return Answer::success(std::move(*found));
-  found->updated = system::unix_seconds(*_clock);
+  found->updated = (_wall.unix_ms() / 1000);
   co_return co_await _put_user(actor, std::move(*found), version, "user.update", join_change(changed));
 }
 
@@ -187,7 +187,7 @@ Task<Outcome<User>> Directory::disable_user(audit::Actor actor, std::string id, 
 
   const auto version = found->version;
   found->disabled = disabled;
-  found->updated = system::unix_seconds(*_clock);
+  found->updated = (_wall.unix_ms() / 1000);
   co_return co_await _put_user(actor, std::move(*found), version, disabled ? "user.disable" : "user.enable", {});
 }
 
@@ -199,7 +199,7 @@ Task<Outcome<User>> Directory::enrolled_set(audit::Actor actor, std::string id, 
 
   const auto version = found->version;
   found->enrolled = enrolled;
-  found->updated = system::unix_seconds(*_clock);
+  found->updated = (_wall.unix_ms() / 1000);
   co_return co_await _put_user(actor, std::move(*found), version, enrolled ? "user.enrolled" : "user.unenrolled", {});
 }
 
@@ -239,7 +239,7 @@ Task<Outcome<Group>> Directory::create_group(audit::Actor actor, std::string nam
   group.id = *id;
   group.name = *normal;
   group.description = std::move(description);
-  group.created = group.updated = system::unix_seconds(*_clock);
+  group.created = group.updated = (_wall.unix_ms() / 1000);
   co_return co_await _put_group(actor, std::move(group), 0, "group.create");
 }
 
@@ -290,7 +290,7 @@ Task<Outcome<Group>> Directory::update_group(audit::Actor actor, std::string id,
   }
 
   if (!changed) co_return Answer::success(std::move(*found));
-  found->updated = system::unix_seconds(*_clock);
+  found->updated = (_wall.unix_ms() / 1000);
   co_return co_await _put_group(actor, std::move(*found), version, "group.update");
 }
 
@@ -325,7 +325,7 @@ Task<Outcome<>> Directory::add_member(audit::Actor actor, std::string group_id, 
   Membership membership;
   membership.group_id = group_id;
   membership.user_id = user_id;
-  membership.added = system::unix_seconds(*_clock);
+  membership.added = (_wall.unix_ms() / 1000);
   const auto key = membership.group_id + "/" + membership.user_id + "/" + dannan::identity::hex(instance);
 
   const auto written = co_await _store->put(kMemberships, key, encode(membership), 0);

@@ -41,8 +41,8 @@ class ApiRig : public AuthnRig {
 
   ApiRig()
       : callers(make_callers()),
-        router(std::make_shared<lugh::http::Router>(
-            io.get_executor(), std::make_shared<lugh::http::Throttle>(clock, lugh::http::RateLimits{{1000, 1000}, {1000, 1000}}), callers)),
+        router(std::make_shared<lugh::http::Router>(io.get_executor(),
+                                                    std::make_shared<lugh::http::Throttle>(time, lugh::http::RateLimits{{1000, 1000}, {1000, 1000}}), callers)),
         users(directory, factors, authenticator, links),
         groups(directory),
         policy_routes(policies, directory),

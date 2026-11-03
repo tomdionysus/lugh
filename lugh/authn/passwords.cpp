@@ -92,12 +92,12 @@ std::array<unsigned char, 32> BreachedPasswords::_fold_and_hash(std::span<const 
 }
 
 Passwords::Passwords(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
-                     std::shared_ptr<system::Clock> clock, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs params,
+                     const dannan::contract::WallClock& wall, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs params,
                      PasswordRules rules, BreachedPasswords breached)
     : _logger(std::make_shared<loggers::LoggerScoped>("passwords", std::move(logger))),
       _store(std::move(store)),
       _random(std::move(random)),
-      _clock(std::move(clock)),
+      _wall(wall),
       _audit(std::move(audit)),
       _hashing(std::move(hashing)),
       _params(params),
@@ -128,7 +128,7 @@ Task<Outcome<>> Passwords::set(audit::Actor actor, directory::User user, Secret 
       _hashing, [params = _params, random = _random, password = std::move(password)] { return hash_password(byte_span(password.reveal()), params, *random); });
   if (!hashed.ok) co_return Answer::failure(Fault::failed, hashed.error);
 
-  const auto written = co_await _store->put(kTable, user.id, encode(Credential{std::move(hashed.value), system::unix_seconds(*_clock)}));
+  const auto written = co_await _store->put(kTable, user.id, encode(Credential{std::move(hashed.value), (_wall.unix_ms() / 1000)}));
   if (!written.ok()) co_return Answer::failure(directory::fault_of(written.error), written.message);
   co_await _audit->record(audit::Event{"password.set", actor.id, user.id, actor.source, "version " + std::to_string(written.version)});
   co_return Answer::success();

@@ -9,8 +9,8 @@
 
 #include <gtest/gtest.h>
 
+#include "dannan/test/fixtures/stepped_time.h"
 #include "lugh/test/fixtures/logger_mock.h"
-#include "lugh/test/fixtures/manual_clock.h"
 #include "lugh/test/fixtures/memory_store.h"
 #include "lugh/test/fixtures/run.h"
 
@@ -22,14 +22,14 @@ namespace {
 class AuditLogTest : public ::testing::Test {
  protected:
   std::shared_ptr<AuditLog> open() {
-    auto opened = run(AuditLog::open(logger, store, clock));
+    auto opened = run(AuditLog::open(logger, store, wall));
     EXPECT_TRUE(opened.ok) << opened.error;
     return opened.value;
   }
 
   std::shared_ptr<MockLogger> logger = std::make_shared<MockLogger>();
   std::shared_ptr<MemoryStore> store = std::make_shared<MemoryStore>(std::vector<lugh::store::TableSpec>{{"audit", {}}});
-  std::shared_ptr<ManualClock> clock = std::make_shared<ManualClock>();
+  dannan::test::SteppedWall wall{1792281600000ull};  // 2026-10-18T00:00:00Z
 };
 
 }  // namespace
@@ -37,7 +37,7 @@ class AuditLogTest : public ::testing::Test {
 TEST_F(AuditLogTest, EachEntryCarriesTheHashOfTheOneBefore) {
   auto log = open();
   ASSERT_TRUE(run(log->record(Event{"user.create", "admin", "u1", "192.0.2.1", "person"})).ok);
-  clock->advance(std::chrono::seconds(5));
+  wall.advance(std::chrono::seconds(5));
   ASSERT_TRUE(run(log->record(Event{"user.disable", "admin", "u1", "192.0.2.1", ""})).ok);
 
   const auto entries = run(log->entries(1, 10));
@@ -97,7 +97,7 @@ TEST_F(AuditLogTest, ARewrittenChainIsFoundWhereItJoins) {
   auto entry = *AuditLog::decode(store->get_now("audit", AuditLog::key(2))->value);
   entry.event.actor = "someone else";
   auto other_store = std::make_shared<MemoryStore>(std::vector<lugh::store::TableSpec>{{"audit", {}}});
-  auto other = run(AuditLog::open(logger, other_store, clock)).value;
+  auto other = run(AuditLog::open(logger, other_store, wall)).value;
   run(other->record(Event{"a", "x", "", "", ""}));
   run(other->record(entry.event));
   store->put_now("audit", AuditLog::key(2), other_store->get_now("audit", AuditLog::key(2))->value);
@@ -127,7 +127,7 @@ TEST_F(AuditLogTest, LongFieldsAreCutNotRefused) {
 }
 
 TEST_F(AuditLogTest, AFailedWriteIsLoggedAndAnswered) {
-  auto log = run(AuditLog::open(logger, std::make_shared<MemoryStore>(std::vector<lugh::store::TableSpec>{}), clock)).value;
+  auto log = run(AuditLog::open(logger, std::make_shared<MemoryStore>(std::vector<lugh::store::TableSpec>{}), wall)).value;
   EXPECT_FALSE(run(log->record(Event{"user.create", "admin", "u1", "", ""})).ok);
   EXPECT_NE(logger->text().find("cannot record user.create for u1"), std::string::npos);
   EXPECT_EQ(log->size(), 0u);

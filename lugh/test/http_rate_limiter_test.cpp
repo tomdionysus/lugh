@@ -7,8 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include "dannan/test/fixtures/stepped_time.h"
 #include "lugh/http/rate_limiter.h"
-#include "lugh/test/fixtures/manual_clock.h"
 
 using lugh::http::RateLimiter;
 using lugh::http::Throttle;
@@ -68,13 +68,13 @@ TEST(RateLimiter, PrunesFullBuckets) {
 }
 
 TEST(Throttle, ReadsTheInjectedClock) {
-  auto clock = std::make_shared<ManualClock>();
-  Throttle throttle(clock);
+  dannan::test::SteppedTime time;
+  Throttle throttle(time);
   const RateLimiter::Policy policy{1, 6};
 
   EXPECT_FALSE(throttle.take("k", policy));
   EXPECT_TRUE(throttle.take("k", policy));
 
-  clock->advance(10s);
+  time.advance(10s);
   EXPECT_FALSE(throttle.take("k", policy));
 }

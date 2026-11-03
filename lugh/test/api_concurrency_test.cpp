@@ -66,8 +66,8 @@ class Responses {
 class Concurrency : public ::testing::Test {
  protected:
   void SetUp() override {
-    router = std::make_shared<lugh::http::Router>(pool.get_executor(),
-                                                  std::make_shared<lugh::http::Throttle>(rig.clock, lugh::http::RateLimits{{0, 0}, {0, 0}}), rig.callers, 1000);
+    router = std::make_shared<lugh::http::Router>(pool.get_executor(), std::make_shared<lugh::http::Throttle>(rig.time, lugh::http::RateLimits{{0, 0}, {0, 0}}),
+                                                  rig.callers, 1000);
     rig.users.register_routes(*router);
     rig.groups.register_routes(*router);
   }

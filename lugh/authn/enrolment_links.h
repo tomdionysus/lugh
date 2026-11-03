@@ -14,13 +14,13 @@
 #include <span>
 #include <string>
 
+#include "dannan/contract/time_source.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/core/outcome.h"
 #include "lugh/core/secret.h"
 #include "lugh/core/task.h"
 #include "lugh/directory/directory.h"
 #include "lugh/store/store.h"
-#include "lugh/system/clock.h"
 #include "lugh/system/random.h"
 
 namespace lugh::authn {
@@ -35,7 +35,7 @@ class EnrolmentLinks {
   static constexpr const char* kTable = "grants";
   static constexpr std::size_t kTokenBytes = 32;
 
-  EnrolmentLinks(std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random, std::shared_ptr<system::Clock> clock,
+  EnrolmentLinks(std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random, const dannan::contract::WallClock& wall,
                  std::shared_ptr<directory::Directory> directory, std::shared_ptr<audit::AuditLog> audit,
                  std::chrono::seconds lifetime = std::chrono::hours(72));
 
@@ -76,7 +76,7 @@ class EnrolmentLinks {
 
   std::shared_ptr<store::Store> _store;
   std::shared_ptr<system::Random> _random;
-  std::shared_ptr<system::Clock> _clock;
+  const dannan::contract::WallClock& _wall;
   std::shared_ptr<directory::Directory> _directory;
   std::shared_ptr<audit::AuditLog> _audit;
   std::chrono::seconds _lifetime;
