@@ -207,8 +207,8 @@ Task<Result<Bytes>> SystemFiles::read(std::string path, std::size_t most) const 
   co_return co_await offload(_blocking, [path = std::move(path), most] { return read_all<Bytes>(path, most); });
 }
 
-Task<Result<SecureBytes>> SystemFiles::read_secret(std::string path, std::size_t most) const {
-  co_return co_await offload(_blocking, [path = std::move(path), most] { return read_all<SecureBytes>(path, most); });
+Task<Result<SecureBuffer>> SystemFiles::read_secret(std::string path, std::size_t most) const {
+  co_return co_await offload(_blocking, [path = std::move(path), most] { return read_all<SecureBuffer>(path, most); });
 }
 
 Task<Status> SystemFiles::write(std::string path, Bytes data, bool replace) {

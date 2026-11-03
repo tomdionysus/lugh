@@ -50,7 +50,7 @@ struct KeyringHeader {
 struct DataKey {
   std::string name;
   std::uint32_t epoch = 0;
-  SecureBytes key;
+  SecureBuffer key;
 };
 
 // Lower-case letters, digits and underscores, 1 to 64 of them: a table name.
@@ -90,7 +90,7 @@ struct ParsedHeader {
 
 std::optional<ParsedHeader> decode_header(std::span<const unsigned char> file);
 
-SecureBytes encode_body(const std::vector<DataKey>& keys);
+SecureBuffer encode_body(const std::vector<DataKey>& keys);
 std::optional<std::vector<DataKey>> decode_body(std::span<const unsigned char> body);
 
 }  // namespace lugh::keys

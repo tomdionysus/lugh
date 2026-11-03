@@ -15,10 +15,10 @@ using namespace lugh::store;
 
 namespace {
 
-const lugh::SecureBytes kKey(32, 0x42);
+const lugh::SecureBuffer kKey(32, 0x42);
 
 KeyFor only_epoch_one() {
-  return [](std::uint32_t epoch) -> const lugh::SecureBytes* { return epoch == 1 ? &kKey : nullptr; };
+  return [](std::uint32_t epoch) -> const lugh::SecureBuffer* { return epoch == 1 ? &kKey : nullptr; };
 }
 
 Change put(std::string key, std::uint64_t version, std::string value) {
@@ -35,7 +35,7 @@ lugh::Bytes log_of(const std::vector<Change>& changes, FixedRandom& random, std:
   auto file = encode_file_header(header);
   auto previous = header.tag();
   for (const auto& change : changes) {
-    const auto framed = seal_change(change, table, 1, kKey, previous, random).value;
+    const auto framed = seal_change(change, table, 1, kKey, previous).value;
     file.insert(file.end(), framed.bytes.begin(), framed.bytes.end());
     previous = framed.frame.tag();
   }
@@ -59,7 +59,7 @@ TEST(LogFormat, AHeader) {
   EXPECT_EQ(parsed->header.table, "users");
   EXPECT_EQ(parsed->header.epoch, 3u);
   EXPECT_TRUE(verify_file_header(parsed->header, kKey));
-  EXPECT_FALSE(verify_file_header(parsed->header, lugh::SecureBytes(32, 0x43)));
+  EXPECT_FALSE(verify_file_header(parsed->header, lugh::SecureBuffer(32, 0x43)));
 }
 
 TEST(LogFormat, AnEditedHeaderDoesNotVerify) {
@@ -111,12 +111,12 @@ TEST(LogFormat, TheHeaderMustBeThisTables) {
 TEST(LogFormat, TheWrongKeyIsRefusedAtTheHeader) {
   FixedRandom random;
   const auto file = log_of({put("u1", 1, "alice")}, random);
-  const lugh::SecureBytes other(32, 0x99);
+  const lugh::SecureBuffer other(32, 0x99);
   const auto scan = scan_log(file, "users", [&](std::uint32_t) { return &other; });
   EXPECT_FALSE(scan.ok);
   EXPECT_NE(scan.error.find("does not open"), std::string::npos);
 
-  EXPECT_FALSE(scan_log(file, "users", [](std::uint32_t) -> const lugh::SecureBytes* { return nullptr; }).ok);
+  EXPECT_FALSE(scan_log(file, "users", [](std::uint32_t) -> const lugh::SecureBuffer* { return nullptr; }).ok);
 }
 
 TEST(LogFormat, EveryTruncationIsATornTail) {
@@ -203,7 +203,7 @@ TEST(LogFormat, AnEpochWithNoKeyIsDamageNotATear) {
   FixedRandom random;
   const auto header = make_file_header("users", 1, kKey, random).value;
   auto file = encode_file_header(header);
-  const auto framed = seal_change(put("u1", 1, "alice"), "users", 2, kKey, header.tag(), random).value;
+  const auto framed = seal_change(put("u1", 1, "alice"), "users", 2, kKey, header.tag()).value;
   file.insert(file.end(), framed.bytes.begin(), framed.bytes.end());
 
   const auto scan = scan_log(file, "users", only_epoch_one());
@@ -215,11 +215,11 @@ TEST(LogFormat, AnEpochWithNoKeyIsDamageNotATear) {
 TEST(LogFormat, SealRefusesWhatCannotBeRead) {
   FixedRandom random;
   const lugh::Bytes previous(kTagBytes, 0);
-  EXPECT_FALSE(seal_change(put("", 1, "x"), "users", 1, kKey, previous, random).ok);
-  EXPECT_FALSE(seal_change(put("k", 0, "x"), "users", 1, kKey, previous, random).ok);
-  EXPECT_FALSE(seal_change(put("k", 1, "x"), "users", 0, kKey, previous, random).ok);
-  EXPECT_FALSE(seal_change(put("k", 1, "x"), "users", 1, kKey, lugh::Bytes(3, 0), random).ok);
+  EXPECT_FALSE(seal_change(put("", 1, "x"), "users", 1, kKey, previous).ok);
+  EXPECT_FALSE(seal_change(put("k", 0, "x"), "users", 1, kKey, previous).ok);
+  EXPECT_FALSE(seal_change(put("k", 1, "x"), "users", 0, kKey, previous).ok);
+  EXPECT_FALSE(seal_change(put("k", 1, "x"), "users", 1, kKey, lugh::Bytes(3, 0)).ok);
   Change removal = put("k", 1, "not empty");
   removal.operation = Operation::remove;
-  EXPECT_FALSE(seal_change(removal, "users", 1, kKey, previous, random).ok);
+  EXPECT_FALSE(seal_change(removal, "users", 1, kKey, previous).ok);
 }

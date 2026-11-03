@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "dannan/identity/crypto.h"
-#include "lugh/core/byte_io.h"
+#include "lugh/core/codec.h"
 #include "lugh/crypto/aead.h"
 
 namespace lugh::store {
@@ -26,23 +26,21 @@ constexpr std::size_t kHeaderSealBytes = crypto::kAeadOverhead;
 
 // What the header's seal covers: everything in the header before it.
 Bytes header_fields(const FileHeader& header) {
-  Bytes out;
-  ByteWriter writer(out);
-  writer.text("LUGHTBL1");
+  dannan::net::Writer writer;
+  writer.raw(byte_span(kFileMagic));
   writer.u8(static_cast<std::uint8_t>(header.table.size()));
-  writer.text(header.table);
-  writer.bytes(header.id);
+  writer.raw(byte_span(header.table));
+  writer.raw(header.id);
   writer.u32(header.epoch);
-  return out;
+  return writer.take();
 }
 
 Bytes header_associated(const FileHeader& header) {
-  Bytes out;
-  ByteWriter writer(out);
-  writer.text(kTableContext);
+  dannan::net::Writer writer;
+  writer.raw(byte_span(kTableContext));
   writer.u8(0);
-  writer.bytes(header_fields(header));
-  return out;
+  writer.raw(header_fields(header));
+  return writer.take();
 }
 constexpr std::size_t kCheckBytes = 8;
 
@@ -50,15 +48,14 @@ constexpr std::size_t kCheckBytes = 8;
 constexpr std::size_t kMostSealedBytes = 1 + 8 + 2 + kMostKeyBytes + kMostValueBytes + crypto::kAeadOverhead;
 
 Bytes associated_data(std::string_view table, std::uint32_t epoch, std::span<const unsigned char> previous) {
-  Bytes out;
-  ByteWriter writer(out);
-  writer.text(kRecordContext);
+  dannan::net::Writer writer;
+  writer.raw(byte_span(kRecordContext));
   writer.u8(0);
   writer.u8(static_cast<std::uint8_t>(table.size()));
-  writer.text(table);
+  writer.raw(byte_span(table));
   writer.u32(epoch);
-  writer.bytes(previous);
-  return out;
+  writer.raw(previous);
+  return writer.take();
 }
 
 std::array<unsigned char, kCheckBytes> check_of(std::span<const unsigned char> header_prefix) {
@@ -81,10 +78,10 @@ std::optional<FrameHeader> frame_header_at(std::span<const unsigned char> bytes)
   const auto check = check_of(bytes.first(12));
   if (!std::equal(check.begin(), check.end(), bytes.begin() + 12)) return std::nullopt;
 
-  ByteReader reader(bytes.subspan(4, 8));
+  dannan::net::Reader reader(bytes.subspan(4, 8));
   FrameHeader header;
-  header.epoch = *reader.u32();
-  header.length = *reader.u32();
+  header.epoch = reader.u32();
+  header.length = reader.u32();
   if (header.epoch == 0 || header.length < crypto::kAeadOverhead || header.length > kMostSealedBytes) return std::nullopt;
   return header;
 }
@@ -101,32 +98,30 @@ bool header_after(std::span<const unsigned char> file, std::size_t from) {
 }
 
 std::optional<Change> decode_change(std::span<const unsigned char> plaintext) {
-  ByteReader reader(plaintext);
+  return decode_whole<Change>(plaintext, [](dannan::net::Reader& reader) -> std::optional<Change> {
+    Change change;
+    const auto operation = reader.u8();
+    if (operation == static_cast<std::uint8_t>(Operation::put)) {
+      change.operation = Operation::put;
+    } else if (operation == static_cast<std::uint8_t>(Operation::remove)) {
+      change.operation = Operation::remove;
+    } else {
+      return std::nullopt;
+    }
 
-  Change change;
-  const auto operation = reader.u8();
-  if (operation == static_cast<std::uint8_t>(Operation::put)) {
-    change.operation = Operation::put;
-  } else if (operation == static_cast<std::uint8_t>(Operation::remove)) {
-    change.operation = Operation::remove;
-  } else {
-    return std::nullopt;
-  }
+    change.version = reader.u64();
+    const auto key_length = reader.u16();
+    if (change.version == 0 || key_length == 0 || key_length > kMostKeyBytes) return std::nullopt;
+    const auto key = reader.view(key_length);
+    change.key.assign(key.begin(), key.end());
 
-  const auto version = reader.u64();
-  const auto key_length = reader.u16();
-  if (!version || *version == 0 || !key_length || *key_length == 0 || *key_length > kMostKeyBytes) return std::nullopt;
-  const auto key = reader.bytes(*key_length);
-  if (!key) return std::nullopt;
-
-  change.version = *version;
-  change.key.assign(key->begin(), key->end());
-
-  const auto value = reader.rest();
-  if (change.operation == Operation::remove && !value.empty()) return std::nullopt;
-  if (value.size() > kMostValueBytes) return std::nullopt;
-  change.value.assign(value.begin(), value.end());
-  return change;
+    // The value is the rest of the plaintext.
+    const auto value = reader.view(reader.remaining());
+    if (change.operation == Operation::remove && !value.empty()) return std::nullopt;
+    if (value.size() > kMostValueBytes) return std::nullopt;
+    change.value.assign(value.begin(), value.end());
+    return change;
+  });
 }
 
 }  // namespace
@@ -141,7 +136,7 @@ Result<FileHeader> make_file_header(std::string_view table, std::uint32_t epoch,
   header.id = random.bytes(kFileIdBytes);
   if (header.id.size() != kFileIdBytes) return Answer::failure("no randomness for a file id");
 
-  auto seal = crypto::seal(key, {}, header_associated(header), random);
+  auto seal = crypto::seal(key, {}, header_associated(header));
   if (!seal.ok) return Answer::failure(seal.error);
   header.seal = std::move(seal.value);
   return Answer::success(std::move(header));
@@ -159,44 +154,48 @@ bool verify_file_header(const FileHeader& header, std::span<const unsigned char>
 }
 
 std::optional<ParsedFileHeader> decode_file_header(std::span<const unsigned char> file) {
-  ByteReader reader(file);
-  const auto magic = reader.bytes(kFileMagic.size());
-  if (!magic || !std::equal(magic->begin(), magic->end(), kFileMagic.begin())) return std::nullopt;
+  try {
+    dannan::net::Reader reader(file);
+    const auto magic = reader.view(kFileMagic.size());
+    if (!std::equal(magic.begin(), magic.end(), kFileMagic.begin())) return std::nullopt;
 
-  const auto name_length = reader.u8();
-  if (!name_length || *name_length == 0 || *name_length > kMostTableNameBytes) return std::nullopt;
-  const auto name = reader.bytes(*name_length);
-  const auto id = reader.bytes(kFileIdBytes);
-  const auto epoch = reader.u32();
-  const auto seal = reader.bytes(kHeaderSealBytes);
-  if (!name || !id || !epoch || *epoch == 0 || !seal) return std::nullopt;
+    const auto name_length = reader.u8();
+    if (name_length == 0 || name_length > kMostTableNameBytes) return std::nullopt;
+    const auto name = reader.view(name_length);
+    const auto id = reader.view(kFileIdBytes);
+    const auto epoch = reader.u32();
+    const auto seal = reader.view(kHeaderSealBytes);
+    if (epoch == 0) return std::nullopt;
 
-  ParsedFileHeader parsed;
-  parsed.header.table.assign(name->begin(), name->end());
-  parsed.header.id.assign(id->begin(), id->end());
-  parsed.header.epoch = *epoch;
-  parsed.header.seal.assign(seal->begin(), seal->end());
-  parsed.length = reader.offset();
-  return parsed;
+    ParsedFileHeader parsed;
+    parsed.header.table.assign(name.begin(), name.end());
+    parsed.header.id.assign(id.begin(), id.end());
+    parsed.header.epoch = epoch;
+    parsed.header.seal.assign(seal.begin(), seal.end());
+    // The header is what was read; the frames follow it.
+    parsed.length = file.size() - reader.remaining();
+    return parsed;
+  } catch (const dannan::net::DecodeError&) {
+    return std::nullopt;
+  }
 }
 
 Result<Framed> seal_change(const Change& change, std::string_view table, std::uint32_t epoch, std::span<const unsigned char> key,
-                           std::span<const unsigned char> previous, system::Random& random) {
+                           std::span<const unsigned char> previous) {
   using Answer = Result<Framed>;
   if (change.key.empty() || change.key.size() > kMostKeyBytes) return Answer::failure("a key is 1 to 255 bytes");
   if (change.value.size() > kMostValueBytes) return Answer::failure("a value is at most 256 KiB");
   if (change.operation == Operation::remove && !change.value.empty()) return Answer::failure("a remove carries no value");
   if (change.version == 0 || epoch == 0 || previous.size() != kTagBytes) return Answer::failure("a frame needs a version, an epoch and a chain");
 
-  SecureBytes plaintext;
-  ByteWriter body(plaintext);
+  SecureWriter body;
   body.u8(static_cast<std::uint8_t>(change.operation));
   body.u64(change.version);
   body.u16(static_cast<std::uint16_t>(change.key.size()));
-  body.text(change.key);
-  body.bytes(change.value);
+  body.raw(byte_span(change.key));
+  body.raw(change.value);
 
-  auto sealed = crypto::seal(key, plaintext, associated_data(table, epoch, previous), random);
+  auto sealed = crypto::seal(key, body.data(), associated_data(table, epoch, previous));
   if (!sealed.ok) return Answer::failure(sealed.error);
 
   Framed out;
@@ -204,13 +203,13 @@ Result<Framed> seal_change(const Change& change, std::string_view table, std::ui
   out.frame.previous.assign(previous.begin(), previous.end());
   out.frame.sealed = std::move(sealed.value);
 
-  ByteWriter writer(out.bytes);
-  writer.text(kFrameMagic);
+  dannan::net::Writer writer;
+  writer.raw(byte_span(kFrameMagic));
   writer.u32(epoch);
   writer.u32(static_cast<std::uint32_t>(out.frame.sealed.size()));
-  const auto check = check_of(out.bytes);
-  writer.bytes(check);
-  writer.bytes(out.frame.sealed);
+  writer.fixed(check_of(writer.data()));
+  writer.raw(out.frame.sealed);
+  out.bytes = writer.take();
   return Answer::success(std::move(out));
 }
 

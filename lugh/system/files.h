@@ -33,7 +33,7 @@ class Files {
   virtual Task<Result<Bytes>> read(std::string path, std::size_t most) const = 0;
 
   // The same, into locked memory, for a file that holds a key.
-  virtual Task<Result<SecureBytes>> read_secret(std::string path, std::size_t most) const = 0;
+  virtual Task<Result<SecureBuffer>> read_secret(std::string path, std::size_t most) const = 0;
 
   // Writes the whole file, mode 0600, so that a crash leaves either the old file or the new
   // one, never part of either: a temporary beside it, synced, then moved into place, then

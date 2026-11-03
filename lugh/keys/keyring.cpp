@@ -9,8 +9,8 @@
 
 #include <utility>
 
+#include "dannan/identity/crypto.h"
 #include "lugh/crypto/aead.h"
-#include "lugh/crypto/hkdf.h"
 
 namespace lugh::keys {
 
@@ -24,14 +24,15 @@ Status Keyring::_check(const KeyringHeader& header) {
   if (header.id.size() != kKeyringIdBytes) return Status::failure("a keyring id is 16 bytes");
   if (header.source == MasterKeySource::passphrase) {
     if (header.salt.size() != kPassphraseSaltBytes) return Status::failure("a passphrase salt is 16 bytes");
-    if (!crypto::bounded(header.argon2)) return Status::failure("the passphrase's Argon2id costs are out of range");
+    if (!header.argon2.valid()) return Status::failure("the passphrase's Argon2id costs are out of range");
   }
   return Status::success();
 }
 
-Result<SecureBytes> Keyring::_derive_kek(const KeyringHeader& header, std::span<const unsigned char> master_key) {
-  if (master_key.size() != kMasterKeyBytes) return Result<SecureBytes>::failure("a master key is 32 bytes");
-  return crypto::hkdf_sha256(master_key, header.id, byte_span(kKekInfo), crypto::kAeadKeyBytes);
+Result<SecureBuffer> Keyring::_derive_kek(const KeyringHeader& header, std::span<const unsigned char> master_key) {
+  if (master_key.size() != kMasterKeyBytes) return Result<SecureBuffer>::failure("a master key is 32 bytes");
+  const auto kek = dannan::identity::hkdf_sha256_secret(master_key, header.id, byte_span(kKekInfo));
+  return Result<SecureBuffer>::success(SecureBuffer(kek.reveal().begin(), kek.reveal().end()));
 }
 
 Result<Keyring> Keyring::create(KeyringHeader header, std::span<const unsigned char> master_key) {
@@ -70,13 +71,13 @@ Result<Keyring> Keyring::open(std::span<const unsigned char> file, std::span<con
   return Answer::success(std::move(keyring));
 }
 
-Result<Bytes> Keyring::seal(system::Random& random) const {
+Result<Bytes> Keyring::seal() const {
   using Answer = Result<Bytes>;
   if (_kek.empty()) return Answer::failure("the keyring has no KEK");
 
   auto file = encode_header(_header);
   const auto body = encode_body(_keys);
-  auto sealed = crypto::seal(_kek, body, file, random);
+  auto sealed = crypto::seal(_kek, body, file);
   if (!sealed.ok) return Answer::failure("cannot seal the keyring: " + sealed.error);
 
   file.insert(file.end(), sealed.value.begin(), sealed.value.end());

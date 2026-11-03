@@ -67,7 +67,7 @@ inline lugh::store::IndexSpec name_index() {
                                 }};
 }
 
-inline std::string text(const lugh::SecureBytes& value) { return std::string(value.begin(), value.end()); }
+inline std::string text(const lugh::SecureBuffer& value) { return std::string(value.begin(), value.end()); }
 
-// A value to write: the store takes SecureBytes.
-inline lugh::SecureBytes secure(std::string_view value) { return lugh::SecureBytes(value.begin(), value.end()); }
+// A value to write: the store takes SecureBuffer.
+inline lugh::SecureBuffer secure(std::string_view value) { return lugh::SecureBuffer(value.begin(), value.end()); }

@@ -34,11 +34,11 @@ DataKey key(std::string name, std::uint32_t epoch, unsigned char fill) {
   DataKey out;
   out.name = std::move(name);
   out.epoch = epoch;
-  out.key = lugh::SecureBytes(kDataKeyBytes, fill);
+  out.key = lugh::SecureBuffer(kDataKeyBytes, fill);
   return out;
 }
 
-lugh::Bytes plain(const lugh::SecureBytes& secure) { return lugh::Bytes(secure.begin(), secure.end()); }
+lugh::Bytes plain(const lugh::SecureBuffer& secure) { return lugh::Bytes(secure.begin(), secure.end()); }
 
 }  // namespace
 

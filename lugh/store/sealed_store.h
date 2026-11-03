@@ -63,7 +63,7 @@ class SealedStore : public Store {
   Task<bool> removed(std::string table, std::string key) const override;
   // The defaults are the interface's, repeated: a call through a SealedStore does not see
   // the base class's.
-  Task<Write> put(std::string table, std::string key, SecureBytes value, std::optional<std::uint64_t> expected = std::nullopt) override;
+  Task<Write> put(std::string table, std::string key, SecureBuffer value, std::optional<std::uint64_t> expected = std::nullopt) override;
   Task<Write> remove(std::string table, std::string key, std::optional<std::uint64_t> expected = std::nullopt) override;
 
   // Rewrites the table now.
@@ -99,7 +99,7 @@ class SealedStore : public Store {
     std::map<std::string, Entry, std::less<>> entries;
     // index name -> value -> key
     std::map<std::string, std::map<std::string, std::string, std::less<>>, std::less<>> indexes;
-    std::map<std::uint32_t, SecureBytes> keys;
+    std::map<std::uint32_t, SecureBuffer> keys;
     std::uint32_t epoch = 0;
     Bytes last_tag;
     std::size_t length = 0;
@@ -113,7 +113,7 @@ class SealedStore : public Store {
   Task<Status> _open_table(TableSpec spec);
   Task<Status> _load_keys(Table& table);
   Status _apply(Table& table, Scan::Entry entry);
-  Task<Write> _write(Table& table, Operation operation, std::string key, SecureBytes value, std::optional<std::uint64_t> expected);
+  Task<Write> _write(Table& table, Operation operation, std::string key, SecureBuffer value, std::optional<std::uint64_t> expected);
   // With the table's write lock held.
   Task<Status> _compact(Table& table);
   std::optional<Record> _open_entry(const Table& table, const std::string& key, const Entry& entry) const;

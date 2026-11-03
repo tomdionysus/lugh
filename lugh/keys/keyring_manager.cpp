@@ -49,7 +49,7 @@ Task<Result<KeyringManager::Created>> KeyringManager::create_for_credential() {
   header.id = _random->bytes(kKeyringIdBytes);
   if (header.id.size() != kKeyringIdBytes) co_return Answer::failure("no randomness for a keyring id");
 
-  SecureBytes master_key(kMasterKeyBytes);
+  SecureBuffer master_key(kMasterKeyBytes);
   if (!_random->fill(master_key)) co_return Answer::failure("no randomness for a master key");
 
   auto keyring = Keyring::create(std::move(header), master_key);
@@ -93,7 +93,7 @@ Task<Result<Keyring>> KeyringManager::create_with_passphrase(crypto::Argon2Costs
 Task<Status> KeyringManager::save_new(const Keyring& keyring) {
   if (const auto made = co_await _files->make_directory(_state_directory); !made.ok) co_return made;
 
-  auto sealed = keyring.seal(*_random);
+  auto sealed = keyring.seal();
   if (!sealed.ok) co_return Status::failure(sealed.error);
   if (const auto written = co_await _files->write(path(), std::move(sealed.value), false); !written.ok) co_return written;
 
@@ -102,7 +102,7 @@ Task<Status> KeyringManager::save_new(const Keyring& keyring) {
 }
 
 Task<Status> KeyringManager::save(const Keyring& keyring) {
-  auto sealed = keyring.seal(*_random);
+  auto sealed = keyring.seal();
   if (!sealed.ok) co_return Status::failure(sealed.error);
   co_return co_await _files->write(path(), std::move(sealed.value), true);
 }
@@ -128,8 +128,8 @@ Task<Result<Keyring>> KeyringManager::open() {
   co_return keyring;
 }
 
-Task<Result<SecureBytes>> KeyringManager::_from_credential() const {
-  using Answer = Result<SecureBytes>;
+Task<Result<SecureBuffer>> KeyringManager::_from_credential() const {
+  using Answer = Result<SecureBuffer>;
 
   const auto directory = _environment->get("CREDENTIALS_DIRECTORY");
   if (!directory || directory->empty()) {
@@ -149,9 +149,9 @@ Task<Result<SecureBytes>> KeyringManager::_from_credential() const {
   co_return key;
 }
 
-Task<Result<SecureBytes>> KeyringManager::_from_passphrase(KeyringHeader header) {
+Task<Result<SecureBuffer>> KeyringManager::_from_passphrase(KeyringHeader header) {
   auto passphrase = co_await _console->read_secret("Lugh master passphrase: ");
-  if (!passphrase) co_return Result<SecureBytes>::failure("the keyring's master key is a passphrase, and none was given");
+  if (!passphrase) co_return Result<SecureBuffer>::failure("the keyring's master key is a passphrase, and none was given");
   co_return co_await offload(_hashing, [header = std::move(header), passphrase = std::move(*passphrase)] {
     return crypto::stretch(byte_span(passphrase.reveal()), header.salt, header.argon2, kMasterKeyBytes);
   });

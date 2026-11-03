@@ -75,7 +75,7 @@ struct Change {
   Operation operation = Operation::put;
   std::uint64_t version = 0;
   std::string key;
-  SecureBytes value;
+  SecureBuffer value;
 };
 
 struct FileHeader {
@@ -126,13 +126,13 @@ struct Framed {
 };
 
 Result<Framed> seal_change(const Change& change, std::string_view table, std::uint32_t epoch, std::span<const unsigned char> key,
-                           std::span<const unsigned char> previous, system::Random& random);
+                           std::span<const unsigned char> previous);
 
 // Opens a frame the store kept.
 std::optional<Change> open_frame(const SealedFrame& frame, std::string_view table, std::span<const unsigned char> key);
 
 // The data key for an epoch, or null when the keyring has none.
-using KeyFor = std::function<const SecureBytes*(std::uint32_t epoch)>;
+using KeyFor = std::function<const SecureBuffer*(std::uint32_t epoch)>;
 
 struct Scan {
   FileHeader header;

@@ -18,7 +18,7 @@ class Random {
  public:
   virtual ~Random() = default;
 
-  // Fills the buffer it is given, so a key can be made where it will live (SecureBytes)
+  // Fills the buffer it is given, so a key can be made where it will live (SecureBuffer)
   // and nowhere else. False when the source failed, and then the buffer means nothing.
   virtual bool fill(std::span<unsigned char> out) = 0;
 

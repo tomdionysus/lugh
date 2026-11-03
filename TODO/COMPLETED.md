@@ -14,12 +14,29 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
 - Dannan's layout: `lugh/<subsystem>/`, `lugh/test/` flat, `lugh/fuzz/`, `tools/` (the service
   is `lugh-node`), `test/process/`, `TODO/COMPLETED.md`.
 - From Dannan in place of Lugh's own: SHA-256, the constant-time compare and hex
-  (`dannan/identity/crypto.h`), Argon2id (`dannan/identity/argon2.h`; Lugh keeps the ceiling
-  on stored costs and the stretch into its secure buffer until Dannan's carry them), and
-  signing (`dannan/identity/signing.h`; Lugh's copy deleted, it had no user yet).
+  (`dannan/identity/crypto.h`), Argon2id and its ceiling on stored costs
+  (`dannan/identity/argon2.h`, `Argon2Costs::valid()`), and signing
+  (`dannan/identity/signing.h`; Lugh's copy deleted, it had no user yet).
 - Finding: the unit count went from 389 to 373. The tests that went were of what Lugh no
   longer owns: its SHA-256, compare and signing copies, and the RFC 9106 Argon2id vectors,
   all tested in Dannan against the same published vectors.
+- The wall clock and the steady time source are Dannan's (`dannan/contract/`), and the tests
+  step Dannan's `SteppedTime` and `SteppedWall`.
+- Secure memory, the record codec, HKDF and AES-256-GCM are Dannan's: `SecureBuffer` on
+  Dannan's locked pages, every record and file format written with Dannan's `Writer` and
+  read with its `Reader` (`lugh/core/codec.h` holds only `SecureWriter` and
+  `decode_whole`), the keyring's KEK from `hkdf_sha256_secret`, and `crypto/aead` reduced to
+  the sealed-value framing (nonce, ciphertext, tag) over `aes_gcm_seal` and
+  `aes_gcm_open_secure`. The keyring and table log formats keep their bytes. The node
+  hardens itself with `harden_process()`. Lugh's `core/byte_io.h`, `core/secure_memory`
+  and `crypto/hkdf` are deleted. Dannan is pinned to f5dd71e.
+- Finding: the unit count went from 373 to 353, all of it what Lugh no longer owns: its
+  byte codec, secure memory and HKDF tests, the GCM known-answer vectors and the Argon2
+  ceiling (each tested in Dannan), and the test that a broken random source seals nothing,
+  since Dannan draws the nonce itself and Lugh cannot inject that failure any more.
+- Finding: the warning that key material could not be locked into memory is gone. Dannan
+  reports locking per allocation (`locked()`), not as a count for the process, so the node
+  now warns only when `harden_process()` falls short. Asked of Dannan.
 
 ## 2026-10-18: P5, the management API (not committed)
 

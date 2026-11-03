@@ -29,7 +29,7 @@ class KeyringManagerTest : public ::testing::Test {
   KeyringManager manager() { return KeyringManager(logger, files, random, console, environment, "/var/lib/lugh", test_pool()); }
 
   // A keyring made for a credential, saved, and the credential where systemd puts it.
-  lugh::SecureBytes initialise() {
+  lugh::SecureBuffer initialise() {
     auto keys = manager();
     auto created = run(keys.create_for_credential());
     EXPECT_TRUE(created.ok) << created.error;

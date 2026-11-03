@@ -40,7 +40,7 @@ class Keyring {
   static Result<Keyring> open(std::span<const unsigned char> file, std::span<const unsigned char> master_key);
 
   // The file, sealed again under a fresh nonce.
-  Result<Bytes> seal(system::Random& random) const;
+  Result<Bytes> seal() const;
 
   const KeyringHeader& header() const { return _header; }
 
@@ -66,11 +66,11 @@ class Keyring {
   Status rekey(KeyringHeader header, std::span<const unsigned char> master_key);
 
  private:
-  static Result<SecureBytes> _derive_kek(const KeyringHeader& header, std::span<const unsigned char> master_key);
+  static Result<SecureBuffer> _derive_kek(const KeyringHeader& header, std::span<const unsigned char> master_key);
   static Status _check(const KeyringHeader& header);
 
   KeyringHeader _header;
-  SecureBytes _kek;
+  SecureBuffer _kek;
   std::vector<DataKey> _keys;
 };
 

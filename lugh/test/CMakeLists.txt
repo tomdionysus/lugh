@@ -23,13 +23,10 @@ add_executable(lugh_tests
     authn_policy_test.cpp
     authn_totp_test.cpp
     core_async_test.cpp
-    core_byte_io_test.cpp
     core_encoding_test.cpp
     core_secret_test.cpp
-    core_secure_memory_test.cpp
     crypto_aead_test.cpp
     crypto_argon2_test.cpp
-    crypto_hkdf_test.cpp
     crypto_hmac_test.cpp
     directory_records_test.cpp
     directory_test.cpp

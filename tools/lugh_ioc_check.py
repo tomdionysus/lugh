@@ -59,7 +59,6 @@ ADAPTERS = {
     "lugh/system/system_files.cpp",
     "lugh/system/system_console.h",  # SystemConsole: a passphrase typed without echo
     "lugh/system/system_console.cpp",
-    "lugh/core/secure_memory.cpp",  # locked pages for key material
 }
 
 # Exempt from one pattern only.

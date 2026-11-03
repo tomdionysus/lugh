@@ -28,7 +28,7 @@ Task<Outcome<Secret>> Genesis::run() {
   if (!administrators.ok()) co_return Answer::from(administrators);
   if (const auto added = co_await _directory->add_member(actor, administrators.value.id, root.value.id); !added.ok()) co_return Answer::from(added);
 
-  SecureBytes raw(kPasswordBytes);
+  SecureBuffer raw(kPasswordBytes);
   if (!_random->fill(raw)) co_return Answer::failure(Fault::failed, "no randomness for root's password");
   Secret password(encoding::base64url(raw));
 

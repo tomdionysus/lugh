@@ -96,7 +96,7 @@ Task<Status> SealedStore::_open_table(TableSpec spec) {
   const auto file = co_await _files->read(path, kMostTableFileBytes);
   if (!file.ok) co_return Status::failure(file.error);
 
-  const KeyFor key_for = [&table](std::uint32_t epoch) -> const SecureBytes* {
+  const KeyFor key_for = [&table](std::uint32_t epoch) -> const SecureBuffer* {
     const auto found = table->keys.find(epoch);
     return found == table->keys.end() ? nullptr : &found->second;
   };
@@ -225,7 +225,7 @@ Task<bool> SealedStore::removed(std::string name, std::string key) const {
   co_return found != table->entries.end() && found->second.removed;
 }
 
-Task<Write> SealedStore::put(std::string name, std::string key, SecureBytes value, std::optional<std::uint64_t> expected) {
+Task<Write> SealedStore::put(std::string name, std::string key, SecureBuffer value, std::optional<std::uint64_t> expected) {
   auto* table = _table(name);
   if (table == nullptr) co_return Write::failure(StoreError::not_found, "no table " + name);
   co_return co_await _write(*table, Operation::put, std::move(key), std::move(value), expected);
@@ -237,7 +237,7 @@ Task<Write> SealedStore::remove(std::string name, std::string key, std::optional
   co_return co_await _write(*table, Operation::remove, std::move(key), {}, expected);
 }
 
-Task<Write> SealedStore::_write(Table& table, Operation operation, std::string key, SecureBytes value, std::optional<std::uint64_t> expected) {
+Task<Write> SealedStore::_write(Table& table, Operation operation, std::string key, SecureBuffer value, std::optional<std::uint64_t> expected) {
   // One writer at a time on this table, from the check to the change in memory, so what is
   // checked is still true when it is applied. Readers carry on meanwhile.
   auto writing = co_await table.write_lock.lock();
@@ -285,7 +285,7 @@ Task<Write> SealedStore::_write(Table& table, Operation operation, std::string k
     change.key = key;
     change.value = std::move(value);
 
-    auto framed = seal_change(change, name, table.epoch, table.keys.at(table.epoch), table.last_tag, *_random);
+    auto framed = seal_change(change, name, table.epoch, table.keys.at(table.epoch), table.last_tag);
     if (!framed.ok) co_return Write::failure(StoreError::failed, framed.error);
     frame = std::move(framed.value.frame);
     bytes = std::move(framed.value.bytes);
@@ -369,7 +369,7 @@ Task<Status> SealedStore::_compact(Table& table) {
       auto change = open_frame(entry.frame, name, old_key->second);
       if (!change) co_return Status::failure("record " + record + " does not open");
 
-      auto framed = seal_change(*change, name, epoch, key, previous, *_random);
+      auto framed = seal_change(*change, name, epoch, key, previous);
       if (!framed.ok) co_return Status::failure(framed.error);
       file.insert(file.end(), framed.value.bytes.begin(), framed.value.bytes.end());
       previous = framed.value.frame.tag();

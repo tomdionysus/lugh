@@ -11,7 +11,7 @@
 #include <set>
 #include <utility>
 
-#include "lugh/core/byte_io.h"
+#include "lugh/core/codec.h"
 
 namespace lugh::keys {
 
@@ -31,105 +31,99 @@ bool valid_key_name(std::string_view name) {
 }
 
 Bytes encode_header(const KeyringHeader& header) {
-  Bytes out;
-  ByteWriter writer(out);
-  writer.text(kMagic);
+  dannan::net::Writer writer;
+  writer.raw(byte_span(kMagic));
   writer.u8(kVersion);
   writer.u8(static_cast<std::uint8_t>(header.source));
-  writer.bytes(header.id);
+  writer.raw(header.id);
   if (header.source == MasterKeySource::passphrase) {
     writer.u32(header.argon2.memory_kib);
     writer.u32(header.argon2.iterations);
     writer.u32(header.argon2.lanes);
-    writer.bytes(header.salt);
+    writer.raw(header.salt);
   }
-  return out;
+  return writer.take();
 }
 
 std::optional<ParsedHeader> decode_header(std::span<const unsigned char> file) {
   if (file.size() > kMostKeyringBytes) return std::nullopt;
-  ByteReader reader(file);
+  try {
+    dannan::net::Reader reader(file);
 
-  const auto magic = reader.bytes(kMagic.size());
-  if (!magic || !std::equal(magic->begin(), magic->end(), kMagic.begin())) return std::nullopt;
-  if (reader.u8() != kVersion) return std::nullopt;
+    const auto magic = reader.view(kMagic.size());
+    if (!std::equal(magic.begin(), magic.end(), kMagic.begin())) return std::nullopt;
+    if (reader.u8() != kVersion) return std::nullopt;
 
-  ParsedHeader parsed;
-  const auto source = reader.u8();
-  if (source == static_cast<std::uint8_t>(MasterKeySource::credential)) {
-    parsed.header.source = MasterKeySource::credential;
-  } else if (source == static_cast<std::uint8_t>(MasterKeySource::passphrase)) {
-    parsed.header.source = MasterKeySource::passphrase;
-  } else {
+    ParsedHeader parsed;
+    const auto source = reader.u8();
+    if (source == static_cast<std::uint8_t>(MasterKeySource::credential)) {
+      parsed.header.source = MasterKeySource::credential;
+    } else if (source == static_cast<std::uint8_t>(MasterKeySource::passphrase)) {
+      parsed.header.source = MasterKeySource::passphrase;
+    } else {
+      return std::nullopt;
+    }
+
+    const auto id = reader.view(kKeyringIdBytes);
+    parsed.header.id.assign(id.begin(), id.end());
+
+    if (parsed.header.source == MasterKeySource::passphrase) {
+      const auto memory = reader.u32();
+      const auto iterations = reader.u32();
+      const auto lanes = reader.u32();
+      const auto salt = reader.view(kPassphraseSaltBytes);
+      parsed.header.argon2 = crypto::Argon2Costs{memory, iterations, lanes};
+      if (!parsed.header.argon2.valid()) return std::nullopt;
+      parsed.header.salt.assign(salt.begin(), salt.end());
+    }
+
+    // The header is what was read; the sealed body follows it.
+    parsed.length = file.size() - reader.remaining();
+    return parsed;
+  } catch (const dannan::net::DecodeError&) {
     return std::nullopt;
   }
-
-  const auto id = reader.bytes(kKeyringIdBytes);
-  if (!id) return std::nullopt;
-  parsed.header.id.assign(id->begin(), id->end());
-
-  if (parsed.header.source == MasterKeySource::passphrase) {
-    const auto memory = reader.u32();
-    const auto iterations = reader.u32();
-    const auto lanes = reader.u32();
-    const auto salt = reader.bytes(kPassphraseSaltBytes);
-    if (!memory || !iterations || !lanes || !salt) return std::nullopt;
-    parsed.header.argon2 = crypto::Argon2Costs{*memory, *iterations, *lanes};
-    if (!crypto::bounded(parsed.header.argon2)) return std::nullopt;
-    parsed.header.salt.assign(salt->begin(), salt->end());
-  }
-
-  parsed.length = reader.offset();
-  return parsed;
 }
 
-SecureBytes encode_body(const std::vector<DataKey>& keys) {
-  SecureBytes out;
-  ByteWriter writer(out);
+SecureBuffer encode_body(const std::vector<DataKey>& keys) {
+  SecureWriter writer;
   writer.u32(static_cast<std::uint32_t>(keys.size()));
   for (const auto& key : keys) {
     writer.u8(static_cast<std::uint8_t>(key.name.size()));
-    writer.text(key.name);
+    writer.raw(byte_span(key.name));
     writer.u32(key.epoch);
     writer.u8(static_cast<std::uint8_t>(key.key.size()));
-    writer.bytes(key.key);
+    writer.raw(key.key);
   }
-  return out;
+  return writer.take();
 }
 
 std::optional<std::vector<DataKey>> decode_body(std::span<const unsigned char> body) {
-  ByteReader reader(body);
+  return decode_whole<std::vector<DataKey>>(body, [](dannan::net::Reader& reader) -> std::optional<std::vector<DataKey>> {
+    const auto count = reader.u32();
+    if (count > kMostDataKeys) return std::nullopt;
 
-  const auto count = reader.u32();
-  if (!count || *count > kMostDataKeys) return std::nullopt;
+    std::vector<DataKey> keys;
+    std::set<std::pair<std::string, std::uint32_t>> seen;
+    for (std::uint32_t i = 0; i < count; ++i) {
+      DataKey key;
 
-  std::vector<DataKey> keys;
-  std::set<std::pair<std::string, std::uint32_t>> seen;
-  for (std::uint32_t i = 0; i < *count; ++i) {
-    DataKey key;
+      const auto name = reader.view(reader.u8());
+      key.name.assign(name.begin(), name.end());
+      if (!valid_key_name(key.name)) return std::nullopt;
 
-    const auto name_length = reader.u8();
-    if (!name_length) return std::nullopt;
-    const auto name = reader.bytes(*name_length);
-    if (!name) return std::nullopt;
-    key.name.assign(name->begin(), name->end());
-    if (!valid_key_name(key.name)) return std::nullopt;
+      key.epoch = reader.u32();
+      if (key.epoch == 0) return std::nullopt;
 
-    const auto epoch = reader.u32();
-    if (!epoch || *epoch == 0) return std::nullopt;
-    key.epoch = *epoch;
+      if (reader.u8() != kDataKeyBytes) return std::nullopt;
+      const auto material = reader.view(kDataKeyBytes);
+      key.key.assign(material.begin(), material.end());
 
-    if (reader.u8() != kDataKeyBytes) return std::nullopt;
-    const auto material = reader.bytes(kDataKeyBytes);
-    if (!material) return std::nullopt;
-    key.key.assign(material->begin(), material->end());
-
-    if (!seen.emplace(key.name, key.epoch).second) return std::nullopt;
-    keys.push_back(std::move(key));
-  }
-
-  if (!reader.done()) return std::nullopt;
-  return keys;
+      if (!seen.emplace(key.name, key.epoch).second) return std::nullopt;
+      keys.push_back(std::move(key));
+    }
+    return keys;
+  });
 }
 
 }  // namespace lugh::keys

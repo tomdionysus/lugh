@@ -44,7 +44,7 @@ class KeyringManager {
 
   struct Created {
     Keyring keyring;
-    SecureBytes master_key;
+    SecureBuffer master_key;
   };
 
   // `lugh-node init`: a new master key and an empty keyring under it, not yet saved. The caller
@@ -68,8 +68,8 @@ class KeyringManager {
 
  private:
   Task<Status> _refuse_existing() const;
-  Task<Result<SecureBytes>> _from_credential() const;
-  Task<Result<SecureBytes>> _from_passphrase(KeyringHeader header);
+  Task<Result<SecureBuffer>> _from_credential() const;
+  Task<Result<SecureBuffer>> _from_passphrase(KeyringHeader header);
 
   std::shared_ptr<loggers::Logger> _logger;
   std::shared_ptr<system::Files> _files;

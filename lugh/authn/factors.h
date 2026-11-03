@@ -105,7 +105,7 @@ class Factors : public directory::Dependent {
   struct Stored {
     std::string key;
     std::uint64_t version = 0;
-    SecureBytes value;
+    SecureBuffer value;
   };
 
   Task<std::vector<Stored>> _records(std::string user_id, std::optional<FactorKind> kind) const;
@@ -126,7 +126,7 @@ struct TotpRecord {
   bool confirmed = false;
   std::optional<std::uint64_t> last_step;
   std::uint64_t created = 0;
-  SecureBytes secret;
+  SecureBuffer secret;
 };
 
 struct RecoverySlot {
@@ -140,9 +140,9 @@ struct RecoveryRecord {
   std::vector<RecoverySlot> slots;
 };
 
-SecureBytes encode(const TotpRecord& record);
+SecureBuffer encode(const TotpRecord& record);
 std::optional<TotpRecord> decode_totp(std::span<const unsigned char> value);
-SecureBytes encode(const RecoveryRecord& record);
+SecureBuffer encode(const RecoveryRecord& record);
 std::optional<RecoveryRecord> decode_recovery(std::span<const unsigned char> value);
 
 // A recovery code as typed: dashes and spaces dropped, folded to upper case. nullopt for

@@ -63,7 +63,7 @@ TEST_F(GenesisTest, EachGenesisAPasswordOfItsOwn) {
   const auto first = genesis().value;
   // Another cluster, whose randomness has gone another way.
   AuthnRig other;
-  lugh::SecureBytes skip(7);
+  lugh::SecureBuffer skip(7);
   other.random->fill(skip);
   const auto second = run(Genesis(other.directory, other.passwords, other.links, other.random, other.audit).run()).value;
   EXPECT_FALSE(first.equals(second));

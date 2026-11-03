@@ -9,23 +9,9 @@
 
 #include "lugh/crypto/argon2.h"
 
-// Argon2id itself is Dannan's, tested there against RFC 9106. What Lugh adds is the ceiling
-// on costs read from a record, and the stretch into its secure buffer.
+// Argon2id itself is Dannan's, tested there against RFC 9106. What Lugh adds is the stretch
+// into its secure buffer, with a failure as a Result.
 using lugh::crypto::Argon2Costs;
-using lugh::crypto::bounded;
-
-TEST(Argon2, TheDefaultsAreWithinTheCeiling) { EXPECT_TRUE(bounded(Argon2Costs{})); }
-
-TEST(Argon2, CostsOutsideTheCeilingAreRefusedBeforeAnythingIsSpent) {
-  EXPECT_FALSE(bounded(Argon2Costs{lugh::crypto::kArgon2MostMemoryKib + 1, 3, 4}));
-  EXPECT_FALSE(bounded(Argon2Costs{64 * 1024, lugh::crypto::kArgon2MostIterations + 1, 4}));
-  EXPECT_FALSE(bounded(Argon2Costs{64 * 1024, 3, lugh::crypto::kArgon2MostLanes + 1}));
-  EXPECT_FALSE(bounded(Argon2Costs{64 * 1024, 0, 4}));
-  EXPECT_FALSE(bounded(Argon2Costs{64 * 1024, 3, 0}));
-  // Argon2 needs 8 KiB a lane.
-  EXPECT_FALSE(bounded(Argon2Costs{31, 1, 4}));
-  EXPECT_TRUE(bounded(Argon2Costs{32, 1, 4}));
-}
 
 TEST(Argon2, StretchIsArgon2id) {
   const auto salt = std::vector<unsigned char>(16, 0x02);

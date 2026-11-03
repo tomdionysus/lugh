@@ -25,28 +25,21 @@ Result<PasswordHash> hash_password(std::span<const unsigned char> secret, const 
 }
 
 bool verify_password(std::span<const unsigned char> secret, const PasswordHash& hash) {
-  if (!crypto::bounded(hash.params) || hash.hash.size() != kPasswordHashBytes) return false;
+  if (!hash.params.valid() || hash.hash.size() != kPasswordHashBytes) return false;
   const auto computed = crypto::stretch(secret, hash.salt, hash.params, kPasswordHashBytes);
   return computed.ok && dannan::identity::constant_time_equal(computed.value, hash.hash);
 }
 
-std::optional<PasswordHash> read_password_hash(ByteReader& reader) {
+std::optional<PasswordHash> read_password_hash(dannan::net::Reader& reader) {
   PasswordHash out;
-  const auto memory = reader.u32();
-  const auto iterations = reader.u32();
-  const auto lanes = reader.u32();
-  const auto salt_length = reader.u8();
-  if (!memory || !iterations || !lanes || !salt_length) return std::nullopt;
-  const auto salt = reader.bytes(*salt_length);
-  const auto hash_length = reader.u8();
-  if (!salt || !hash_length || *hash_length != kPasswordHashBytes) return std::nullopt;
-  const auto hash = reader.bytes(*hash_length);
-  if (!hash) return std::nullopt;
-
-  out.params = crypto::Argon2Costs{*memory, *iterations, *lanes};
-  if (!crypto::bounded(out.params) || salt->size() < crypto::kArgon2MinimumSalt) return std::nullopt;
-  out.salt.assign(salt->begin(), salt->end());
-  out.hash.assign(hash->begin(), hash->end());
+  out.params.memory_kib = reader.u32();
+  out.params.iterations = reader.u32();
+  out.params.lanes = reader.u32();
+  const auto salt = reader.view_bytes(kPasswordSaltBytes * 4);
+  const auto hash = reader.view_bytes(kPasswordHashBytes);
+  if (!out.params.valid() || salt.size() < crypto::kArgon2MinimumSalt || hash.size() != kPasswordHashBytes) return std::nullopt;
+  out.salt.assign(salt.begin(), salt.end());
+  out.hash.assign(hash.begin(), hash.end());
   return out;
 }
 

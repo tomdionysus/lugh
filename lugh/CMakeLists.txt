@@ -22,9 +22,7 @@ add_library(lugh STATIC
     authn/passwords.cpp
     authn/policy.cpp
     authn/totp.cpp
-    core/secure_memory.cpp
     crypto/aead.cpp
-    crypto/hkdf.cpp
     crypto/hmac.cpp
     directory/directory.cpp
     directory/records.cpp

@@ -52,8 +52,8 @@ inline std::string base32(std::span<const unsigned char> data) {
 
 // Either case, no padding, nothing else. nullopt for anything that is not exactly that,
 // including trailing bits that are not zero.
-inline std::optional<SecureBytes> base32_decode(std::string_view text) {
-  SecureBytes out;
+inline std::optional<SecureBuffer> base32_decode(std::string_view text) {
+  SecureBuffer out;
   out.reserve(text.size() * 5 / 8);
   unsigned buffer = 0;
   int bits = 0;

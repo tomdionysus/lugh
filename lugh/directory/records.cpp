@@ -7,7 +7,7 @@
 
 #include "lugh/directory/records.h"
 
-#include "lugh/core/byte_io.h"
+#include "lugh/core/codec.h"
 
 namespace lugh::directory {
 
@@ -56,12 +56,11 @@ std::size_t utf8_length(std::string_view text, std::size_t at) {
 }
 
 template <typename Write>
-SecureBytes encoded(Write write) {
-  SecureBytes out;
-  ByteWriter<SecureBytes> writer(out);
+SecureBuffer encoded(Write write) {
+  SecureWriter writer;
   writer.u8(kFormat);
   write(writer);
-  return out;
+  return writer.take();
 }
 
 }  // namespace
@@ -110,91 +109,77 @@ bool printable(std::string_view text, std::size_t most) {
   return true;
 }
 
-SecureBytes encode(const User& user) {
-  return encoded([&](ByteWriter<SecureBytes>& writer) {
+SecureBuffer encode(const User& user) {
+  return encoded([&](SecureWriter& writer) {
     writer.u8(static_cast<std::uint8_t>(user.kind));
     writer.u8(static_cast<std::uint8_t>((user.enrolled ? kEnrolled : 0) | (user.disabled ? kDisabled : 0)));
-    writer.field(user.name);
-    writer.field(user.email);
-    writer.field(user.display_name);
+    writer.string(user.name);
+    writer.string(user.email);
+    writer.string(user.display_name);
     writer.u64(user.created);
     writer.u64(user.updated);
   });
 }
 
 std::optional<User> decode_user(std::span<const unsigned char> value) {
-  ByteReader reader(value);
-  const auto format = reader.u8();
-  const auto kind = reader.u8();
-  const auto flags = reader.u8();
-  auto name = reader.field();
-  auto email = reader.field();
-  auto display = reader.field();
-  const auto created = reader.u64();
-  const auto updated = reader.u64();
-  if (!format || *format != kFormat || !kind || !flags || !name || !email || !display || !created || !updated || !reader.done()) return std::nullopt;
-  if (*kind != static_cast<std::uint8_t>(Kind::person) && *kind != static_cast<std::uint8_t>(Kind::service)) return std::nullopt;
-  if ((*flags & ~(kEnrolled | kDisabled)) != 0) return std::nullopt;
+  return decode_whole<User>(value, [](dannan::net::Reader& reader) -> std::optional<User> {
+    if (reader.u8() != kFormat) return std::nullopt;
+    const auto kind = reader.u8();
+    const auto flags = reader.u8();
+    if (kind != static_cast<std::uint8_t>(Kind::person) && kind != static_cast<std::uint8_t>(Kind::service)) return std::nullopt;
+    if ((flags & ~(kEnrolled | kDisabled)) != 0) return std::nullopt;
 
-  User user;
-  user.kind = static_cast<Kind>(*kind);
-  user.enrolled = (*flags & kEnrolled) != 0;
-  user.disabled = (*flags & kDisabled) != 0;
-  user.name = std::move(*name);
-  user.email = std::move(*email);
-  user.display_name = std::move(*display);
-  user.created = *created;
-  user.updated = *updated;
-  return user;
+    User user;
+    user.kind = static_cast<Kind>(kind);
+    user.enrolled = (flags & kEnrolled) != 0;
+    user.disabled = (flags & kDisabled) != 0;
+    user.name = reader.string(kMostFieldBytes);
+    user.email = reader.string(kMostFieldBytes);
+    user.display_name = reader.string(kMostFieldBytes);
+    user.created = reader.u64();
+    user.updated = reader.u64();
+    return user;
+  });
 }
 
-SecureBytes encode(const Group& group) {
-  return encoded([&](ByteWriter<SecureBytes>& writer) {
-    writer.field(group.name);
-    writer.field(group.description);
+SecureBuffer encode(const Group& group) {
+  return encoded([&](SecureWriter& writer) {
+    writer.string(group.name);
+    writer.string(group.description);
     writer.u64(group.created);
     writer.u64(group.updated);
   });
 }
 
 std::optional<Group> decode_group(std::span<const unsigned char> value) {
-  ByteReader reader(value);
-  const auto format = reader.u8();
-  auto name = reader.field();
-  auto description = reader.field();
-  const auto created = reader.u64();
-  const auto updated = reader.u64();
-  if (!format || *format != kFormat || !name || !description || !created || !updated || !reader.done()) return std::nullopt;
-
-  Group group;
-  group.name = std::move(*name);
-  group.description = std::move(*description);
-  group.created = *created;
-  group.updated = *updated;
-  return group;
+  return decode_whole<Group>(value, [](dannan::net::Reader& reader) -> std::optional<Group> {
+    if (reader.u8() != kFormat) return std::nullopt;
+    Group group;
+    group.name = reader.string(kMostFieldBytes);
+    group.description = reader.string(kMostFieldBytes);
+    group.created = reader.u64();
+    group.updated = reader.u64();
+    return group;
+  });
 }
 
-SecureBytes encode(const Membership& membership) {
-  return encoded([&](ByteWriter<SecureBytes>& writer) {
-    writer.field(membership.group_id);
-    writer.field(membership.user_id);
+SecureBuffer encode(const Membership& membership) {
+  return encoded([&](SecureWriter& writer) {
+    writer.string(membership.group_id);
+    writer.string(membership.user_id);
     writer.u64(membership.added);
   });
 }
 
 std::optional<Membership> decode_membership(std::span<const unsigned char> value) {
-  ByteReader reader(value);
-  const auto format = reader.u8();
-  auto group = reader.field();
-  auto user = reader.field();
-  const auto added = reader.u64();
-  if (!format || *format != kFormat || !group || !user || !added || !reader.done()) return std::nullopt;
-
-  Membership membership;
-  membership.group_id = std::move(*group);
-  membership.user_id = std::move(*user);
-  membership.added = *added;
-  return membership;
+  return decode_whole<Membership>(value, [](dannan::net::Reader& reader) -> std::optional<Membership> {
+    if (reader.u8() != kFormat) return std::nullopt;
+    Membership membership;
+    membership.group_id = reader.string(kMostFieldBytes);
+    membership.user_id = reader.string(kMostFieldBytes);
+    membership.added = reader.u64();
+    return membership;
+  });
 }
 
 std::vector<store::TableSpec> table_specs() {

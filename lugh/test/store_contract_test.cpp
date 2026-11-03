@@ -172,9 +172,9 @@ TYPED_TEST(StoreContract, BoundsAreKept) {
   EXPECT_EQ(run(this->store->put("users", std::string(256, 'k'), secure("x"))).error, StoreError::invalid);
   EXPECT_TRUE(run(this->store->put("users", std::string(255, 'k'), secure("x"))).ok());
 
-  const lugh::SecureBytes big(lugh::store::kMostValueBytes + 1, 'v');
+  const lugh::SecureBuffer big(lugh::store::kMostValueBytes + 1, 'v');
   EXPECT_EQ(run(this->store->put("groups", "big", big)).error, StoreError::invalid);
-  const lugh::SecureBytes most(lugh::store::kMostValueBytes, 'v');
+  const lugh::SecureBuffer most(lugh::store::kMostValueBytes, 'v');
   EXPECT_TRUE(run(this->store->put("groups", "most", most)).ok());
   EXPECT_EQ(run(this->store->get("groups", "most"))->value.size(), lugh::store::kMostValueBytes);
 

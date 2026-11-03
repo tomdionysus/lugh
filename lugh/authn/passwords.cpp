@@ -8,7 +8,7 @@
 #include "lugh/authn/passwords.h"
 
 #include "dannan/identity/crypto.h"
-#include "lugh/core/byte_io.h"
+#include "lugh/core/codec.h"
 #include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::authn {
@@ -22,23 +22,22 @@ struct Credential {
   std::uint64_t changed = 0;
 };
 
-SecureBytes encode(const Credential& credential) {
-  SecureBytes out;
-  ByteWriter<SecureBytes> writer(out);
+SecureBuffer encode(const Credential& credential) {
+  SecureWriter writer;
   writer.u8(kFormat);
   write_password_hash(writer, credential.hash);
   writer.u64(credential.changed);
-  return out;
+  return writer.take();
 }
 
 std::optional<Credential> decode(std::span<const unsigned char> value) {
-  ByteReader reader(value);
-  const auto format = reader.u8();
-  if (!format || *format != kFormat) return std::nullopt;
-  auto hash = read_password_hash(reader);
-  const auto changed = reader.u64();
-  if (!hash || !changed || !reader.done()) return std::nullopt;
-  return Credential{std::move(*hash), *changed};
+  return decode_whole<Credential>(value, [](dannan::net::Reader& reader) -> std::optional<Credential> {
+    if (reader.u8() != kFormat) return std::nullopt;
+    auto hash = read_password_hash(reader);
+    const auto changed = reader.u64();
+    if (!hash) return std::nullopt;
+    return Credential{std::move(*hash), changed};
+  });
 }
 
 // Characters, counting each UTF-8 lead byte; what follows a lead byte is not counted.
@@ -86,7 +85,7 @@ BreachedPasswords BreachedPasswords::from_text(std::span<const unsigned char> te
 bool BreachedPasswords::contains(std::span<const unsigned char> password) const { return !_hashes.empty() && _hashes.count(_fold_and_hash(password)) != 0; }
 
 std::array<unsigned char, 32> BreachedPasswords::_fold_and_hash(std::span<const unsigned char> password) {
-  SecureBytes folded(password.begin(), password.end());
+  SecureBuffer folded(password.begin(), password.end());
   for (auto& byte : folded) byte = static_cast<unsigned char>(lower(static_cast<char>(byte)));
   return dannan::identity::sha256(folded).bytes;
 }

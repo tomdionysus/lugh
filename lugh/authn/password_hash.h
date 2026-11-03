@@ -10,7 +10,7 @@
 #include <optional>
 #include <span>
 
-#include "lugh/core/byte_io.h"
+#include "lugh/core/codec.h"
 #include "lugh/core/secure_bytes.h"
 #include "lugh/core/status.h"
 #include "lugh/crypto/argon2.h"
@@ -24,7 +24,7 @@ namespace lugh::authn {
 struct PasswordHash {
   crypto::Argon2Costs params;
   Bytes salt;
-  SecureBytes hash;
+  SecureBuffer hash;
 };
 
 inline constexpr std::size_t kPasswordSaltBytes = 16;
@@ -41,19 +41,17 @@ inline bool same_costs(const crypto::Argon2Costs& a, const crypto::Argon2Costs& 
   return a.memory_kib == b.memory_kib && a.iterations == b.iterations && a.lanes == b.lanes;
 }
 
-// Within a record: the costs, then the salt and the hash, each with a one-byte length.
-template <typename Buffer>
-void write_password_hash(ByteWriter<Buffer>& writer, const PasswordHash& hash) {
+// Within a record: the costs, then the salt and the hash, each a blob.
+inline void write_password_hash(SecureWriter& writer, const PasswordHash& hash) {
   writer.u32(hash.params.memory_kib);
   writer.u32(hash.params.iterations);
   writer.u32(hash.params.lanes);
-  writer.u8(static_cast<std::uint8_t>(hash.salt.size()));
   writer.bytes(hash.salt);
-  writer.u8(static_cast<std::uint8_t>(hash.hash.size()));
   writer.bytes(hash.hash);
 }
 
-// nullopt for costs out of bounds, a salt too short, or a hash of the wrong length.
-std::optional<PasswordHash> read_password_hash(ByteReader& reader);
+// nullopt for costs out of bounds, a salt too short, or a hash of the wrong length. Throws
+// DecodeError for bytes that run short, as every read does.
+std::optional<PasswordHash> read_password_hash(dannan::net::Reader& reader);
 
 }  // namespace lugh::authn

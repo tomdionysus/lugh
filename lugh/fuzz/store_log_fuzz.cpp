@@ -16,8 +16,8 @@
 #include "lugh/store/log_format.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
-  static const lugh::SecureBytes key(32, 0x42);
-  const auto key_for = [](std::uint32_t epoch) -> const lugh::SecureBytes* { return epoch == 1 ? &key : nullptr; };
+  static const lugh::SecureBuffer key(32, 0x42);
+  const auto key_for = [](std::uint32_t epoch) -> const lugh::SecureBuffer* { return epoch == 1 ? &key : nullptr; };
 
   const std::span<const unsigned char> file(data, size);
   (void)lugh::store::decode_file_header(file);

@@ -83,12 +83,12 @@ std::optional<std::string> normal_email(std::string_view text);
 // Printable: no control characters, valid UTF-8, within `most` bytes.
 bool printable(std::string_view text, std::size_t most);
 
-// SecureBytes: a record of a person is theirs, and is sealed before it leaves memory.
-SecureBytes encode(const User& user);
+// SecureBuffer: a record of a person is theirs, and is sealed before it leaves memory.
+SecureBuffer encode(const User& user);
 std::optional<User> decode_user(std::span<const unsigned char> value);
-SecureBytes encode(const Group& group);
+SecureBuffer encode(const Group& group);
 std::optional<Group> decode_group(std::span<const unsigned char> value);
-SecureBytes encode(const Membership& membership);
+SecureBuffer encode(const Membership& membership);
 std::optional<Membership> decode_membership(std::span<const unsigned char> value);
 
 // The directory's tables, with their indexes: users by name and email, groups by name.

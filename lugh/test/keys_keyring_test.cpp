@@ -29,7 +29,7 @@ Keyring made() {
   return std::move(keyring.value);
 }
 
-lugh::Bytes plain(const lugh::SecureBytes& secure) { return lugh::Bytes(secure.begin(), secure.end()); }
+lugh::Bytes plain(const lugh::SecureBuffer& secure) { return lugh::Bytes(secure.begin(), secure.end()); }
 
 }  // namespace
 
@@ -46,7 +46,7 @@ TEST(Keyring, SealThenOpen) {
   ASSERT_TRUE(keyring.rotate("users", random).ok);
   ASSERT_TRUE(keyring.rotate("audit", random).ok);
 
-  const auto file = keyring.seal(random);
+  const auto file = keyring.seal();
   ASSERT_TRUE(file.ok) << file.error;
 
   const auto opened = Keyring::open(file.value, kMaster);
@@ -61,14 +61,14 @@ TEST(Keyring, TheKeysAreNotInTheFile) {
   FixedRandom random;
   auto keyring = made();
   ASSERT_TRUE(keyring.rotate("users", random).ok);
-  const auto file = keyring.seal(random).value;
+  const auto file = keyring.seal().value;
   const auto key = plain(keyring.current("users")->key);
   EXPECT_EQ(std::search(file.begin(), file.end(), key.begin(), key.end()), file.end());
 }
 
 TEST(Keyring, TheWrongMasterKeyOpensNothing) {
   FixedRandom random;
-  const auto file = made().seal(random).value;
+  const auto file = made().seal().value;
 
   auto wrong = kMaster;
   wrong[31] ^= 1;
@@ -84,7 +84,7 @@ TEST(Keyring, AnyEditIsRefused) {
   FixedRandom random;
   auto keyring = made();
   ASSERT_TRUE(keyring.rotate("users", random).ok);
-  const auto file = keyring.seal(random).value;
+  const auto file = keyring.seal().value;
 
   for (std::size_t i = 0; i < file.size(); ++i) {
     auto edited = file;
@@ -100,8 +100,8 @@ TEST(Keyring, AnyEditIsRefused) {
 // id, so another KEK salt) does not open.
 TEST(Keyring, ABodyCannotMoveToAnotherHeader) {
   FixedRandom random;
-  const auto first = made().seal(random).value;
-  auto second = Keyring::create(header(0x99), kMaster).value.seal(random).value;
+  const auto first = made().seal().value;
+  auto second = Keyring::create(header(0x99), kMaster).value.seal().value;
 
   const auto header_length = encode_header(header()).size();
   lugh::Bytes spliced(second.begin(), second.begin() + header_length);
@@ -112,8 +112,8 @@ TEST(Keyring, ABodyCannotMoveToAnotherHeader) {
 TEST(Keyring, EachSealIsFresh) {
   FixedRandom random;
   const auto keyring = made();
-  const auto a = keyring.seal(random).value;
-  const auto b = keyring.seal(random).value;
+  const auto a = keyring.seal().value;
+  const auto b = keyring.seal().value;
   EXPECT_NE(a, b);
   EXPECT_TRUE(Keyring::open(a, kMaster).ok);
   EXPECT_TRUE(Keyring::open(b, kMaster).ok);
@@ -149,14 +149,14 @@ TEST(Keyring, RotationRefusesBadNamesAndBadRandomness) {
 
 TEST(Keyring, AddTakesAKeyMadeElsewhere) {
   auto keyring = made();
-  DataKey key{"users", 7, lugh::SecureBytes(kDataKeyBytes, 0x42)};
+  DataKey key{"users", 7, lugh::SecureBuffer(kDataKeyBytes, 0x42)};
   ASSERT_TRUE(keyring.add(key).ok);
   EXPECT_EQ(keyring.current("users")->epoch, 7u);
 
   EXPECT_FALSE(keyring.add(key).ok);
-  EXPECT_FALSE(keyring.add(DataKey{"users", 0, lugh::SecureBytes(kDataKeyBytes, 1)}).ok);
-  EXPECT_FALSE(keyring.add(DataKey{"users", 8, lugh::SecureBytes(16, 1)}).ok);
-  EXPECT_FALSE(keyring.add(DataKey{"Users", 8, lugh::SecureBytes(kDataKeyBytes, 1)}).ok);
+  EXPECT_FALSE(keyring.add(DataKey{"users", 0, lugh::SecureBuffer(kDataKeyBytes, 1)}).ok);
+  EXPECT_FALSE(keyring.add(DataKey{"users", 8, lugh::SecureBuffer(16, 1)}).ok);
+  EXPECT_FALSE(keyring.add(DataKey{"Users", 8, lugh::SecureBuffer(kDataKeyBytes, 1)}).ok);
   EXPECT_EQ(keyring.size(), 1u);
 }
 
@@ -168,7 +168,7 @@ TEST(Keyring, RekeyMovesToANewMasterKey) {
 
   const auto next = repeated(0x77, kMasterKeyBytes);
   ASSERT_TRUE(keyring.rekey(header(0x12), next).ok);
-  const auto file = keyring.seal(random).value;
+  const auto file = keyring.seal().value;
 
   EXPECT_FALSE(Keyring::open(file, kMaster).ok);
   const auto opened = Keyring::open(file, next);
@@ -193,5 +193,5 @@ TEST(Keyring, RefusesBadHeaders) {
 
 TEST(Keyring, AnEmptyKeyringSealsNothing) {
   FixedRandom random;
-  EXPECT_FALSE(Keyring().seal(random).ok);
+  EXPECT_FALSE(Keyring().seal().ok);
 }

@@ -25,10 +25,10 @@ class MemoryFiles : public lugh::system::Files {
 
   lugh::Task<lugh::Result<lugh::Bytes>> read(std::string path, std::size_t most) const override { co_return read_now(path, most); }
 
-  lugh::Task<lugh::Result<lugh::SecureBytes>> read_secret(std::string path, std::size_t most) const override {
+  lugh::Task<lugh::Result<lugh::SecureBuffer>> read_secret(std::string path, std::size_t most) const override {
     auto plain = read_now(path, most);
-    if (!plain.ok) co_return lugh::Result<lugh::SecureBytes>::failure(plain.error);
-    co_return lugh::Result<lugh::SecureBytes>::success(lugh::SecureBytes(plain.value.begin(), plain.value.end()));
+    if (!plain.ok) co_return lugh::Result<lugh::SecureBuffer>::failure(plain.error);
+    co_return lugh::Result<lugh::SecureBuffer>::success(lugh::SecureBuffer(plain.value.begin(), plain.value.end()));
   }
 
   lugh::Task<lugh::Status> write(std::string path, lugh::Bytes data, bool replace) override {

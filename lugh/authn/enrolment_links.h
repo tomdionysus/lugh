@@ -66,7 +66,7 @@ class EnrolmentLinks {
     std::uint64_t expires = 0;
   };
 
-  static SecureBytes encode(const Link& link);
+  static SecureBuffer encode(const Link& link);
   static std::optional<Link> decode(std::span<const unsigned char> value);
 
  private:

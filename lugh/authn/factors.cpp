@@ -11,7 +11,7 @@
 
 #include "dannan/identity/crypto.h"
 #include "lugh/authn/totp.h"
-#include "lugh/core/byte_io.h"
+#include "lugh/core/codec.h"
 #include "lugh/core/encoding.h"
 #include "lugh/loggers/logger_scoped.h"
 
@@ -53,77 +53,72 @@ Secret display_code(std::string_view normal) {
 
 }  // namespace
 
-SecureBytes encode(const TotpRecord& record) {
-  SecureBytes out;
-  ByteWriter<SecureBytes> writer(out);
+SecureBuffer encode(const TotpRecord& record) {
+  SecureWriter writer;
   writer.u8(kFormat);
   writer.u8(static_cast<std::uint8_t>(FactorKind::totp));
   writer.u8(static_cast<std::uint8_t>((record.confirmed ? kConfirmed : 0) | (record.last_step ? kHasLastStep : 0)));
   writer.u64(record.last_step.value_or(0));
   writer.u64(record.created);
-  writer.u8(static_cast<std::uint8_t>(record.secret.size()));
   writer.bytes(record.secret);
-  return out;
+  return writer.take();
 }
 
 std::optional<TotpRecord> decode_totp(std::span<const unsigned char> value) {
   if (kind_of(value) != FactorKind::totp) return std::nullopt;
-  ByteReader reader(value);
-  reader.bytes(2);
-  const auto flags = reader.u8();
-  const auto last = reader.u64();
-  const auto created = reader.u64();
-  const auto length = reader.u8();
-  if (!flags || !last || !created || !length || (*flags & ~(kConfirmed | kHasLastStep)) != 0) return std::nullopt;
-  // One encoding per record: no step is written as zero.
-  if (!(*flags & kHasLastStep) && *last != 0) return std::nullopt;
-  if (*length < kLeastSecretBytes || *length > kMostSecretBytes) return std::nullopt;
-  const auto secret = reader.bytes(*length);
-  if (!secret || !reader.done()) return std::nullopt;
+  return decode_whole<TotpRecord>(value, [](dannan::net::Reader& reader) -> std::optional<TotpRecord> {
+    reader.view(2);
+    const auto flags = reader.u8();
+    const auto last = reader.u64();
+    const auto created = reader.u64();
+    // The secret is read in place and copied straight into secure memory.
+    const auto secret = reader.view_bytes(kMostSecretBytes);
+    if ((flags & ~(kConfirmed | kHasLastStep)) != 0) return std::nullopt;
+    // One encoding per record: no step is written as zero.
+    if (!(flags & kHasLastStep) && last != 0) return std::nullopt;
+    if (secret.size() < kLeastSecretBytes) return std::nullopt;
 
-  TotpRecord record;
-  record.confirmed = (*flags & kConfirmed) != 0;
-  if (*flags & kHasLastStep) record.last_step = *last;
-  record.created = *created;
-  record.secret.assign(secret->begin(), secret->end());
-  return record;
+    TotpRecord record;
+    record.confirmed = (flags & kConfirmed) != 0;
+    if (flags & kHasLastStep) record.last_step = last;
+    record.created = created;
+    record.secret.assign(secret.begin(), secret.end());
+    return record;
+  });
 }
 
-SecureBytes encode(const RecoveryRecord& record) {
-  SecureBytes out;
-  ByteWriter<SecureBytes> writer(out);
+SecureBuffer encode(const RecoveryRecord& record) {
+  SecureWriter writer;
   writer.u8(kFormat);
   writer.u8(static_cast<std::uint8_t>(FactorKind::recovery));
   writer.u64(record.created);
   writer.u8(static_cast<std::uint8_t>(record.slots.size()));
   for (const auto& slot : record.slots) {
-    writer.field(slot.selector);
+    writer.string(slot.selector);
     writer.u8(slot.used ? 1 : 0);
     write_password_hash(writer, slot.hash);
   }
-  return out;
+  return writer.take();
 }
 
 std::optional<RecoveryRecord> decode_recovery(std::span<const unsigned char> value) {
   if (kind_of(value) != FactorKind::recovery) return std::nullopt;
-  ByteReader reader(value);
-  reader.bytes(2);
-  const auto created = reader.u64();
-  const auto count = reader.u8();
-  if (!created || !count || *count > kMostSlots) return std::nullopt;
-
-  RecoveryRecord record;
-  record.created = *created;
-  for (unsigned i = 0; i < *count; ++i) {
-    auto selector = reader.field();
-    const auto used = reader.u8();
-    if (!selector || selector->size() != kSelectorCharacters || !used || *used > 1) return std::nullopt;
-    auto hash = read_password_hash(reader);
-    if (!hash) return std::nullopt;
-    record.slots.push_back(RecoverySlot{std::move(*selector), *used == 1, std::move(*hash)});
-  }
-  if (!reader.done()) return std::nullopt;
-  return record;
+  return decode_whole<RecoveryRecord>(value, [](dannan::net::Reader& reader) -> std::optional<RecoveryRecord> {
+    reader.view(2);
+    RecoveryRecord record;
+    record.created = reader.u64();
+    const auto count = reader.u8();
+    if (count > kMostSlots) return std::nullopt;
+    for (unsigned i = 0; i < count; ++i) {
+      auto selector = reader.string(kSelectorCharacters);
+      const auto used = reader.u8();
+      if (selector.size() != kSelectorCharacters || used > 1) return std::nullopt;
+      auto hash = read_password_hash(reader);
+      if (!hash) return std::nullopt;
+      record.slots.push_back(RecoverySlot{std::move(selector), used == 1, std::move(*hash)});
+    }
+    return record;
+  });
 }
 
 std::optional<Secret> normal_recovery_code(std::string_view code) {
@@ -262,7 +257,7 @@ Task<Outcome<std::vector<Secret>>> Factors::recovery_generate(audit::Actor actor
     Made out;
     out.record.created = created;
     while (out.codes.size() < kRecoveryCodes) {
-      SecureBytes raw(kRecoveryCodeBytes);
+      SecureBuffer raw(kRecoveryCodeBytes);
       if (!random->fill(raw)) {
         out.error = "no randomness for a recovery code";
         return out;

@@ -48,7 +48,7 @@ class MemoryStore : public lugh::store::Store {
     co_return found != nullptr && found->removed;
   }
 
-  lugh::Task<lugh::store::Write> put(std::string table, std::string key, lugh::SecureBytes value,
+  lugh::Task<lugh::store::Write> put(std::string table, std::string key, lugh::SecureBuffer value,
                                      std::optional<std::uint64_t> expected = std::nullopt) override {
     co_return put_now(table, key, value, expected);
   }
@@ -87,7 +87,7 @@ class MemoryStore : public lugh::store::Store {
   struct Entry {
     std::uint64_t version = 0;
     bool removed = false;
-    lugh::SecureBytes value;
+    lugh::SecureBuffer value;
     std::map<std::string, std::set<std::string>> index_values;
   };
 

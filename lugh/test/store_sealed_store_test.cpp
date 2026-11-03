@@ -7,7 +7,8 @@
 
 #include <gtest/gtest.h>
 
-#include "lugh/core/byte_io.h"
+#include "dannan/net/codec.h"
+#include "lugh/core/codec.h"
 #include "lugh/store/sealed_store.h"
 #include "lugh/system/system_files.h"
 #include "lugh/test/fixtures/hex.h"
@@ -270,9 +271,9 @@ TEST(SealedStore, RotationResealsUnderTheNewEpoch) {
   EXPECT_EQ(header->header.epoch, 2u);
   std::size_t frames = 0;
   for (std::size_t at = header->length; at < file.size();) {
-    lugh::ByteReader reader(std::span(file).subspan(at + 4, 8));
+    dannan::net::Reader reader(std::span(file).subspan(at + 4, 8));
     EXPECT_EQ(reader.u32(), 2u);
-    at += lugh::store::kFrameHeaderBytes + *reader.u32();
+    at += lugh::store::kFrameHeaderBytes + reader.u32();
     ++frames;
   }
   EXPECT_EQ(frames, 2u);

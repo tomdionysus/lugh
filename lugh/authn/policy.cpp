@@ -69,7 +69,7 @@ Task<std::optional<Assurance>> Policies::_read(std::string key) const {
 }
 
 Task<Outcome<>> Policies::_write(audit::Actor actor, std::string key, std::optional<Assurance> level, std::string subject) {
-  SecureBytes value{kFormat, level ? static_cast<std::uint8_t>(*level) : kNone};
+  SecureBuffer value{kFormat, level ? static_cast<std::uint8_t>(*level) : kNone};
   const auto written = co_await _store->put(kTable, std::move(key), std::move(value));
   if (!written.ok()) co_return Outcome<>::failure(directory::fault_of(written.error), written.message);
   co_await _audit->record(audit::Event{"policy.set", actor.id, std::move(subject), actor.source, level ? std::string(acr(*level)) : "none"});

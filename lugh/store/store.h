@@ -24,7 +24,7 @@ namespace lugh::store {
 struct Record {
   std::string key;
   std::uint64_t version = 0;
-  SecureBytes value;
+  SecureBuffer value;
 };
 
 // A secondary index: the values a record is found by (a user name, an email), from the
@@ -94,8 +94,8 @@ class Store {
   // Whether the key has been removed: the tombstones are kept for ever.
   virtual Task<bool> removed(std::string table, std::string key) const = 0;
 
-  // The value is SecureBytes: what a record holds may be a secret until it is sealed.
-  virtual Task<Write> put(std::string table, std::string key, SecureBytes value, std::optional<std::uint64_t> expected = std::nullopt) = 0;
+  // The value is SecureBuffer: what a record holds may be a secret until it is sealed.
+  virtual Task<Write> put(std::string table, std::string key, SecureBuffer value, std::optional<std::uint64_t> expected = std::nullopt) = 0;
 
   virtual Task<Write> remove(std::string table, std::string key, std::optional<std::uint64_t> expected = std::nullopt) = 0;
 };

@@ -12,7 +12,7 @@
 #include <string_view>
 
 #include "dannan/identity/crypto.h"
-#include "lugh/core/byte_io.h"
+#include "lugh/core/codec.h"
 #include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::audit {
@@ -29,18 +29,17 @@ std::string cut(std::string text, std::size_t most) {
 
 // The entry without its hash, which is what the hash is over.
 Bytes body(const Entry& entry) {
-  Bytes out;
-  ByteWriter<Bytes> writer(out);
+  dannan::net::Writer writer;
   writer.u8(kFormat);
   writer.u64(entry.sequence);
   writer.u64(entry.time);
-  writer.field(entry.event.action);
-  writer.field(entry.event.actor);
-  writer.field(entry.event.subject);
-  writer.field(entry.event.source);
-  writer.field(entry.event.detail);
-  writer.bytes(entry.previous);
-  return out;
+  writer.string(entry.event.action);
+  writer.string(entry.event.actor);
+  writer.string(entry.event.subject);
+  writer.string(entry.event.source);
+  writer.string(entry.event.detail);
+  writer.fixed(entry.previous);
+  return writer.take();
 }
 
 Hash hash_of(std::span<const unsigned char> body) {
@@ -89,7 +88,7 @@ Task<Status> AuditLog::record(Event event) {
   entry.hash = hash_of(body(entry));
 
   const auto encoded = encode(entry);
-  const auto written = co_await _store->put(kTable, key(entry.sequence), SecureBytes(encoded.begin(), encoded.end()), 0);
+  const auto written = co_await _store->put(kTable, key(entry.sequence), SecureBuffer(encoded.begin(), encoded.end()), 0);
   if (!written.ok()) {
     _logger->error("cannot record " + entry.event.action + " for " + entry.event.subject + ": " + written.message);
     co_return Status::failure("the audit log cannot be written: " + written.message);
@@ -144,28 +143,20 @@ Bytes AuditLog::encode(const Entry& entry) {
 }
 
 std::optional<Entry> AuditLog::decode(std::span<const unsigned char> value) {
-  ByteReader reader(value);
-  const auto format = reader.u8();
-  if (!format || *format != kFormat) return std::nullopt;
-
-  Entry entry;
-  const auto sequence = reader.u64();
-  const auto time = reader.u64();
-  auto action = reader.field();
-  auto actor = reader.field();
-  auto subject = reader.field();
-  auto source = reader.field();
-  auto detail = reader.field();
-  const auto previous = reader.bytes(entry.previous.size());
-  const auto hash = reader.bytes(entry.hash.size());
-  if (!sequence || !time || !action || !actor || !subject || !source || !detail || !previous || !hash || !reader.done()) return std::nullopt;
-
-  entry.sequence = *sequence;
-  entry.time = *time;
-  entry.event = Event{std::move(*action), std::move(*actor), std::move(*subject), std::move(*source), std::move(*detail)};
-  std::copy(previous->begin(), previous->end(), entry.previous.begin());
-  std::copy(hash->begin(), hash->end(), entry.hash.begin());
-  return entry;
+  return decode_whole<Entry>(value, [](dannan::net::Reader& reader) -> std::optional<Entry> {
+    if (reader.u8() != kFormat) return std::nullopt;
+    Entry entry;
+    entry.sequence = reader.u64();
+    entry.time = reader.u64();
+    entry.event.action = reader.string(kMostFieldBytes);
+    entry.event.actor = reader.string(kMostFieldBytes);
+    entry.event.subject = reader.string(kMostFieldBytes);
+    entry.event.source = reader.string(kMostFieldBytes);
+    entry.event.detail = reader.string(kMostDetailBytes);
+    entry.previous = reader.fixed<std::tuple_size_v<Hash>>();
+    entry.hash = reader.fixed<std::tuple_size_v<Hash>>();
+    return entry;
+  });
 }
 
 std::string AuditLog::key(std::uint64_t sequence) {

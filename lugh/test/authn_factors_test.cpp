@@ -178,7 +178,7 @@ TEST_F(FactorsTest, RecordsRoundTripAndRefuseTheRest) {
   totp.confirmed = true;
   totp.last_step = 42;
   totp.created = 7;
-  totp.secret = lugh::SecureBytes(20, 0x11);
+  totp.secret = lugh::SecureBuffer(20, 0x11);
   const auto encoded = encode(totp);
   const auto back = decode_totp(encoded);
   ASSERT_TRUE(back);

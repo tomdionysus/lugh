@@ -22,8 +22,8 @@ namespace lugh {
 // A value that must never reach a log line, an error message or a response body: a
 // password, a passphrase, a token. It converts to nothing, so `logger->info("key " + secret)`
 // does not compile, and the one way to the bytes is spelled out at the call site. The bytes
-// live in locked memory (core/secure_memory.h) and are wiped when they go. Binary key
-// material is SecureBytes.
+// live in locked memory (dannan/identity/secure_memory.h) and are wiped when they go. Binary key
+// material is SecureBuffer.
 class Secret {
  public:
   // What a log line or error says in its place.
@@ -68,7 +68,7 @@ class Secret {
   }
 
  private:
-  std::vector<char, SecureAllocator<char>> _value;
+  std::vector<char, dannan::identity::SecureAllocator<char>> _value;
 };
 
 }  // namespace lugh

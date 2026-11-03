@@ -10,7 +10,6 @@
 // the io_context, starts the server, waits for SIGTERM or SIGINT, and stops in reverse.
 // `lugh-node init` is genesis: the keyring, the store, and root.
 
-#include <sys/resource.h>
 #include <unistd.h>
 
 #include <boost/asio.hpp>
@@ -23,6 +22,7 @@
 #include <thread>
 #include <vector>
 
+#include "dannan/identity/secure_memory.h"
 #include "lugh/api/audit_routes.h"
 #include "lugh/api/group_routes.h"
 #include "lugh/api/policy_routes.h"
@@ -30,7 +30,6 @@
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/authenticator.h"
 #include "lugh/authn/genesis.h"
-#include "lugh/core/secure_memory.h"
 #include "lugh/directory/directory.h"
 #include "lugh/http/client_address.h"
 #include "lugh/http/health_routes.h"
@@ -76,22 +75,7 @@ std::string signal_name(int number) {
   return "signal " + std::to_string(number);
 }
 
-// A core dump of an identity server is a copy of its keys. The unit says LimitCORE=0 too;
-// this covers a run outside it.
-void refuse_core_dumps() {
-  rlimit none{0, 0};
-  setrlimit(RLIMIT_CORE, &none);
-}
-
-// Key material is locked into memory (core/secure_memory.h) when the lock limit allows.
-// Said once the keys are in hand, when it is known whether it did.
-void warn_if_unlocked(loggers::Logger& logger) {
-  if (const auto unlocked = secure_memory::unlocked(); unlocked > 0) {
-    logger.warn(std::to_string(unlocked) + " blocks of key material could not be locked into memory (RLIMIT_MEMLOCK) and may be swapped out");
-  }
-}
-
-bool write_all(int fd, const SecureBytes& data) {
+bool write_all(int fd, const SecureBuffer& data) {
   std::size_t done = 0;
   while (done < data.size()) {
     const auto put = ::write(fd, data.data() + done, data.size() - done);
@@ -177,7 +161,6 @@ Task<int> run_init(cli::Options options, Ports ports, std::string state_director
       co_return 1;
     }
     logger.info("Every start will ask for the passphrase");
-    warn_if_unlocked(logger);
     co_return co_await genesis(ports, std::move(made.value), state_directory);
   }
 
@@ -205,7 +188,6 @@ Task<int> run_init(cli::Options options, Ports ports, std::string state_director
 
   logger.info(std::string("The master key went to standard output. Load it as the credential ") + keys::kCredentialName +
               "; nothing under this keyring can be opened without it");
-  warn_if_unlocked(logger);
   co_return co_await genesis(ports, std::move(made.value.keyring), state_directory);
 }
 
@@ -221,7 +203,6 @@ Task<Result<Services>> start(Ports ports, Config config) {
   auto opened = co_await store::SealedStore::open(logger, ports.files, ports.random, ports.keyrings, std::move(keyring.value),
                                                   config.state_directory + "/store", all_tables());
   if (!opened.ok) co_return Answer::failure(opened.error);
-  warn_if_unlocked(*logger);
 
   Services services;
   services.store = opened.value;
@@ -367,7 +348,11 @@ int run(const cli::Options& options) {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  refuse_core_dumps();
+  // A core dump of an identity server is a copy of its keys, and so is a debugger attached
+  // to it. The unit says LimitCORE=0 too; this covers a run outside it.
+  if (const auto hardening = dannan::identity::harden_process(); !hardening.core_dumps_disabled || !hardening.attach_refused) {
+    std::cerr << "warning: the process is not fully hardened: " << hardening.detail << "\n";
+  }
 
   const auto options = lugh::cli::parse(argc, argv);
 

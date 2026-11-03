@@ -21,7 +21,7 @@ class SystemFiles : public Files {
 
   Task<bool> exists(std::string path) const override;
   Task<Result<Bytes>> read(std::string path, std::size_t most) const override;
-  Task<Result<SecureBytes>> read_secret(std::string path, std::size_t most) const override;
+  Task<Result<SecureBuffer>> read_secret(std::string path, std::size_t most) const override;
   Task<Status> write(std::string path, Bytes data, bool replace) override;
   Task<Status> append(std::string path, Bytes data) override;
   Task<Status> truncate(std::string path, std::uint64_t size) override;

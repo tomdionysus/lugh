@@ -8,7 +8,7 @@
 #include "lugh/authn/enrolment_links.h"
 
 #include "dannan/identity/crypto.h"
-#include "lugh/core/byte_io.h"
+#include "lugh/core/codec.h"
 #include "lugh/core/encoding.h"
 
 namespace lugh::authn {
@@ -39,7 +39,7 @@ Task<Outcome<Secret>> EnrolmentLinks::issue(audit::Actor actor, std::string user
     if (link && link->user_id == user_id) co_await _store->remove(kTable, record.key, record.version);
   }
 
-  SecureBytes raw(kTokenBytes);
+  SecureBuffer raw(kTokenBytes);
   if (!_random->fill(raw)) co_return Answer::failure(Fault::failed, "no randomness for a token");
   Secret token(encoding::base64url(raw));
 
@@ -114,24 +114,25 @@ Task<void> EnrolmentLinks::first_sign_in_spend(std::string user_id) {
   if (co_await _store->get(kTable, key)) co_await _store->remove(kTable, key);
 }
 
-SecureBytes EnrolmentLinks::encode(const Link& link) {
-  SecureBytes out;
-  ByteWriter<SecureBytes> writer(out);
+SecureBuffer EnrolmentLinks::encode(const Link& link) {
+  SecureWriter writer;
   writer.u8(kFormat);
-  writer.field(link.user_id);
+  writer.string(link.user_id);
   writer.u64(link.issued);
   writer.u64(link.expires);
-  return out;
+  return writer.take();
 }
 
 std::optional<EnrolmentLinks::Link> EnrolmentLinks::decode(std::span<const unsigned char> value) {
-  ByteReader reader(value);
-  const auto format = reader.u8();
-  auto user = reader.field();
-  const auto issued = reader.u64();
-  const auto expires = reader.u64();
-  if (!format || *format != kFormat || !user || user->empty() || !issued || !expires || !reader.done()) return std::nullopt;
-  return Link{std::move(*user), *issued, *expires};
+  return decode_whole<Link>(value, [](dannan::net::Reader& reader) -> std::optional<Link> {
+    if (reader.u8() != kFormat) return std::nullopt;
+    Link link;
+    link.user_id = reader.string(kMostFieldBytes);
+    link.issued = reader.u64();
+    link.expires = reader.u64();
+    if (link.user_id.empty()) return std::nullopt;
+    return link;
+  });
 }
 
 std::optional<std::string> EnrolmentLinks::_key(const Secret& token) {
