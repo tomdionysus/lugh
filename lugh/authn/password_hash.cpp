@@ -7,27 +7,27 @@
 
 #include "lugh/authn/password_hash.h"
 
-#include "lugh/crypto/compare.h"
+#include "dannan/identity/crypto.h"
 
 namespace lugh::authn {
 
-Result<PasswordHash> hash_password(std::span<const unsigned char> secret, const crypto::Argon2Params& params, system::Random& random) {
+Result<PasswordHash> hash_password(std::span<const unsigned char> secret, const crypto::Argon2Costs& params, system::Random& random) {
   using Answer = Result<PasswordHash>;
   PasswordHash out;
   out.params = params;
   out.salt = random.bytes(kPasswordSaltBytes);
   if (out.salt.empty()) return Answer::failure("no randomness for a salt");
 
-  auto hashed = crypto::argon2id(params, secret, out.salt, kPasswordHashBytes);
+  auto hashed = crypto::stretch(secret, out.salt, params, kPasswordHashBytes);
   if (!hashed.ok) return Answer::failure(hashed.error);
   out.hash = std::move(hashed.value);
   return Answer::success(std::move(out));
 }
 
 bool verify_password(std::span<const unsigned char> secret, const PasswordHash& hash) {
-  if (!hash.params.valid() || hash.hash.size() != kPasswordHashBytes) return false;
-  const auto computed = crypto::argon2id(hash.params, secret, hash.salt, kPasswordHashBytes);
-  return computed.ok && crypto::equal(computed.value, hash.hash);
+  if (!crypto::bounded(hash.params) || hash.hash.size() != kPasswordHashBytes) return false;
+  const auto computed = crypto::stretch(secret, hash.salt, hash.params, kPasswordHashBytes);
+  return computed.ok && dannan::identity::constant_time_equal(computed.value, hash.hash);
 }
 
 std::optional<PasswordHash> read_password_hash(ByteReader& reader) {
@@ -43,8 +43,8 @@ std::optional<PasswordHash> read_password_hash(ByteReader& reader) {
   const auto hash = reader.bytes(*hash_length);
   if (!hash) return std::nullopt;
 
-  out.params = crypto::Argon2Params{*memory, *iterations, *lanes};
-  if (!out.params.valid() || salt->size() < crypto::kArgon2MinimumSalt) return std::nullopt;
+  out.params = crypto::Argon2Costs{*memory, *iterations, *lanes};
+  if (!crypto::bounded(out.params) || salt->size() < crypto::kArgon2MinimumSalt) return std::nullopt;
   out.salt.assign(salt->begin(), salt->end());
   out.hash.assign(hash->begin(), hash->end());
   return out;

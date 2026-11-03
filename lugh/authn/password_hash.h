@@ -22,7 +22,7 @@ namespace lugh::authn {
 // without anyone's hash being lost: a hash under old costs is made again at the next
 // sign-in.
 struct PasswordHash {
-  crypto::Argon2Params params;
+  crypto::Argon2Costs params;
   Bytes salt;
   SecureBytes hash;
 };
@@ -31,13 +31,13 @@ inline constexpr std::size_t kPasswordSaltBytes = 16;
 inline constexpr std::size_t kPasswordHashBytes = 32;
 
 // A new hash of `secret` under `params`, with a fresh salt.
-Result<PasswordHash> hash_password(std::span<const unsigned char> secret, const crypto::Argon2Params& params, system::Random& random);
+Result<PasswordHash> hash_password(std::span<const unsigned char> secret, const crypto::Argon2Costs& params, system::Random& random);
 
 // Constant time over the hash. False for a hash whose costs are out of bounds, without
 // spending anything on it.
 bool verify_password(std::span<const unsigned char> secret, const PasswordHash& hash);
 
-inline bool same_costs(const crypto::Argon2Params& a, const crypto::Argon2Params& b) {
+inline bool same_costs(const crypto::Argon2Costs& a, const crypto::Argon2Costs& b) {
   return a.memory_kib == b.memory_kib && a.iterations == b.iterations && a.lanes == b.lanes;
 }
 

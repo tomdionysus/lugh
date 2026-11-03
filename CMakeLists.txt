@@ -44,10 +44,12 @@ find_package(OpenSSL 3.0 REQUIRED)
 
 # Dannan, the network layer Lugh hosts on (and Dagda, the store, built beside it). From
 # the sibling checkout, pinned to one commit and cloned into the build tree, so building
-# Lugh never touches ../dannan. Its Context exists only on feature/wire-v1 so far, which
-# has no tag; the pin moves to a tag once one carries it (the maintainer, 2026-11-03).
+# Lugh never touches ../dannan. Its Context, secure memory, signing, Argon2id and key custody
+# exist only on feature/wire-v1 so far, which has no tag; the pin moves to a tag once one
+# carries them (the maintainer, 2026-11-03).
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
-set(LUGH_DANNAN_COMMIT "785e393afe963a40a4878e2f16869ce6c022b0a0" CACHE STRING "The Dannan commit Lugh builds against")
+# Not a cache variable: a moved pin must take effect without clearing the build tree.
+set(LUGH_DANNAN_COMMIT "63c2f51b50aa486ff05d682970f6e17faaff6404")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)

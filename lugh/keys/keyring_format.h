@@ -41,7 +41,7 @@ struct KeyringHeader {
   Bytes id;
 
   // For a passphrase only: the costs and salt it is stretched with.
-  crypto::Argon2Params argon2;
+  crypto::Argon2Costs argon2;
   Bytes salt;
 };
 

@@ -9,36 +9,41 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <span>
 
+#include "dannan/identity/argon2.h"
 #include "lugh/core/secure_bytes.h"
 #include "lugh/core/status.h"
 
+// Argon2id is Dannan's (dannan/identity/argon2.h), for the whole stack. What is here is
+// Lugh's use of it: the ceiling on costs read from a record before anything is spent on
+// them, until Dannan's costs carry one (asked for), and the stretch into Lugh's own secure
+// buffer, until Dannan's secure memory can grow (asked for).
 namespace lugh::crypto {
 
-// Argon2id's costs. The defaults are RFC 9106's second recommendation (64 MiB, three
-// passes, four lanes), which a node can afford per sign-in and an attacker cannot per guess.
-struct Argon2Params {
-  std::uint32_t memory_kib = 64 * 1024;
-  std::uint32_t iterations = 3;
-  std::uint32_t lanes = 4;
-
-  // The bounds a stored set of costs must fall in before anything is spent on it, so a
-  // crafted header cannot ask for a terabyte. Argon2 itself needs 8 KiB per lane.
-  static constexpr std::uint32_t kMostMemoryKib = 2 * 1024 * 1024;
-  static constexpr std::uint32_t kMostIterations = 64;
-  static constexpr std::uint32_t kMostLanes = 64;
-
-  bool valid() const {
-    return lanes >= 1 && lanes <= kMostLanes && iterations >= 1 && iterations <= kMostIterations && memory_kib >= 8 * lanes && memory_kib <= kMostMemoryKib;
-  }
-};
+using Argon2Costs = dannan::identity::Argon2Costs;
 
 inline constexpr std::size_t kArgon2MinimumSalt = 8;
+inline constexpr std::uint32_t kArgon2MostMemoryKib = 2 * 1024 * 1024;
+inline constexpr std::uint32_t kArgon2MostIterations = 64;
+inline constexpr std::uint32_t kArgon2MostLanes = 64;
 
-// Argon2id (RFC 9106), version 0x13, from OpenSSL 3.2. The secret (a pepper) and the
-// associated data are optional, as the RFC has them.
-Result<SecureBytes> argon2id(const Argon2Params& params, std::span<const unsigned char> password, std::span<const unsigned char> salt, std::size_t length,
-                             std::span<const unsigned char> secret = {}, std::span<const unsigned char> associated = {});
+// Costs a stored record may ask for: within the ceiling, and what Argon2 accepts (8 KiB a
+// lane at least).
+inline bool bounded(const Argon2Costs& costs) {
+  return costs.lanes >= 1 && costs.lanes <= kArgon2MostLanes && costs.iterations >= 1 && costs.iterations <= kArgon2MostIterations &&
+         costs.memory_kib >= 8 * costs.lanes && costs.memory_kib <= kArgon2MostMemoryKib;
+}
+
+// Argon2id's tag, `length` bytes, into SecureBytes; a failure as a Result.
+inline Result<SecureBytes> stretch(std::span<const unsigned char> password, std::span<const unsigned char> salt, const Argon2Costs& costs, std::size_t length) {
+  try {
+    const auto tag = dannan::identity::argon2id(password, salt, costs, length);
+    return Result<SecureBytes>::success(SecureBytes(tag.reveal().begin(), tag.reveal().end()));
+  } catch (const std::exception& e) {
+    return Result<SecureBytes>::failure(std::string("Argon2id: ") + e.what());
+  }
+}
 
 }  // namespace lugh::crypto

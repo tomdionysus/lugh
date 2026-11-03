@@ -11,8 +11,8 @@
 #include <cstdio>
 #include <string_view>
 
+#include "dannan/identity/crypto.h"
 #include "lugh/core/byte_io.h"
-#include "lugh/crypto/compare.h"
 #include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::audit {
@@ -46,7 +46,7 @@ Bytes body(const Entry& entry) {
 Hash hash_of(std::span<const unsigned char> body) {
   Bytes input(kContext.begin(), kContext.end());
   input.insert(input.end(), body.begin(), body.end());
-  return crypto::sha256(input);
+  return dannan::identity::sha256(input).bytes;
 }
 
 }  // namespace
@@ -128,8 +128,10 @@ Task<Result<std::uint64_t>> AuditLog::verify() const {
     if (!record) co_return Answer::failure("audit entry " + std::to_string(sequence) + " is missing");
     const auto entry = decode(record->value);
     if (!entry || entry->sequence != sequence) co_return Answer::failure("audit entry " + std::to_string(sequence) + " cannot be read");
-    if (!crypto::equal(entry->previous, previous)) co_return Answer::failure("audit entry " + std::to_string(sequence) + " does not follow the one before");
-    if (!crypto::equal(entry->hash, hash_of(body(*entry)))) co_return Answer::failure("audit entry " + std::to_string(sequence) + " has been altered");
+    if (!dannan::identity::constant_time_equal(entry->previous, previous))
+      co_return Answer::failure("audit entry " + std::to_string(sequence) + " does not follow the one before");
+    if (!dannan::identity::constant_time_equal(entry->hash, hash_of(body(*entry))))
+      co_return Answer::failure("audit entry " + std::to_string(sequence) + " has been altered");
     previous = entry->hash;
   }
   co_return Answer::success(count);

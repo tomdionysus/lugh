@@ -16,10 +16,10 @@
 #include <string>
 #include <vector>
 
+#include "dannan/identity/crypto.h"
 #include "lugh/core/async_mutex.h"
 #include "lugh/core/status.h"
 #include "lugh/core/task.h"
-#include "lugh/crypto/digest.h"
 #include "lugh/loggers/logger.h"
 #include "lugh/store/store.h"
 #include "lugh/system/clock.h"
@@ -48,7 +48,7 @@ struct Actor {
   std::string source;
 };
 
-using Hash = std::array<unsigned char, crypto::kSha256Bytes>;
+using Hash = std::array<unsigned char, 32>;
 
 struct Entry {
   std::uint64_t sequence = 0;

@@ -67,12 +67,12 @@ class Factors : public directory::Dependent {
 
   // A recovery code is 80 random bits, so the hash need not be slow against guessing; it
   // is Argon2id so that a stolen table gives nothing up quickly either. OWASP's lightest.
-  static constexpr crypto::Argon2Params kRecoveryParams{19 * 1024, 2, 1};
+  static constexpr crypto::Argon2Costs kRecoveryParams{19 * 1024, 2, 1};
 
   // `hashing` runs the recovery codes' Argon2id, as Passwords' does.
   Factors(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
           std::shared_ptr<system::Clock> clock, std::shared_ptr<audit::AuditLog> audit, Executor hashing,
-          crypto::Argon2Params recovery_params = kRecoveryParams);
+          crypto::Argon2Costs recovery_params = kRecoveryParams);
 
   Task<std::vector<FactorInfo>> list(std::string user_id) const;
 
@@ -118,7 +118,7 @@ class Factors : public directory::Dependent {
   std::shared_ptr<system::Clock> _clock;
   std::shared_ptr<audit::AuditLog> _audit_log;
   Executor _hashing;
-  crypto::Argon2Params _recovery_params;
+  crypto::Argon2Costs _recovery_params;
 };
 
 // The factor records, for the tests and the fuzz target.

@@ -14,12 +14,12 @@
 #include <string>
 #include <string_view>
 
+#include "dannan/identity/crypto.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/password_hash.h"
 #include "lugh/core/outcome.h"
 #include "lugh/core/secret.h"
 #include "lugh/core/task.h"
-#include "lugh/crypto/digest.h"
 #include "lugh/directory/directory.h"
 #include "lugh/loggers/logger.h"
 #include "lugh/store/store.h"
@@ -45,9 +45,9 @@ class BreachedPasswords {
   std::size_t size() const { return _hashes.size(); }
 
  private:
-  static std::array<unsigned char, crypto::kSha256Bytes> _fold_and_hash(std::span<const unsigned char> password);
+  static std::array<unsigned char, 32> _fold_and_hash(std::span<const unsigned char> password);
 
-  std::set<std::array<unsigned char, crypto::kSha256Bytes>> _hashes;
+  std::set<std::array<unsigned char, 32>> _hashes;
 };
 
 struct PasswordRules {
@@ -70,7 +70,7 @@ class Passwords : public directory::Dependent {
   static constexpr const char* kTable = "credentials";
 
   Passwords(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
-            std::shared_ptr<system::Clock> clock, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Params params, PasswordRules rules,
+            std::shared_ptr<system::Clock> clock, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs params, PasswordRules rules,
             BreachedPasswords breached);
 
   // Whether the password may be used by this user, and if not, why, without saying what it
@@ -99,7 +99,7 @@ class Passwords : public directory::Dependent {
   std::shared_ptr<system::Clock> _clock;
   std::shared_ptr<audit::AuditLog> _audit;
   Executor _hashing;
-  crypto::Argon2Params _params;
+  crypto::Argon2Costs _params;
   PasswordRules _rules;
   BreachedPasswords _breached;
   // For spend(): a salt that is never anyone's.

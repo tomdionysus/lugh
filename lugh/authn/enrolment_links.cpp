@@ -7,9 +7,9 @@
 
 #include "lugh/authn/enrolment_links.h"
 
+#include "dannan/identity/crypto.h"
 #include "lugh/core/byte_io.h"
 #include "lugh/core/encoding.h"
-#include "lugh/crypto/digest.h"
 
 namespace lugh::authn {
 
@@ -146,7 +146,7 @@ std::optional<std::string> EnrolmentLinks::_key(const Secret& token) {
   for (const char c : text) {
     if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_')) return std::nullopt;
   }
-  return std::string(kPrefix) + encoding::hex(crypto::sha256(byte_span(text)));
+  return std::string(kPrefix) + dannan::identity::hex(dannan::identity::sha256(byte_span(text)).bytes);
 }
 
 Task<Outcome<std::pair<EnrolmentLinks::Link, std::uint64_t>>> EnrolmentLinks::_live(std::string key) const {

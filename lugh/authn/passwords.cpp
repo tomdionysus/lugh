@@ -7,6 +7,7 @@
 
 #include "lugh/authn/passwords.h"
 
+#include "dannan/identity/crypto.h"
 #include "lugh/core/byte_io.h"
 #include "lugh/loggers/logger_scoped.h"
 
@@ -84,14 +85,14 @@ BreachedPasswords BreachedPasswords::from_text(std::span<const unsigned char> te
 
 bool BreachedPasswords::contains(std::span<const unsigned char> password) const { return !_hashes.empty() && _hashes.count(_fold_and_hash(password)) != 0; }
 
-std::array<unsigned char, crypto::kSha256Bytes> BreachedPasswords::_fold_and_hash(std::span<const unsigned char> password) {
+std::array<unsigned char, 32> BreachedPasswords::_fold_and_hash(std::span<const unsigned char> password) {
   SecureBytes folded(password.begin(), password.end());
   for (auto& byte : folded) byte = static_cast<unsigned char>(lower(static_cast<char>(byte)));
-  return crypto::sha256(folded);
+  return dannan::identity::sha256(folded).bytes;
 }
 
 Passwords::Passwords(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
-                     std::shared_ptr<system::Clock> clock, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Params params,
+                     std::shared_ptr<system::Clock> clock, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs params,
                      PasswordRules rules, BreachedPasswords breached)
     : _logger(std::make_shared<loggers::LoggerScoped>("passwords", std::move(logger))),
       _store(std::move(store)),
@@ -168,7 +169,7 @@ Task<bool> Passwords::verify(std::string user_id, Secret password) {
 
 Task<void> Passwords::spend(Secret password) {
   co_await offload(_hashing, [params = _params, salt = _decoy_salt, password = std::move(password)] {
-    (void)crypto::argon2id(params, byte_span(password.reveal()), salt, kPasswordHashBytes);
+    (void)crypto::stretch(byte_span(password.reveal()), salt, params, kPasswordHashBytes);
   });
 }
 

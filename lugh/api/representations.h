@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 
+#include "dannan/identity/crypto.h"
 #include "lugh/api/api_support.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/factors.h"
@@ -86,8 +87,8 @@ inline boost::json::object entry_json(const audit::Entry& entry) {
   out["subject"] = entry.event.subject;
   out["source"] = entry.event.source;
   out["detail"] = entry.event.detail;
-  out["hash"] = encoding::hex(entry.hash);
-  out["previous"] = encoding::hex(entry.previous);
+  out["hash"] = dannan::identity::hex(entry.hash);
+  out["previous"] = dannan::identity::hex(entry.previous);
   return out;
 }
 

@@ -154,7 +154,7 @@ Task<int> genesis(Ports ports, keys::Keyring keyring, std::string state_director
   if (!audit.ok) co_return failed(audit.error);
 
   auto directory = std::make_shared<directory::Directory>(ports.logger, opened.value, ports.random, ports.clock, audit.value);
-  auto passwords = std::make_shared<authn::Passwords>(ports.logger, opened.value, ports.random, ports.clock, audit.value, ports.hashing, crypto::Argon2Params{},
+  auto passwords = std::make_shared<authn::Passwords>(ports.logger, opened.value, ports.random, ports.clock, audit.value, ports.hashing, crypto::Argon2Costs{},
                                                       authn::PasswordRules{}, authn::BreachedPasswords{});
   auto links = std::make_shared<authn::EnrolmentLinks>(opened.value, ports.random, ports.clock, directory, audit.value);
   const auto password = co_await authn::Genesis(directory, passwords, links, ports.random, audit.value).run();
@@ -171,7 +171,7 @@ Task<int> run_init(cli::Options options, Ports ports, std::string state_director
   auto& keyrings = *ports.keyrings;
   auto& logger = *ports.logger;
   if (options.passphrase) {
-    auto made = co_await keyrings.create_with_passphrase(crypto::Argon2Params{});
+    auto made = co_await keyrings.create_with_passphrase(crypto::Argon2Costs{});
     if (!made.ok) {
       logger.error(made.error);
       co_return 1;
@@ -239,7 +239,7 @@ Task<Result<Services>> start(Ports ports, Config config) {
 
   const auto& store = services.store;
   services.directory = std::make_shared<directory::Directory>(logger, store, ports.random, ports.clock, services.audit);
-  auto passwords = std::make_shared<authn::Passwords>(logger, store, ports.random, ports.clock, services.audit, ports.hashing, crypto::Argon2Params{},
+  auto passwords = std::make_shared<authn::Passwords>(logger, store, ports.random, ports.clock, services.audit, ports.hashing, crypto::Argon2Costs{},
                                                       authn::PasswordRules{}, std::move(breached));
   services.factors = std::make_shared<authn::Factors>(logger, store, ports.random, ports.clock, services.audit, ports.hashing);
   services.directory->dependent_add(passwords);

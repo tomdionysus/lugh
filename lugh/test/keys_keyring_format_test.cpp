@@ -25,7 +25,7 @@ KeyringHeader passphrase_header() {
   KeyringHeader header;
   header.source = MasterKeySource::passphrase;
   header.id = repeated(0x22, kKeyringIdBytes);
-  header.argon2 = lugh::crypto::Argon2Params{65536, 3, 4};
+  header.argon2 = lugh::crypto::Argon2Costs{65536, 3, 4};
   header.salt = repeated(0x33, kPassphraseSaltBytes);
   return header;
 }

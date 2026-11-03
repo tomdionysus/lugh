@@ -10,9 +10,9 @@
 #include <algorithm>
 #include <utility>
 
+#include "dannan/identity/crypto.h"
 #include "lugh/core/byte_io.h"
 #include "lugh/crypto/aead.h"
-#include "lugh/crypto/digest.h"
 
 namespace lugh::store {
 
@@ -62,7 +62,7 @@ Bytes associated_data(std::string_view table, std::uint32_t epoch, std::span<con
 }
 
 std::array<unsigned char, kCheckBytes> check_of(std::span<const unsigned char> header_prefix) {
-  const auto digest = crypto::sha256(header_prefix);
+  const auto digest = dannan::identity::sha256(header_prefix).bytes;
   std::array<unsigned char, kCheckBytes> out{};
   std::copy_n(digest.begin(), kCheckBytes, out.begin());
   return out;

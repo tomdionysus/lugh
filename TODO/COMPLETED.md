@@ -2,6 +2,25 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-03: Aligning with Dannan and Dagda (feature/dannan-alignment, in progress)
+
+The maintainer, 2026-11-03: Lugh uses Dannan as its network and Dagda as its datastore, no code is
+duplicated between the three, and all three share one style, set of conventions and
+layout. Kept until Dagda carries Lugh's spaces: the sealed store and keyring ("Keep the
+store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-stack.md`.
+
+- The GPLv3 header block ("Lugh - The Directory") and `LICENSE`; Dannan linked, pinned to a
+  commit of `feature/wire-v1` until a tag carries its Context; MacPorts for every dependency.
+- Dannan's layout: `lugh/<subsystem>/`, `lugh/test/` flat, `lugh/fuzz/`, `tools/` (the service
+  is `lugh-node`), `test/process/`, `TODO/COMPLETED.md`.
+- From Dannan in place of Lugh's own: SHA-256, the constant-time compare and hex
+  (`dannan/identity/crypto.h`), Argon2id (`dannan/identity/argon2.h`; Lugh keeps the ceiling
+  on stored costs and the stretch into its secure buffer until Dannan's carry them), and
+  signing (`dannan/identity/signing.h`; Lugh's copy deleted, it had no user yet).
+- Finding: the unit count went from 389 to 373. The tests that went were of what Lugh no
+  longer owns: its SHA-256, compare and signing copies, and the RFC 9106 Argon2id vectors,
+  all tested in Dannan against the same published vectors.
+
 ## 2026-10-18: P5, the management API (not committed)
 
 - **`/api/v1`** (`src/api/`, [docs/api.md](../docs/api.md)): users (list, find by name or address, create, read, change, disable, remove), their groups and factors, removing a factor, resetting them all, enrolment links; groups and their members; the global and per-group assurance levels; the audit log a page at a time, and a walk of its whole chain.

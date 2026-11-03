@@ -54,7 +54,7 @@ class KeyringManager {
 
   // `lugh-node init --passphrase`: asks for a passphrase twice, stretches it with Argon2id into
   // the master key, and saves the new keyring.
-  Task<Result<Keyring>> create_with_passphrase(crypto::Argon2Params params);
+  Task<Result<Keyring>> create_with_passphrase(crypto::Argon2Costs params);
 
   // Saves a keyring where there is none, refusing to replace one.
   Task<Status> save_new(const Keyring& keyring);

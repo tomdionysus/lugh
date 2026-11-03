@@ -58,7 +58,7 @@ Task<Result<KeyringManager::Created>> KeyringManager::create_for_credential() {
   co_return Answer::success(Created{std::move(keyring.value), std::move(master_key)});
 }
 
-Task<Result<Keyring>> KeyringManager::create_with_passphrase(crypto::Argon2Params params) {
+Task<Result<Keyring>> KeyringManager::create_with_passphrase(crypto::Argon2Costs params) {
   using Answer = Result<Keyring>;
   if (const auto refused = co_await _refuse_existing(); !refused.ok) co_return Answer::failure(refused.error);
 
@@ -79,7 +79,7 @@ Task<Result<Keyring>> KeyringManager::create_with_passphrase(crypto::Argon2Param
   if (header.id.size() != kKeyringIdBytes || header.salt.size() != kPassphraseSaltBytes) co_return Answer::failure("no randomness for a keyring");
 
   auto master_key = co_await offload(_hashing, [params, salt = header.salt, passphrase = std::move(*passphrase)] {
-    return crypto::argon2id(params, byte_span(passphrase.reveal()), salt, kMasterKeyBytes);
+    return crypto::stretch(byte_span(passphrase.reveal()), salt, params, kMasterKeyBytes);
   });
   if (!master_key.ok) co_return Answer::failure(master_key.error);
 
@@ -153,7 +153,7 @@ Task<Result<SecureBytes>> KeyringManager::_from_passphrase(KeyringHeader header)
   auto passphrase = co_await _console->read_secret("Lugh master passphrase: ");
   if (!passphrase) co_return Result<SecureBytes>::failure("the keyring's master key is a passphrase, and none was given");
   co_return co_await offload(_hashing, [header = std::move(header), passphrase = std::move(*passphrase)] {
-    return crypto::argon2id(header.argon2, byte_span(passphrase.reveal()), header.salt, kMasterKeyBytes);
+    return crypto::stretch(byte_span(passphrase.reveal()), header.salt, header.argon2, kMasterKeyBytes);
   });
 }
 

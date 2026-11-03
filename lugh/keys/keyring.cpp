@@ -24,7 +24,7 @@ Status Keyring::_check(const KeyringHeader& header) {
   if (header.id.size() != kKeyringIdBytes) return Status::failure("a keyring id is 16 bytes");
   if (header.source == MasterKeySource::passphrase) {
     if (header.salt.size() != kPassphraseSaltBytes) return Status::failure("a passphrase salt is 16 bytes");
-    if (!header.argon2.valid()) return Status::failure("the passphrase's Argon2id costs are out of range");
+    if (!crypto::bounded(header.argon2)) return Status::failure("the passphrase's Argon2id costs are out of range");
   }
   return Status::success();
 }

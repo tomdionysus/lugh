@@ -9,6 +9,7 @@
 
 #include <set>
 
+#include "dannan/identity/crypto.h"
 #include "lugh/core/encoding.h"
 #include "lugh/loggers/logger_scoped.h"
 
@@ -325,7 +326,7 @@ Task<Outcome<>> Directory::add_member(audit::Actor actor, std::string group_id, 
   membership.group_id = group_id;
   membership.user_id = user_id;
   membership.added = system::unix_seconds(*_clock);
-  const auto key = membership.group_id + "/" + membership.user_id + "/" + encoding::hex(instance);
+  const auto key = membership.group_id + "/" + membership.user_id + "/" + dannan::identity::hex(instance);
 
   const auto written = co_await _store->put(kMemberships, key, encode(membership), 0);
   if (!written.ok()) co_return Answer::failure(fault_of(written.error), written.message);
@@ -368,7 +369,7 @@ Task<std::vector<std::string>> Directory::groups_of(std::string user_id) const {
 std::optional<std::string> Directory::_new_id() {
   const auto bytes = _random->bytes(kIdBytes);
   if (bytes.empty()) return std::nullopt;
-  return encoding::hex(bytes);
+  return dannan::identity::hex(bytes);
 }
 
 Task<std::vector<Membership>> Directory::_memberships() const {

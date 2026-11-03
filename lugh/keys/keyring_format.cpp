@@ -74,8 +74,8 @@ std::optional<ParsedHeader> decode_header(std::span<const unsigned char> file) {
     const auto lanes = reader.u32();
     const auto salt = reader.bytes(kPassphraseSaltBytes);
     if (!memory || !iterations || !lanes || !salt) return std::nullopt;
-    parsed.header.argon2 = crypto::Argon2Params{*memory, *iterations, *lanes};
-    if (!parsed.header.argon2.valid()) return std::nullopt;
+    parsed.header.argon2 = crypto::Argon2Costs{*memory, *iterations, *lanes};
+    if (!crypto::bounded(parsed.header.argon2)) return std::nullopt;
     parsed.header.salt.assign(salt->begin(), salt->end());
   }
 

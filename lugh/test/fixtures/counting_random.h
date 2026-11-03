@@ -11,7 +11,7 @@
 #include <cstdint>
 #include <mutex>
 
-#include "lugh/crypto/digest.h"
+#include "dannan/identity/crypto.h"
 #include "lugh/system/random.h"
 
 // Bytes that never repeat within a test and are the same every run: SHA-256 of a counter.
@@ -28,7 +28,7 @@ class CountingRandom : public lugh::system::Random {
       unsigned char counter[8];
       for (int i = 0; i < 8; ++i) counter[i] = static_cast<unsigned char>(_next >> (8 * i));
       ++_next;
-      const auto block = lugh::crypto::sha256(counter);
+      const auto block = dannan::identity::sha256(counter).bytes;
       for (std::size_t i = 0; i < block.size() && done < out.size(); ++i) out[done++] = block[i];
     }
     return true;

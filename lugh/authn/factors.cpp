@@ -9,10 +9,10 @@
 
 #include <openssl/crypto.h>
 
+#include "dannan/identity/crypto.h"
 #include "lugh/authn/totp.h"
 #include "lugh/core/byte_io.h"
 #include "lugh/core/encoding.h"
-#include "lugh/crypto/compare.h"
 #include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::authn {
@@ -140,7 +140,7 @@ std::optional<Secret> normal_recovery_code(std::string_view code) {
 }
 
 Factors::Factors(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
-                 std::shared_ptr<system::Clock> clock, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Params recovery_params)
+                 std::shared_ptr<system::Clock> clock, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs recovery_params)
     : _logger(std::make_shared<loggers::LoggerScoped>("factors", std::move(logger))),
       _store(std::move(store)),
       _random(std::move(random)),
@@ -312,7 +312,7 @@ Task<Outcome<std::size_t>> Factors::recovery_use(std::string user_id, Secret cod
     std::optional<std::size_t> slot;
     const auto selector = normal ? byte_span(normal->reveal().substr(0, kSelectorCharacters)) : std::span<const unsigned char>{};
     for (std::size_t i = 0; i < record->slots.size(); ++i) {
-      const bool same = normal && crypto::equal(selector, byte_span(record->slots[i].selector));
+      const bool same = normal && dannan::identity::constant_time_equal(selector, byte_span(record->slots[i].selector));
       if (same && !record->slots[i].used) slot = i;
     }
     if (!slot) co_return Answer::failure(Fault::refused, "the code is not right");
@@ -371,7 +371,7 @@ Task<std::vector<Factors::Stored>> Factors::_records(std::string user_id, std::o
 std::optional<std::string> Factors::_new_key(std::string_view user_id, FactorKind kind) {
   const auto instance = _random->bytes(8);
   if (instance.empty()) return std::nullopt;
-  return std::string(user_id) + "/" + std::string(kind_name(kind)) + "/" + encoding::hex(instance);
+  return std::string(user_id) + "/" + std::string(kind_name(kind)) + "/" + dannan::identity::hex(instance);
 }
 
 Task<void> Factors::_audit(const audit::Actor& actor, std::string action, std::string user_id, std::string detail) {

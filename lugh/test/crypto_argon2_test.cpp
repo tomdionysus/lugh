@@ -8,61 +8,32 @@
 #include <gtest/gtest.h>
 
 #include "lugh/crypto/argon2.h"
-#include "lugh/test/fixtures/hex.h"
 
-using lugh::crypto::argon2id;
-using lugh::crypto::Argon2Params;
+// Argon2id itself is Dannan's, tested there against RFC 9106. What Lugh adds is the ceiling
+// on costs read from a record, and the stretch into its secure buffer.
+using lugh::crypto::Argon2Costs;
+using lugh::crypto::bounded;
 
-namespace {
+TEST(Argon2, TheDefaultsAreWithinTheCeiling) { EXPECT_TRUE(bounded(Argon2Costs{})); }
 
-// Cheap enough for a test, valid all the same.
-const Argon2Params kCheap{64, 1, 1};
-
-}  // namespace
-
-// RFC 9106, section 5.3: Argon2id with a secret and associated data.
-TEST(Argon2, Rfc9106Vector) {
-  const auto out = argon2id(Argon2Params{32, 3, 4}, repeated(0x01, 32), repeated(0x02, 16), 32, repeated(0x03, 8), repeated(0x04, 12));
-  ASSERT_TRUE(out.ok) << out.error;
-  EXPECT_EQ(to_hex(out.value), "0d640df58d78766c08c037a34a8b53c9d01ef0452d75b65eb52520e96b01e659");
+TEST(Argon2, CostsOutsideTheCeilingAreRefusedBeforeAnythingIsSpent) {
+  EXPECT_FALSE(bounded(Argon2Costs{lugh::crypto::kArgon2MostMemoryKib + 1, 3, 4}));
+  EXPECT_FALSE(bounded(Argon2Costs{64 * 1024, lugh::crypto::kArgon2MostIterations + 1, 4}));
+  EXPECT_FALSE(bounded(Argon2Costs{64 * 1024, 3, lugh::crypto::kArgon2MostLanes + 1}));
+  EXPECT_FALSE(bounded(Argon2Costs{64 * 1024, 0, 4}));
+  EXPECT_FALSE(bounded(Argon2Costs{64 * 1024, 3, 0}));
+  // Argon2 needs 8 KiB a lane.
+  EXPECT_FALSE(bounded(Argon2Costs{31, 1, 4}));
+  EXPECT_TRUE(bounded(Argon2Costs{32, 1, 4}));
 }
 
-TEST(Argon2, SameInputSameOutput) {
-  const auto a = argon2id(kCheap, lugh::byte_span("password"), lugh::byte_span("saltsaltsalt"), 32);
-  const auto b = argon2id(kCheap, lugh::byte_span("password"), lugh::byte_span("saltsaltsalt"), 32);
-  ASSERT_TRUE(a.ok) << a.error;
-  EXPECT_EQ(to_hex(a.value), to_hex(b.value));
-}
-
-TEST(Argon2, EveryInputMatters) {
-  const auto base = to_hex(argon2id(kCheap, lugh::byte_span("password"), lugh::byte_span("saltsaltsalt"), 32).value);
-  EXPECT_NE(base, to_hex(argon2id(kCheap, lugh::byte_span("passwore"), lugh::byte_span("saltsaltsalt"), 32).value));
-  EXPECT_NE(base, to_hex(argon2id(kCheap, lugh::byte_span("password"), lugh::byte_span("saltsaltsalu"), 32).value));
-  EXPECT_NE(base, to_hex(argon2id(Argon2Params{64, 2, 1}, lugh::byte_span("password"), lugh::byte_span("saltsaltsalt"), 32).value));
-  EXPECT_NE(base, to_hex(argon2id(Argon2Params{128, 1, 1}, lugh::byte_span("password"), lugh::byte_span("saltsaltsalt"), 32).value));
-  EXPECT_NE(base, to_hex(argon2id(kCheap, lugh::byte_span("password"), lugh::byte_span("saltsaltsalt"), 32, lugh::byte_span("pepper")).value));
-}
-
-TEST(Argon2, TheDefaultsAreRfc9106sSecondRecommendation) {
-  const Argon2Params defaults;
-  EXPECT_EQ(defaults.memory_kib, 64u * 1024);
-  EXPECT_EQ(defaults.iterations, 3u);
-  EXPECT_EQ(defaults.lanes, 4u);
-  EXPECT_TRUE(defaults.valid());
-}
-
-TEST(Argon2, RefusesCostsOutOfRange) {
-  const auto salt = lugh::byte_span("saltsaltsalt");
-  EXPECT_FALSE(argon2id(Argon2Params{7, 1, 1}, {}, salt, 32).ok);
-  EXPECT_FALSE(argon2id(Argon2Params{64, 0, 1}, {}, salt, 32).ok);
-  EXPECT_FALSE(argon2id(Argon2Params{64, 1, 0}, {}, salt, 32).ok);
-  EXPECT_FALSE(argon2id(Argon2Params{64, 1, 9}, {}, salt, 32).ok);  // under 8 KiB a lane
-  EXPECT_FALSE(argon2id(Argon2Params{Argon2Params::kMostMemoryKib + 1, 1, 1}, {}, salt, 32).ok);
-  EXPECT_FALSE(argon2id(Argon2Params{64, Argon2Params::kMostIterations + 1, 1}, {}, salt, 32).ok);
-}
-
-TEST(Argon2, RefusesAShortSaltAndOddLengths) {
-  EXPECT_FALSE(argon2id(kCheap, lugh::byte_span("pw"), lugh::byte_span("short"), 32).ok);
-  EXPECT_FALSE(argon2id(kCheap, lugh::byte_span("pw"), lugh::byte_span("saltsalt"), 3).ok);
-  EXPECT_TRUE(argon2id(kCheap, lugh::byte_span("pw"), lugh::byte_span("saltsalt"), 4).ok);
+TEST(Argon2, StretchIsArgon2id) {
+  const auto salt = std::vector<unsigned char>(16, 0x02);
+  const auto password = lugh::byte_span("correct horse battery");
+  const auto one = lugh::crypto::stretch(password, salt, Argon2Costs{64, 1, 1}, 32);
+  const auto two = lugh::crypto::stretch(password, salt, Argon2Costs{64, 1, 1}, 32);
+  ASSERT_TRUE(one.ok) << one.error;
+  EXPECT_EQ(one.value.size(), 32u);
+  EXPECT_EQ(one.value, two.value);
+  EXPECT_FALSE(lugh::crypto::stretch(password, std::vector<unsigned char>(4, 0), Argon2Costs{64, 1, 1}, 32).ok);
 }

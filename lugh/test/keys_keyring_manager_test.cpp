@@ -21,7 +21,7 @@ using namespace lugh::keys;
 
 namespace {
 
-const lugh::crypto::Argon2Params kCheap{64, 1, 1};
+const lugh::crypto::Argon2Costs kCheap{64, 1, 1};
 const std::string kPassphrase = "correct horse battery staple";
 
 class KeyringManagerTest : public ::testing::Test {

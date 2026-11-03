@@ -39,7 +39,7 @@ inline std::vector<lugh::store::TableSpec> all_tables() {
 }
 
 // Costs small enough for a test to hash freely; the hashing is Argon2id all the same.
-inline constexpr lugh::crypto::Argon2Params kTestArgon2{64, 1, 1};
+inline constexpr lugh::crypto::Argon2Costs kTestArgon2{64, 1, 1};
 
 // The directory and authn, wired as main wires them, over a MemoryStore, a ManualClock and
 // CountingRandom, with hashing on a pool of real threads. The helpers here run their

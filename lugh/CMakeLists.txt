@@ -24,11 +24,8 @@ add_library(lugh STATIC
     authn/totp.cpp
     core/secure_memory.cpp
     crypto/aead.cpp
-    crypto/argon2.cpp
-    crypto/digest.cpp
     crypto/hkdf.cpp
     crypto/hmac.cpp
-    crypto/signing.cpp
     directory/directory.cpp
     directory/records.cpp
     http/boost_json.cpp
