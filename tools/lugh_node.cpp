@@ -75,6 +75,14 @@ std::string signal_name(int number) {
   return "signal " + std::to_string(number);
 }
 
+// Key material is on Dannan's locked pages when the lock limit allows. Said once the keys
+// are in hand, when it is known whether it did.
+void warn_if_unlocked(loggers::Logger& logger) {
+  if (const auto unlocked = dannan::identity::unlocked_secure_allocations(); unlocked > 0) {
+    logger.warn(std::to_string(unlocked) + " allocations of key material could not be locked into memory (RLIMIT_MEMLOCK) and may be swapped out");
+  }
+}
+
 bool write_all(int fd, const SecureBuffer& data) {
   std::size_t done = 0;
   while (done < data.size()) {
@@ -161,6 +169,7 @@ Task<int> run_init(cli::Options options, Ports ports, std::string state_director
       co_return 1;
     }
     logger.info("Every start will ask for the passphrase");
+    warn_if_unlocked(logger);
     co_return co_await genesis(ports, std::move(made.value), state_directory);
   }
 
@@ -188,6 +197,7 @@ Task<int> run_init(cli::Options options, Ports ports, std::string state_director
 
   logger.info(std::string("The master key went to standard output. Load it as the credential ") + keys::kCredentialName +
               "; nothing under this keyring can be opened without it");
+  warn_if_unlocked(logger);
   co_return co_await genesis(ports, std::move(made.value.keyring), state_directory);
 }
 
@@ -203,6 +213,7 @@ Task<Result<Services>> start(Ports ports, Config config) {
   auto opened = co_await store::SealedStore::open(logger, ports.files, ports.random, ports.keyrings, std::move(keyring.value),
                                                   config.state_directory + "/store", all_tables());
   if (!opened.ok) co_return Answer::failure(opened.error);
+  warn_if_unlocked(*logger);
 
   Services services;
   services.store = opened.value;

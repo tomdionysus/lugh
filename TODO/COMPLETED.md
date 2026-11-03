@@ -29,14 +29,15 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   the sealed-value framing (nonce, ciphertext, tag) over `aes_gcm_seal` and
   `aes_gcm_open_secure`. The keyring and table log formats keep their bytes. The node
   hardens itself with `harden_process()`. Lugh's `core/byte_io.h`, `core/secure_memory`
-  and `crypto/hkdf` are deleted. Dannan is pinned to f5dd71e.
+  and `crypto/hkdf` are deleted.
 - Finding: the unit count went from 373 to 353, all of it what Lugh no longer owns: its
   byte codec, secure memory and HKDF tests, the GCM known-answer vectors and the Argon2
   ceiling (each tested in Dannan), and the test that a broken random source seals nothing,
   since Dannan draws the nonce itself and Lugh cannot inject that failure any more.
-- Finding: the warning that key material could not be locked into memory is gone. Dannan
-  reports locking per allocation (`locked()`), not as a count for the process, so the node
-  now warns only when `harden_process()` falls short. Asked of Dannan.
+- The warning that key material could not be locked into memory reads Dannan's
+  process-wide count, `unlocked_secure_allocations()`, added at Lugh's request (Dannan
+  6d173c1, which Lugh is now pinned to); the node also warns when `harden_process()` falls
+  short.
 - `Secret` is Dannan's: move-only, on locked pages, compared in constant time with `==`.
   `lugh/core/secret.h` keeps only the redaction text and the text on either side of a
   secret (`text_secret`, which wipes the string it is given, and `secret_text`). A secret
