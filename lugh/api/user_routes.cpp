@@ -225,12 +225,12 @@ Task<void> UserRoutes::_enrolment(http::RouteContext context) {
     context.done();
     co_return;
   }
-  const auto link = co_await _links->link(issued.value);
+  const auto link = co_await _links->link(Secret(issued.value.reveal()));
 
   // The token leaves here once, to the administrator who asked, under Cache-Control:
   // no-store. Only its hash is kept.
   boost::json::object body;
-  body["token"] = std::string(issued.value.reveal());
+  body["token"] = std::string(secret_text(issued.value));
   body["expires_at"] = timestamp(link.ok() ? link.value.expires : 0);
   http::write_json(context.response, http::status::created, body);
   context.done();

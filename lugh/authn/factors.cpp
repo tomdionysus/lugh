@@ -48,7 +48,7 @@ Secret display_code(std::string_view normal) {
     const char c = normal[i];
     out.push_back((c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c);
   }
-  return Secret(std::move(out));
+  return text_secret(std::move(out));
 }
 
 }  // namespace
@@ -123,15 +123,15 @@ std::optional<RecoveryRecord> decode_recovery(std::span<const unsigned char> val
 
 std::optional<Secret> normal_recovery_code(std::string_view code) {
   if (code.size() > 2 * kRecoveryCodeCharacters) return std::nullopt;
-  Secret out;
+  SecureBuffer out;
   for (const char c : code) {
     if (c == '-' || c == ' ') continue;
     const char upper = (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
     if (!((upper >= 'A' && upper <= 'Z') || (upper >= '2' && upper <= '7'))) return std::nullopt;
-    out.push_back(upper);
+    out.push_back(static_cast<unsigned char>(upper));
   }
   if (out.size() != kRecoveryCodeCharacters) return std::nullopt;
-  return out;
+  return Secret(std::move(out));
 }
 
 Factors::Factors(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
@@ -195,7 +195,7 @@ Task<Outcome<TotpSetup>> Factors::totp_begin(audit::Actor actor, std::string use
 
   TotpSetup setup;
   setup.factor_id = *key;
-  setup.secret = Secret(encoding::base32(record.secret));
+  setup.secret = text_secret(encoding::base32(record.secret));
   setup.uri = otpauth_uri(issuer, account, record.secret);
   co_return Answer::success(std::move(setup));
 }
@@ -297,7 +297,7 @@ Task<Outcome<std::vector<Secret>>> Factors::recovery_generate(audit::Actor actor
 
 Task<Outcome<std::size_t>> Factors::recovery_use(std::string user_id, Secret code) {
   using Answer = Outcome<std::size_t>;
-  auto normal = normal_recovery_code(code.reveal());
+  auto normal = normal_recovery_code(secret_text(code));
 
   for (const auto& stored : co_await _records(std::move(user_id), FactorKind::recovery)) {
     auto record = decode_recovery(stored.value);
@@ -305,7 +305,7 @@ Task<Outcome<std::size_t>> Factors::recovery_use(std::string user_id, Secret cod
 
     // Every slot's selector compared, whichever matches.
     std::optional<std::size_t> slot;
-    const auto selector = normal ? byte_span(normal->reveal().substr(0, kSelectorCharacters)) : std::span<const unsigned char>{};
+    const auto selector = normal ? normal->reveal().first(kSelectorCharacters) : std::span<const unsigned char>{};
     for (std::size_t i = 0; i < record->slots.size(); ++i) {
       const bool same = normal && dannan::identity::constant_time_equal(selector, byte_span(record->slots[i].selector));
       if (same && !record->slots[i].used) slot = i;
@@ -313,7 +313,7 @@ Task<Outcome<std::size_t>> Factors::recovery_use(std::string user_id, Secret cod
     if (!slot) co_return Answer::failure(Fault::refused, "the code is not right");
 
     const bool right =
-        co_await offload(_hashing, [code = *normal, hash = record->slots[*slot].hash] { return verify_password(byte_span(code.reveal()), hash); });
+        co_await offload(_hashing, [code = std::move(*normal), hash = record->slots[*slot].hash] { return verify_password(code.reveal(), hash); });
     if (!right) co_return Answer::failure(Fault::refused, "the code is not right");
 
     record->slots[*slot].used = true;

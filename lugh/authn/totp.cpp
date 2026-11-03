@@ -94,7 +94,7 @@ Secret otpauth_uri(std::string_view issuer, std::string_view account, std::span<
   out += "&issuer=";
   append_escaped(out, issuer);
   out += "&algorithm=SHA1&digits=6&period=30";
-  return Secret(std::move(out));
+  return text_secret(std::move(out));
 }
 
 }  // namespace lugh::authn

@@ -12,6 +12,7 @@
 
 using lugh::Fault;
 using lugh::Secret;
+using lugh::text_secret;
 using namespace lugh::authn;
 using Kind = Step::Kind;
 using Stage = SignIn::Stage;
@@ -29,11 +30,11 @@ class AuthenticatorTest : public ::testing::Test {
     return step;
   }
   Step password(const std::string& login, const std::string& password, const std::string& source = kSource) {
-    return keep(run(auth.password(login, Secret(password), source)));
+    return keep(run(auth.password(login, text_secret(password), source)));
   }
   Step totp(std::string_view code) { return keep(run(auth.totp(sign_in, std::string(code), kSource))); }
-  Step recovery(const Secret& code) { return keep(run(auth.recovery(sign_in, code, kSource))); }
-  Step redeem(const Secret& token, const std::string& password) { return keep(run(auth.redeem(token, Secret(password), kSource))); }
+  Step recovery(const Secret& code) { return keep(run(auth.recovery(sign_in, copy_of(code), kSource))); }
+  Step redeem(const Secret& token, const std::string& password) { return keep(run(auth.redeem(copy_of(token), text_secret(password), kSource))); }
   lugh::Outcome<TotpSetup> enrol_begin() { return run(auth.enrol_begin(sign_in, kSource)); }
   Step enrol_confirm(const std::string& factor_id, const std::string& code) { return keep(run(auth.enrol_confirm(sign_in, factor_id, code, kSource))); }
 
@@ -56,7 +57,7 @@ TEST_F(AuthenticatorTest, EnrolmentFromALink) {
 
   const auto setup = enrol_begin();
   ASSERT_TRUE(setup.ok());
-  EXPECT_NE(setup.value.uri.reveal().find("Lugh:alice"), std::string::npos);
+  EXPECT_NE(lugh::secret_text(setup.value.uri).find("Lugh:alice"), std::string::npos);
 
   const auto done = enrol_confirm(setup.value.factor_id, rig.code_for(setup.value.secret));
   ASSERT_EQ(done.kind, Kind::next);
@@ -72,7 +73,7 @@ TEST_F(AuthenticatorTest, ARefusedPasswordKeepsTheLink) {
   const auto alice = rig.person("alice");
   const auto token = run(rig.links->issue(rig.admin, alice.id)).value;
   EXPECT_EQ(redeem(token, "short").kind, Kind::refused);
-  EXPECT_TRUE(run(rig.links->peek(token)).ok());
+  EXPECT_TRUE(run(rig.links->peek(copy_of(token))).ok());
   EXPECT_EQ(redeem(token, kPassword).kind, Kind::next);
   EXPECT_EQ(redeem(token, kPassword).kind, Kind::refused);
 }
@@ -179,7 +180,7 @@ TEST_F(AuthenticatorTest, ARefusalIsAuditedAsAnonymous) {
 TEST_F(AuthenticatorTest, AStolenPasswordCannotEnrol) {
   // A person who set a password through a link and stopped there.
   const auto alice = rig.person("alice");
-  run(auth.redeem(run(rig.links->issue(rig.admin, alice.id)).value, Secret(kPassword), kSource));
+  run(auth.redeem(run(rig.links->issue(rig.admin, alice.id)).value, text_secret(kPassword), kSource));
   EXPECT_EQ(password("alice", kPassword).kind, Kind::refused);
   EXPECT_EQ(enrol_begin().fault, Fault::refused);
 }
@@ -215,7 +216,7 @@ TEST_F(AuthenticatorTest, ASignInHasALifetime) {
 TEST_F(AuthenticatorTest, APasswordAloneWhenPolicySaysSo) {
   run(rig.policies->global_set(rig.admin, Assurance::pwd));
   const auto alice = rig.person("alice");
-  run(rig.passwords->set(rig.admin, alice, Secret(kPassword)));
+  run(rig.passwords->set(rig.admin, alice, text_secret(kPassword)));
   run(rig.directory->enrolled_set(rig.admin, alice.id, true));
 
   ASSERT_EQ(password("alice", kPassword).kind, Kind::next);

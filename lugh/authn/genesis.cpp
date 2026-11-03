@@ -30,9 +30,9 @@ Task<Outcome<Secret>> Genesis::run() {
 
   SecureBuffer raw(kPasswordBytes);
   if (!_random->fill(raw)) co_return Answer::failure(Fault::failed, "no randomness for root's password");
-  Secret password(encoding::base64url(raw));
+  auto password = text_secret(encoding::base64url(raw));
 
-  if (const auto set = co_await _passwords->set(actor, root.value, password); !set.ok()) co_return Answer::from(set);
+  if (const auto set = co_await _passwords->set(actor, root.value, Secret(password.reveal())); !set.ok()) co_return Answer::from(set);
   if (const auto allowed = co_await _links->first_sign_in_allow(actor, root.value.id); !allowed.ok()) co_return Answer::from(allowed);
 
   co_await _audit->record(audit::Event{"genesis", actor.id, root.value.id, {}, "root, in administrators"});

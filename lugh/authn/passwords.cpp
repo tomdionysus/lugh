@@ -106,7 +106,7 @@ Passwords::Passwords(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<st
 
 Outcome<> Passwords::acceptable(const Secret& password, const directory::User& user) const {
   using Answer = Outcome<>;
-  const auto text = password.reveal();
+  const auto text = secret_text(password);
   if (characters(text) < _rules.least_characters) {
     return Answer::failure(Fault::invalid, "a password is at least " + std::to_string(_rules.least_characters) + " characters");
   }
@@ -124,7 +124,7 @@ Task<Outcome<>> Passwords::set(audit::Actor actor, directory::User user, Secret 
   if (const auto ok = acceptable(password, user); !ok.ok()) co_return ok;
 
   auto hashed = co_await offload(
-      _hashing, [params = _params, random = _random, password = std::move(password)] { return hash_password(byte_span(password.reveal()), params, *random); });
+      _hashing, [params = _params, random = _random, password = std::move(password)] { return hash_password(password.reveal(), params, *random); });
   if (!hashed.ok) co_return Answer::failure(Fault::failed, hashed.error);
 
   const auto written = co_await _store->put(kTable, user.id, encode(Credential{std::move(hashed.value), (_wall.unix_ms() / 1000)}));
@@ -148,7 +148,7 @@ Task<bool> Passwords::verify(std::string user_id, Secret password) {
   };
   auto checked = co_await offload(_hashing, [params = _params, random = _random, hash = std::move(credential->hash), password = std::move(password)] {
     Checked out;
-    const auto secret = byte_span(password.reveal());
+    const auto secret = password.reveal();
     out.right = verify_password(secret, hash);
     if (out.right && !same_costs(hash.params, params)) {
       if (auto hashed = hash_password(secret, params, *random); hashed.ok) out.again = std::move(hashed.value);
@@ -168,7 +168,7 @@ Task<bool> Passwords::verify(std::string user_id, Secret password) {
 
 Task<void> Passwords::spend(Secret password) {
   co_await offload(_hashing, [params = _params, salt = _decoy_salt, password = std::move(password)] {
-    (void)crypto::stretch(byte_span(password.reveal()), salt, params, kPasswordHashBytes);
+    (void)crypto::stretch(password.reveal(), salt, params, kPasswordHashBytes);
   });
 }
 

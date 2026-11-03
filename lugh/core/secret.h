@@ -7,68 +7,37 @@
 
 #pragma once
 
-#include <openssl/crypto.h>
-
-#include <cstddef>
 #include <string>
 #include <string_view>
-#include <utility>
-#include <vector>
 
+#include "dannan/identity/crypto.h"
+#include "dannan/identity/secure_memory.h"
 #include "lugh/core/secure_bytes.h"
 
+// A secret is Dannan's (dannan/identity/secure_memory.h): its bytes on locked pages, wiped
+// when it goes, with no conversion to text and no stream operator, so it cannot reach a log
+// line by accident. Move-only, and compared in constant time with ==. What is here is
+// Lugh's use of it for what people type and read: passwords, tokens, codes.
 namespace lugh {
 
-// A value that must never reach a log line, an error message or a response body: a
-// password, a passphrase, a token. It converts to nothing, so `logger->info("key " + secret)`
-// does not compile, and the one way to the bytes is spelled out at the call site. The bytes
-// live in locked memory (dannan/identity/secure_memory.h) and are wiped when they go. Binary key
-// material is SecureBuffer.
-class Secret {
- public:
-  // What a log line or error says in its place.
-  static constexpr const char* kRedacted = "[redacted]";
+using Secret = dannan::identity::Secret;
 
-  Secret() = default;
+// What a log line or error says in a secret's place.
+inline constexpr std::string_view kRedacted = "[redacted]";
 
-  // The string given is wiped once copied, so the caller's copy does not outlive this one.
-  explicit Secret(std::string value) : _value(value.begin(), value.end()) {
-    if (!value.empty()) OPENSSL_cleanse(value.data(), value.size());
-  }
+// A secret from text. The text given is wiped once copied, so the caller's copy does not
+// outlive this one.
+inline Secret text_secret(std::string text) {
+  Secret out(byte_span(text));
+  dannan::identity::cleanse(std::span(reinterpret_cast<std::uint8_t*>(text.data()), text.size()));
+  return out;
+}
 
-  Secret(const Secret& other) = default;
-  Secret& operator=(const Secret& other) = default;
-
-  Secret(Secret&& other) noexcept : _value(std::move(other._value)) { other._value.clear(); }
-
-  Secret& operator=(Secret&& other) noexcept {
-    if (this != &other) {
-      _value = std::move(other._value);
-      other._value.clear();
-    }
-    return *this;
-  }
-
-  // The bytes, for the code that hashes, seals or compares them. Nowhere else.
-  std::string_view reveal() const { return {_value.data(), _value.size()}; }
-
-  // For a reader that takes a secret a character at a time, so it is never whole anywhere
-  // else.
-  void push_back(char c) { _value.push_back(c); }
-
-  bool empty() const { return _value.empty(); }
-  std::size_t size() const { return _value.size(); }
-
-  // Constant time over the bytes, so a comparison does not say how far it got. The lengths
-  // are compared first, and that is known: a secret's length is not the secret.
-  bool equals(const Secret& other) const {
-    if (_value.size() != other._value.size()) return false;
-    if (_value.empty()) return true;
-    return CRYPTO_memcmp(_value.data(), other._value.data(), _value.size()) == 0;
-  }
-
- private:
-  std::vector<char, dannan::identity::SecureAllocator<char>> _value;
-};
+// A secret's bytes read as text, for the code that checks, hashes or shows a password, a
+// token or a code. Nowhere else.
+inline std::string_view secret_text(const Secret& secret) {
+  const auto bytes = secret.reveal();
+  return {reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+}
 
 }  // namespace lugh

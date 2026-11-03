@@ -75,5 +75,5 @@ TEST(Totp, OnlySixDigits) {
 
 TEST(Totp, OtpauthUri) {
   const auto uri = otpauth_uri("Lugh", "alice smith", kSecret);
-  EXPECT_EQ(uri.reveal(), "otpauth://totp/Lugh:alice%20smith?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Lugh&algorithm=SHA1&digits=6&period=30");
+  EXPECT_EQ(lugh::secret_text(uri), "otpauth://totp/Lugh:alice%20smith?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Lugh&algorithm=SHA1&digits=6&period=30");
 }

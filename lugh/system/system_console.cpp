@@ -56,24 +56,24 @@ std::optional<Secret> read_line(const std::string& prompt) {
   say(prompt);
   NoEcho quiet;
 
-  Secret line;
+  SecureBuffer line;
   while (true) {
     char c = 0;
     const auto got = ::read(STDIN_FILENO, &c, 1);
     if (got < 0 && errno == EINTR) continue;
-    if (got <= 0) return line.empty() ? std::nullopt : std::optional<Secret>(std::move(line));
+    if (got <= 0) {
+      if (line.empty()) return std::nullopt;
+      break;
+    }
     if (c == '\n') break;
     if (line.size() >= kMostCharacters) return std::nullopt;
-    line.push_back(c);
+    line.push_back(static_cast<unsigned char>(c));
   }
 
-  // A line typed on Windows, or pasted from one.
-  if (!line.empty() && line.reveal().back() == '\r') {
-    Secret trimmed;
-    for (const char c : line.reveal().substr(0, line.size() - 1)) trimmed.push_back(c);
-    return trimmed;
-  }
-  return line;
+  // A line typed on Windows, or pasted from one. Popping leaves the byte in the buffer's
+  // pages, which are wiped with the rest when they go.
+  if (!line.empty() && line.back() == '\r') line.pop_back();
+  return Secret(std::move(line));
 }
 
 }  // namespace
@@ -85,7 +85,7 @@ Task<std::optional<Secret>> SystemConsole::read_secret(std::string prompt) {
 void SystemConsole::show_secret(const std::string& label, const Secret& secret) {
   say("\n" + label + "\n\n    ");
   // Straight from locked memory to the descriptor, with no copy on the way.
-  const auto text = secret.reveal();
+  const auto text = secret_text(secret);
   std::size_t done = 0;
   while (done < text.size()) {
     const auto put = ::write(STDERR_FILENO, text.data() + done, text.size() - done);

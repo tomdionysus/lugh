@@ -12,6 +12,7 @@
 
 using lugh::Fault;
 using lugh::Secret;
+using lugh::text_secret;
 using namespace lugh::authn;
 using Kind = Step::Kind;
 using Stage = SignIn::Stage;
@@ -43,7 +44,7 @@ TEST_F(GenesisTest, RootInAdministratorsWithARandomPassword) {
   ASSERT_TRUE(administrators);
   EXPECT_EQ(run(rig.directory->members(administrators->id)), std::vector<std::string>{root->id});
 
-  EXPECT_TRUE(run(rig.passwords->verify(root->id, password.value)));
+  EXPECT_TRUE(run(rig.passwords->verify(root->id, copy_of(password.value))));
   EXPECT_TRUE(rig.audited("genesis"));
 }
 
@@ -66,7 +67,7 @@ TEST_F(GenesisTest, EachGenesisAPasswordOfItsOwn) {
   lugh::SecureBuffer skip(7);
   other.random->fill(skip);
   const auto second = run(Genesis(other.directory, other.passwords, other.links, other.random, other.audit).run()).value;
-  EXPECT_FALSE(first.equals(second));
+  EXPECT_FALSE(first == second);
 }
 
 TEST_F(GenesisTest, NoRandomnessNoPassword) {
@@ -77,7 +78,7 @@ TEST_F(GenesisTest, NoRandomnessNoPassword) {
 TEST_F(GenesisTest, RootsFirstSignInIsEnrolment) {
   const auto password = genesis().value;
   auto& auth = *rig.authenticator;
-  const auto first = run(auth.password("root", password, kSource));
+  const auto first = run(auth.password("root", copy_of(password), kSource));
   ASSERT_EQ(first.kind, Kind::next);
   EXPECT_EQ(first.sign_in.stage, Stage::enrolment);
 
@@ -92,7 +93,7 @@ TEST_F(GenesisTest, RootsFirstSignInIsEnrolment) {
 
   // From then on, as anyone: the password, then a code.
   rig.advance(std::chrono::seconds(30));
-  const auto again = run(auth.password("root", password, kSource));
+  const auto again = run(auth.password("root", copy_of(password), kSource));
   ASSERT_EQ(again.kind, Kind::next);
   EXPECT_EQ(again.sign_in.stage, Stage::second_factor);
 }
@@ -100,19 +101,19 @@ TEST_F(GenesisTest, RootsFirstSignInIsEnrolment) {
 TEST_F(GenesisTest, TheFirstSignInHappensOnce) {
   const auto password = genesis().value;
   auto& auth = *rig.authenticator;
-  const auto first = run(auth.password("root", password, kSource));
+  const auto first = run(auth.password("root", copy_of(password), kSource));
   const auto setup = run(auth.enrol_begin(first.sign_in, kSource)).value;
   run(auth.enrol_confirm(first.sign_in, setup.factor_id, rig.code_for(setup.secret), kSource));
 
   // Reset, root's password alone no longer opens enrolment: a new link must.
   const auto root = *run(rig.directory->user_by_name("root"));
   ASSERT_TRUE(run(auth.reset_factors(rig.admin, root.id)).ok());
-  EXPECT_EQ(run(auth.password("root", password, kSource)).kind, Kind::refused);
+  EXPECT_EQ(run(auth.password("root", copy_of(password), kSource)).kind, Kind::refused);
 }
 
 TEST_F(GenesisTest, AWrongPasswordIsStillWrong) {
   genesis();
-  const auto step = run(rig.authenticator->password("root", Secret("not the generated one"), kSource));
+  const auto step = run(rig.authenticator->password("root", text_secret("not the generated one"), kSource));
   EXPECT_EQ(step.kind, Kind::refused);
   EXPECT_EQ(step.sign_in.stage, Stage::ended);
 }

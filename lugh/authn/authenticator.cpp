@@ -144,7 +144,7 @@ Task<Step> Authenticator::redeem(Secret token, Secret password, std::string sour
   const auto address = address_key(source);
   if (const auto wait = _addresses.wait(address, _time.now())) co_return waiting(*wait);
 
-  const auto peeked = co_await _links->peek(token);
+  const auto peeked = co_await _links->peek(Secret(token.reveal()));
   const auto user = peeked.ok() ? co_await _directory->user(peeked.value) : std::nullopt;
   if (!user || user->disabled || user->enrolled || user->kind != directory::Kind::person) {
     _addresses.failed(address, _time.now());

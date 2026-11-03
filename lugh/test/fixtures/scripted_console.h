@@ -23,12 +23,12 @@ class ScriptedConsole : public lugh::system::Console {
   lugh::Task<std::optional<lugh::Secret>> read_secret(std::string prompt) override {
     prompts.push_back(prompt);
     if (_lines.empty()) co_return std::nullopt;
-    lugh::Secret line(_lines.front());
+    auto line = lugh::text_secret(_lines.front());
     _lines.pop_front();
-    co_return line;
+    co_return std::optional<lugh::Secret>(std::move(line));
   }
 
-  void show_secret(const std::string& label, const lugh::Secret& secret) override { shown.emplace_back(label, std::string(secret.reveal())); }
+  void show_secret(const std::string& label, const lugh::Secret& secret) override { shown.emplace_back(label, std::string(lugh::secret_text(secret))); }
 
   void type(const std::string& line) { _lines.push_back(line); }
 

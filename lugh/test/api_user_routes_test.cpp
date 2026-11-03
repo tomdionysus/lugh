@@ -134,9 +134,9 @@ TEST_F(UserRoutesTest, TheFirstAdministratorEnrols) {
   const auto issued = rig.post("/api/v1/users/" + id + "/enrolment", "");
   ASSERT_EQ(issued.status, 201u) << issued.response->body();
   EXPECT_EQ(issued.body.at("expires_at"), "2026-10-21T00:00:00Z");
-  const lugh::Secret token(std::string(issued.body.at("token").as_string()));
+  auto token = lugh::text_secret(std::string(issued.body.at("token").as_string()));
 
-  const auto redeemed = run(rig.authenticator->redeem(token, lugh::Secret("correct horse battery"), "192.0.2.1"));
+  const auto redeemed = run(rig.authenticator->redeem(std::move(token), lugh::text_secret("correct horse battery"), "192.0.2.1"));
   ASSERT_EQ(redeemed.kind, lugh::authn::Step::Kind::next);
   EXPECT_EQ(redeemed.sign_in.user_id, id);
   EXPECT_EQ(rig.post("/api/v1/users/nobody/enrolment", "").status, 404u);
@@ -155,7 +155,7 @@ TEST_F(UserRoutesTest, FactorsAreListedWithoutSecrets) {
     if (factor.at("kind") == "recovery") EXPECT_EQ(factor.at("remaining"), 10);
   }
   const auto body = answer.response->body();
-  EXPECT_EQ(body.find(std::string(rig.secret.reveal())), std::string::npos);
+  EXPECT_EQ(body.find(std::string(lugh::secret_text(rig.secret))), std::string::npos);
 }
 
 TEST_F(UserRoutesTest, RemovingFactorsAndResetting) {

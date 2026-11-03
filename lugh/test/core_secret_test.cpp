@@ -12,62 +12,37 @@
 
 #include "lugh/core/secret.h"
 
+// Secret is Dannan's, tested there. What is here is Lugh's text on either side of it.
 using lugh::Secret;
+using lugh::secret_text;
+using lugh::text_secret;
 
 // The point of the type: a Secret is not a string and does not become one, so the compiler
 // refuses the ways a secret reaches a log line.
 static_assert(!std::is_convertible_v<Secret, std::string>);
 static_assert(!std::is_convertible_v<std::string, Secret>);
 static_assert(!std::is_constructible_v<std::string, Secret>);
+static_assert(!std::is_copy_constructible_v<Secret>);
 
-TEST(Secret, RevealIsTheOnlyWayToTheBytes) {
-  const Secret secret("hunter2");
-  EXPECT_EQ(secret.reveal(), "hunter2");
+TEST(Secret, TextInAndOut) {
+  const auto secret = text_secret("hunter2");
+  EXPECT_EQ(secret_text(secret), "hunter2");
   EXPECT_EQ(secret.size(), 7u);
-  EXPECT_FALSE(secret.empty());
-  EXPECT_TRUE(Secret().empty());
+  EXPECT_EQ(text_secret("").size(), 0u);
+  EXPECT_EQ(secret_text(Secret()), "");
 }
 
-TEST(Secret, EqualsComparesTheBytes) {
-  EXPECT_TRUE(Secret("abc").equals(Secret("abc")));
-  EXPECT_FALSE(Secret("abc").equals(Secret("abd")));
-  EXPECT_FALSE(Secret("abc").equals(Secret("abcd")));
-  EXPECT_TRUE(Secret().equals(Secret()));
-  EXPECT_FALSE(Secret().equals(Secret("a")));
+TEST(Secret, TextComparesAsItsBytes) {
+  EXPECT_TRUE(text_secret("abc") == text_secret("abc"));
+  EXPECT_FALSE(text_secret("abc") == text_secret("abd"));
+  EXPECT_FALSE(text_secret("abc") == text_secret("abcd"));
 }
 
-TEST(Secret, CopiesAndMovesKeepTheValue) {
-  Secret original("key material");
-  Secret copy = original;
-  EXPECT_EQ(copy.reveal(), "key material");
-  EXPECT_EQ(original.reveal(), "key material");
-
-  Secret moved = std::move(original);
-  EXPECT_EQ(moved.reveal(), "key material");
-  EXPECT_TRUE(original.empty());  // NOLINT(bugprone-use-after-move): that it is empty is the point
-
-  Secret assigned;
-  assigned = copy;
-  EXPECT_EQ(assigned.reveal(), "key material");
-
-  Secret move_assigned;
-  move_assigned = std::move(copy);
-  EXPECT_EQ(move_assigned.reveal(), "key material");
-  EXPECT_TRUE(copy.empty());  // NOLINT(bugprone-use-after-move)
-}
-
-TEST(Secret, TheRedactionIsWhatALogMaySay) { EXPECT_STREQ(Secret::kRedacted, "[redacted]"); }
+TEST(Secret, TheRedactionIsWhatALogMaySay) { EXPECT_EQ(lugh::kRedacted, "[redacted]"); }
 
 TEST(Secret, BuiltACharacterAtATime) {
-  Secret secret;
-  for (const char c : std::string("typed")) secret.push_back(c);
-  EXPECT_EQ(secret.reveal(), "typed");
-  EXPECT_TRUE(secret.equals(Secret("typed")));
-}
-
-TEST(Secret, LongValuesSurviveGrowth) {
-  Secret secret;
-  for (int i = 0; i < 1000; ++i) secret.push_back(static_cast<char>('a' + i % 26));
-  EXPECT_EQ(secret.size(), 1000u);
-  EXPECT_EQ(secret.reveal().substr(0, 3), "abc");
+  lugh::SecureBuffer typed;
+  for (const char c : std::string("typed")) typed.push_back(static_cast<unsigned char>(c));
+  const Secret secret(std::move(typed));
+  EXPECT_EQ(secret_text(secret), "typed");
 }

@@ -37,6 +37,13 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
 - Finding: the warning that key material could not be locked into memory is gone. Dannan
   reports locking per allocation (`locked()`), not as a count for the process, so the node
   now warns only when `harden_process()` falls short. Asked of Dannan.
+- `Secret` is Dannan's: move-only, on locked pages, compared in constant time with `==`.
+  `lugh/core/secret.h` keeps only the redaction text and the text on either side of a
+  secret (`text_secret`, which wipes the string it is given, and `secret_text`). A secret
+  read a character at a time is built in a `SecureBuffer` and handed over. Where a caller
+  still needs a secret it passes on, the copy is written out at the call site.
+- Finding: the unit count went from 353 to 351: the copy and growth tests of Lugh's
+  `Secret`, which no longer exist to test.
 
 ## 2026-10-18: P5, the management API (not committed)
 

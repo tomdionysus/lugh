@@ -24,6 +24,10 @@
 #include "lugh/test/fixtures/pools.h"
 #include "lugh/test/fixtures/run.h"
 
+// A secret is move-only, and the calls that take one keep it. A test that offers the same
+// token twice, to see the second refused, offers a copy the first time.
+inline lugh::Secret copy_of(const lugh::Secret& secret) { return lugh::Secret(secret.reveal()); }
+
 // Every table, with the directory's indexes, as main opens them.
 inline std::vector<lugh::store::TableSpec> all_tables() {
   std::vector<lugh::store::TableSpec> out;
@@ -67,7 +71,7 @@ class AuthnRig {
 
   // The code an authenticator app would show now for a base32 secret.
   std::string code_for(const lugh::Secret& secret, std::int64_t steps_ahead = 0) const {
-    const auto raw = lugh::encoding::base32_decode(secret.reveal());
+    const auto raw = lugh::encoding::base32_decode(lugh::secret_text(secret));
     const auto now = wall.unix_ms() / 1000;
     return lugh::authn::totp_code(*raw, lugh::authn::totp_step(now) + static_cast<std::uint64_t>(steps_ahead));
   }
@@ -92,13 +96,13 @@ class AuthnRig {
     const auto user = person(name);
     const auto token = run(links->issue(admin, user.id));
     EXPECT_TRUE(token.ok()) << token.message;
-    const auto redeemed = run(authenticator->redeem(token.value, lugh::Secret(password), "192.0.2.1"));
+    const auto redeemed = run(authenticator->redeem(copy_of(token.value), lugh::text_secret(password), "192.0.2.1"));
     EXPECT_EQ(redeemed.kind, lugh::authn::Step::Kind::next);
     auto setup = run(authenticator->enrol_begin(redeemed.sign_in, "192.0.2.1"));
     EXPECT_TRUE(setup.ok()) << setup.message;
     auto done = run(authenticator->enrol_confirm(redeemed.sign_in, setup.value.factor_id, code_for(setup.value.secret), "192.0.2.1"));
     EXPECT_EQ(done.kind, lugh::authn::Step::Kind::next);
-    secret = setup.value.secret;
+    secret = copy_of(setup.value.secret);
     recovery = std::move(done.recovery_codes);
     // Past the step the confirming code used, so the next code is a new one.
     advance(std::chrono::seconds(30));

@@ -41,7 +41,7 @@ Task<Outcome<Secret>> EnrolmentLinks::issue(audit::Actor actor, std::string user
 
   SecureBuffer raw(kTokenBytes);
   if (!_random->fill(raw)) co_return Answer::failure(Fault::failed, "no randomness for a token");
-  Secret token(encoding::base64url(raw));
+  auto token = text_secret(encoding::base64url(raw));
 
   Link link;
   link.user_id = user_id;
@@ -137,7 +137,7 @@ std::optional<EnrolmentLinks::Link> EnrolmentLinks::decode(std::span<const unsig
 
 std::optional<std::string> EnrolmentLinks::_key(const Secret& token) {
   // Exactly what issue() makes: 43 base64url characters.
-  const auto text = token.reveal();
+  const auto text = secret_text(token);
   if (text.size() != (kTokenBytes * 4 + 2) / 3) return std::nullopt;
   for (const char c : text) {
     if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_')) return std::nullopt;

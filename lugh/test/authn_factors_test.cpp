@@ -43,7 +43,7 @@ TEST_F(FactorsTest, ATotpSecretCountsOnlyOnceConfirmed) {
   auto setup = run(factors.totp_begin(rig.admin, alice.id, "Lugh", "alice"));
   ASSERT_TRUE(setup.ok());
   EXPECT_EQ(setup.value.secret.size(), 32u);
-  EXPECT_EQ(setup.value.uri.reveal().rfind("otpauth://totp/Lugh:alice?secret=", 0), 0u);
+  EXPECT_EQ(lugh::secret_text(setup.value.uri).rfind("otpauth://totp/Lugh:alice?secret=", 0), 0u);
   EXPECT_FALSE(run(factors.has_second_factor(alice.id)));
   ASSERT_EQ(run(factors.list(alice.id)).size(), 1u);
   EXPECT_FALSE(run(factors.list(alice.id))[0].confirmed);
@@ -103,44 +103,44 @@ TEST_F(FactorsTest, RecoveryCodes) {
   for (const auto& code : codes.value) {
     // "abcd-efgh-ijkl-mnop"
     ASSERT_EQ(code.size(), 19u);
-    EXPECT_EQ(code.reveal()[4], '-');
-    distinct.insert(std::string(code.reveal()));
+    EXPECT_EQ(lugh::secret_text(code)[4], '-');
+    distinct.insert(std::string(lugh::secret_text(code)));
   }
   EXPECT_EQ(distinct.size(), Factors::kRecoveryCodes);
   // Codes stand in for a factor; they are not one.
   EXPECT_FALSE(run(factors.has_second_factor(alice.id)));
 
-  const auto used = run(factors.recovery_use(alice.id, codes.value[3]));
+  const auto used = run(factors.recovery_use(alice.id, copy_of(codes.value[3])));
   ASSERT_TRUE(used.ok());
   EXPECT_EQ(used.value, 9u);
-  EXPECT_EQ(run(factors.recovery_use(alice.id, codes.value[3])).fault, Fault::refused);
+  EXPECT_EQ(run(factors.recovery_use(alice.id, copy_of(codes.value[3]))).fault, Fault::refused);
 
   // As typed: upper case, no dashes, spaces.
   std::string typed;
-  for (const char c : codes.value[4].reveal()) {
+  for (const char c : lugh::secret_text(codes.value[4])) {
     if (c != '-') typed.push_back(static_cast<char>(std::toupper(c)));
   }
   typed.insert(8, " ");
-  EXPECT_EQ(run(factors.recovery_use(alice.id, lugh::Secret(typed))).value, 8u);
+  EXPECT_EQ(run(factors.recovery_use(alice.id, lugh::text_secret(typed))).value, 8u);
   EXPECT_EQ(run(factors.list(alice.id)).at(0).remaining, 8u);
 }
 
 TEST_F(FactorsTest, AWrongRecoveryCodeIsRefused) {
   const auto codes = run(factors.recovery_generate(rig.admin, alice.id)).value;
   // The right slot, the wrong rest.
-  std::string wrong(codes[0].reveal());
+  std::string wrong(lugh::secret_text(codes[0]));
   wrong.back() = wrong.back() == 'a' ? 'b' : 'a';
-  EXPECT_EQ(run(factors.recovery_use(alice.id, lugh::Secret(wrong))).fault, Fault::refused);
-  EXPECT_EQ(run(factors.recovery_use(alice.id, lugh::Secret("not a code"))).fault, Fault::refused);
-  EXPECT_EQ(run(factors.recovery_use(alice.id, lugh::Secret(""))).fault, Fault::refused);
+  EXPECT_EQ(run(factors.recovery_use(alice.id, lugh::text_secret(wrong))).fault, Fault::refused);
+  EXPECT_EQ(run(factors.recovery_use(alice.id, lugh::text_secret("not a code"))).fault, Fault::refused);
+  EXPECT_EQ(run(factors.recovery_use(alice.id, lugh::text_secret(""))).fault, Fault::refused);
   EXPECT_EQ(run(factors.list(alice.id)).at(0).remaining, 10u);
 }
 
 TEST_F(FactorsTest, NewRecoveryCodesReplaceTheOld) {
   const auto old = run(factors.recovery_generate(rig.admin, alice.id)).value;
   const auto fresh = run(factors.recovery_generate(rig.admin, alice.id)).value;
-  EXPECT_EQ(run(factors.recovery_use(alice.id, old[0])).fault, Fault::refused);
-  EXPECT_TRUE(run(factors.recovery_use(alice.id, fresh[0])).ok());
+  EXPECT_EQ(run(factors.recovery_use(alice.id, copy_of(old[0]))).fault, Fault::refused);
+  EXPECT_TRUE(run(factors.recovery_use(alice.id, copy_of(fresh[0]))).ok());
   EXPECT_EQ(run(factors.list(alice.id)).size(), 1u);
 }
 
@@ -150,7 +150,7 @@ TEST_F(FactorsTest, TheStoredRecordsHoldNoCode) {
     const std::string value(record.value.begin(), record.value.end());
     for (const auto& code : codes) {
       std::string normal;
-      for (const char c : code.reveal()) {
+      for (const char c : lugh::secret_text(code)) {
         if (c != '-') normal.push_back(static_cast<char>(std::toupper(c)));
       }
       EXPECT_EQ(value.find(normal), std::string::npos);
