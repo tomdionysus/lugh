@@ -5,16 +5,15 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "store/sealed_store.h"
-
 #include <gtest/gtest.h>
 
-#include "core/byte_io.h"
-#include "helpers/hex.h"
-#include "helpers/run.h"
-#include "helpers/sealed_store_rig.h"
-#include "helpers/temp_directory.h"
-#include "system/system_files.h"
+#include "lugh/core/byte_io.h"
+#include "lugh/store/sealed_store.h"
+#include "lugh/system/system_files.h"
+#include "lugh/test/fixtures/hex.h"
+#include "lugh/test/fixtures/run.h"
+#include "lugh/test/fixtures/sealed_store_rig.h"
+#include "lugh/test/fixtures/temp_directory.h"
 
 using lugh::byte_span;
 using lugh::store::StoreError;

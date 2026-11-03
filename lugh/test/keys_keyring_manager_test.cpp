@@ -5,18 +5,17 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "keys/keyring_manager.h"
-
 #include <gtest/gtest.h>
 
-#include "fakes/fixed_random.h"
-#include "fakes/map_environment.h"
-#include "fakes/memory_files.h"
-#include "fakes/scripted_console.h"
-#include "helpers/hex.h"
-#include "helpers/pools.h"
-#include "helpers/run.h"
-#include "mocks/logger_mock.h"
+#include "lugh/keys/keyring_manager.h"
+#include "lugh/test/fixtures/fixed_random.h"
+#include "lugh/test/fixtures/hex.h"
+#include "lugh/test/fixtures/logger_mock.h"
+#include "lugh/test/fixtures/map_environment.h"
+#include "lugh/test/fixtures/memory_files.h"
+#include "lugh/test/fixtures/pools.h"
+#include "lugh/test/fixtures/run.h"
+#include "lugh/test/fixtures/scripted_console.h"
 
 using namespace lugh::keys;
 
@@ -107,7 +106,7 @@ TEST_F(KeyringManagerTest, SaveNewRefusesToReplace) {
 TEST_F(KeyringManagerTest, NoKeyringSaysToRunInit) {
   const auto opened = run(manager().open());
   EXPECT_FALSE(opened.ok);
-  EXPECT_NE(opened.error.find("lugh init"), std::string::npos);
+  EXPECT_NE(opened.error.find("lugh-node init"), std::string::npos);
 }
 
 TEST_F(KeyringManagerTest, NotAKeyring) {

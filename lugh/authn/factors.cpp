@@ -5,15 +5,15 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "authn/factors.h"
+#include "lugh/authn/factors.h"
 
 #include <openssl/crypto.h>
 
-#include "authn/totp.h"
-#include "core/byte_io.h"
-#include "core/encoding.h"
-#include "crypto/compare.h"
-#include "loggers/logger_scoped.h"
+#include "lugh/authn/totp.h"
+#include "lugh/core/byte_io.h"
+#include "lugh/core/encoding.h"
+#include "lugh/crypto/compare.h"
+#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::authn {
 

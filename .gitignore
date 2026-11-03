@@ -11,7 +11,7 @@
 /dashboard/build/
 /dashboard/.react-router/
 
-# The development certificate and key that scripts/dev-cert.sh writes.
+# The development certificate and key that tools/lugh_dev_cert.sh writes.
 /config/dev/
 
 # macOS directory metadata.

@@ -6,7 +6,7 @@
 # Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 #
 
-"""`lugh init`, and the start that needs what it made.
+"""`lugh-node init`, and the start that needs what it made.
 
 With a credential: init writes 32 raw bytes to standard output and the
 keyring to the state directory, then performs genesis, showing root's password
@@ -134,7 +134,7 @@ def credential_mode(binary, directory, cert, key):
 
     up, text = serve(binary, cert, key, state, credentials)
     check("no keyring: the service does not start", not up)
-    check("no keyring: it says to run init", "lugh init" in text, text)
+    check("no keyring: it says to run init", "lugh-node init" in text, text)
 
     made = init(binary, state)
     check("init succeeds", made.returncode == 0, made.stderr.decode(errors="replace"))

@@ -5,11 +5,11 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "directory/directory.h"
+#include "lugh/directory/directory.h"
 
 #include <gtest/gtest.h>
 
-#include "helpers/authn_rig.h"
+#include "lugh/test/fixtures/authn_rig.h"
 
 using lugh::Fault;
 using namespace lugh::directory;

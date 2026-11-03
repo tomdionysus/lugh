@@ -5,12 +5,11 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "authn/passwords.h"
-
 #include <gtest/gtest.h>
 
-#include "fakes/memory_files.h"
-#include "helpers/authn_rig.h"
+#include "lugh/authn/passwords.h"
+#include "lugh/test/fixtures/authn_rig.h"
+#include "lugh/test/fixtures/memory_files.h"
 
 using lugh::byte_span;
 using lugh::Fault;

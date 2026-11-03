@@ -5,15 +5,14 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "http/health_routes.h"
-
 #include <gtest/gtest.h>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/json.hpp>
 
-#include "fakes/manual_clock.h"
-#include "helpers/route_call.h"
+#include "lugh/http/health_routes.h"
+#include "lugh/test/fixtures/manual_clock.h"
+#include "lugh/test/fixtures/route_call.h"
 
 using lugh::http::HealthRoutes;
 using lugh::http::Router;

@@ -5,14 +5,14 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "audit/audit_log.h"
+#include "lugh/audit/audit_log.h"
 
 #include <gtest/gtest.h>
 
-#include "fakes/manual_clock.h"
-#include "fakes/memory_store.h"
-#include "helpers/run.h"
-#include "mocks/logger_mock.h"
+#include "lugh/test/fixtures/logger_mock.h"
+#include "lugh/test/fixtures/manual_clock.h"
+#include "lugh/test/fixtures/memory_store.h"
+#include "lugh/test/fixtures/run.h"
 
 using lugh::audit::AuditLog;
 using lugh::audit::Event;

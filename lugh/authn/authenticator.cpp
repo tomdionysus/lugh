@@ -5,9 +5,9 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "authn/authenticator.h"
+#include "lugh/authn/authenticator.h"
 
-#include "loggers/logger_scoped.h"
+#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::authn {
 

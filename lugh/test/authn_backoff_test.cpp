@@ -5,9 +5,9 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "authn/backoff.h"
-
 #include <gtest/gtest.h>
+
+#include "lugh/authn/backoff.h"
 
 using lugh::authn::Backoff;
 using namespace std::chrono_literals;

@@ -10,7 +10,7 @@
 #include <map>
 #include <string>
 
-#include "http/caller.h"
+#include "lugh/http/caller.h"
 
 // Bearer tokens the test names, each standing for a caller it names: what P6's sessions and
 // OAuth tokens will resolve to, without them.

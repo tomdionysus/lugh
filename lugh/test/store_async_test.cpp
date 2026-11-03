@@ -18,15 +18,15 @@
 #include <boost/asio/steady_timer.hpp>
 #include <set>
 
-#include "fakes/fixed_random.h"
-#include "fakes/map_environment.h"
-#include "fakes/memory_files.h"
-#include "fakes/scripted_console.h"
-#include "helpers/pools.h"
-#include "helpers/run.h"
-#include "helpers/sealed_store_rig.h"
-#include "mocks/logger_mock.h"
-#include "store/sealed_store.h"
+#include "lugh/store/sealed_store.h"
+#include "lugh/test/fixtures/fixed_random.h"
+#include "lugh/test/fixtures/logger_mock.h"
+#include "lugh/test/fixtures/map_environment.h"
+#include "lugh/test/fixtures/memory_files.h"
+#include "lugh/test/fixtures/pools.h"
+#include "lugh/test/fixtures/run.h"
+#include "lugh/test/fixtures/scripted_console.h"
+#include "lugh/test/fixtures/sealed_store_rig.h"
 
 namespace {
 

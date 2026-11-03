@@ -5,11 +5,10 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "crypto/argon2.h"
-
 #include <gtest/gtest.h>
 
-#include "helpers/hex.h"
+#include "lugh/crypto/argon2.h"
+#include "lugh/test/fixtures/hex.h"
 
 using lugh::crypto::argon2id;
 using lugh::crypto::Argon2Params;

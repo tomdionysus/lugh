@@ -11,18 +11,18 @@
 #include <string>
 #include <vector>
 
-#include "audit/audit_log.h"
-#include "authn/authenticator.h"
-#include "authn/totp.h"
-#include "core/encoding.h"
-#include "directory/directory.h"
-#include "fakes/counting_random.h"
-#include "fakes/manual_clock.h"
-#include "fakes/memory_store.h"
-#include "helpers/pools.h"
-#include "helpers/run.h"
-#include "mocks/logger_mock.h"
-#include "store/tables.h"
+#include "lugh/audit/audit_log.h"
+#include "lugh/authn/authenticator.h"
+#include "lugh/authn/totp.h"
+#include "lugh/core/encoding.h"
+#include "lugh/directory/directory.h"
+#include "lugh/store/tables.h"
+#include "lugh/test/fixtures/counting_random.h"
+#include "lugh/test/fixtures/logger_mock.h"
+#include "lugh/test/fixtures/manual_clock.h"
+#include "lugh/test/fixtures/memory_store.h"
+#include "lugh/test/fixtures/pools.h"
+#include "lugh/test/fixtures/run.h"
 
 // Every table, with the directory's indexes, as main opens them.
 inline std::vector<lugh::store::TableSpec> all_tables() {

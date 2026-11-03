@@ -5,7 +5,7 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "crypto/signing.h"
+#include "lugh/crypto/signing.h"
 
 #include <openssl/bn.h>
 #include <openssl/core_names.h>

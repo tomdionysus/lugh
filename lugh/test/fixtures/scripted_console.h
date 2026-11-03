@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-#include "system/console.h"
+#include "lugh/system/console.h"
 
 // A person who types the lines given, in order, and then nothing. Every prompt is kept.
 class ScriptedConsole : public lugh::system::Console {

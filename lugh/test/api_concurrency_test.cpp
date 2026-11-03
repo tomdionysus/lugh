@@ -17,7 +17,7 @@
 #include <set>
 #include <thread>
 
-#include "helpers/api_rig.h"
+#include "lugh/test/fixtures/api_rig.h"
 
 using lugh::http::verb;
 

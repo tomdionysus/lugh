@@ -14,8 +14,8 @@
 #include <string_view>
 #include <vector>
 
-#include "core/secure_bytes.h"
-#include "store/store.h"
+#include "lugh/core/secure_bytes.h"
+#include "lugh/store/store.h"
 
 namespace lugh::directory {
 

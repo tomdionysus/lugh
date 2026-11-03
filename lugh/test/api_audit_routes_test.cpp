@@ -5,11 +5,10 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "api/audit_routes.h"
-
 #include <gtest/gtest.h>
 
-#include "helpers/api_rig.h"
+#include "lugh/api/audit_routes.h"
+#include "lugh/test/fixtures/api_rig.h"
 
 TEST(AuditRoutes, PagesAndTheirEnd) {
   ApiRig rig;

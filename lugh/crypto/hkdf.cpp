@@ -5,7 +5,7 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "crypto/hkdf.h"
+#include "lugh/crypto/hkdf.h"
 
 #include <openssl/core_names.h>
 #include <openssl/kdf.h>

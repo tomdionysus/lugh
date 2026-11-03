@@ -5,11 +5,10 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "core/encoding.h"
-
 #include <gtest/gtest.h>
 
-#include "helpers/hex.h"
+#include "lugh/core/encoding.h"
+#include "lugh/test/fixtures/hex.h"
 
 using lugh::byte_span;
 using namespace lugh::encoding;

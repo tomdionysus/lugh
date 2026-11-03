@@ -5,9 +5,9 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "authn/password_hash.h"
+#include "lugh/authn/password_hash.h"
 
-#include "crypto/compare.h"
+#include "lugh/crypto/compare.h"
 
 namespace lugh::authn {
 

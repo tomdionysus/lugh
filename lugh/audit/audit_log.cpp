@@ -5,15 +5,15 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "audit/audit_log.h"
+#include "lugh/audit/audit_log.h"
 
 #include <algorithm>
 #include <cstdio>
 #include <string_view>
 
-#include "core/byte_io.h"
-#include "crypto/compare.h"
-#include "loggers/logger_scoped.h"
+#include "lugh/core/byte_io.h"
+#include "lugh/crypto/compare.h"
+#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::audit {
 

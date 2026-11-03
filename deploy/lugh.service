@@ -16,7 +16,7 @@ Type=simple
 
 # The config ships verbatim from the repository. Only the deployment facts are overridden
 # here: the privileged port, the installed certificate pair and the state directory.
-ExecStart=/usr/local/bin/lugh \
+ExecStart=/usr/local/bin/lugh-node \
     --config /usr/local/etc/lugh/config.yaml \
     --port 443 \
     --tls-certificate /usr/local/etc/lugh/tls/cert.pem \

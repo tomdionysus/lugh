@@ -9,8 +9,8 @@
 
 #include <memory>
 
-#include "audit/audit_log.h"
-#include "http/router.h"
+#include "lugh/audit/audit_log.h"
+#include "lugh/http/router.h"
 
 namespace lugh::api {
 

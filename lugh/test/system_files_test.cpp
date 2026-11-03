@@ -5,16 +5,16 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "system/system_files.h"
+#include "lugh/system/system_files.h"
 
 #include <gtest/gtest.h>
 #include <sys/stat.h>
 
 #include <filesystem>
 
-#include "helpers/pools.h"
-#include "helpers/run.h"
-#include "helpers/temp_directory.h"
+#include "lugh/test/fixtures/pools.h"
+#include "lugh/test/fixtures/run.h"
+#include "lugh/test/fixtures/temp_directory.h"
 
 using lugh::Bytes;
 using lugh::system::SystemFiles;

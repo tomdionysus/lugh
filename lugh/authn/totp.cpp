@@ -5,14 +5,14 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "authn/totp.h"
+#include "lugh/authn/totp.h"
 
 #include <openssl/crypto.h>
 
 #include <cstdio>
 
-#include "core/encoding.h"
-#include "crypto/hmac.h"
+#include "lugh/core/encoding.h"
+#include "lugh/crypto/hmac.h"
 
 namespace lugh::authn {
 

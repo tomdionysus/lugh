@@ -13,7 +13,7 @@
 #include <string>
 #include <string_view>
 
-#include "core/secret.h"
+#include "lugh/core/secret.h"
 
 namespace lugh::authn {
 

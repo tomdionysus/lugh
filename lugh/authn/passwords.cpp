@@ -5,10 +5,10 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "authn/passwords.h"
+#include "lugh/authn/passwords.h"
 
-#include "core/byte_io.h"
-#include "loggers/logger_scoped.h"
+#include "lugh/core/byte_io.h"
+#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::authn {
 

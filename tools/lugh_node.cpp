@@ -8,7 +8,7 @@
 // The composition root: the one file that names every concrete class. It builds the
 // adapters and the pools they block on, opens the keyring and the store in a coroutine on
 // the io_context, starts the server, waits for SIGTERM or SIGINT, and stops in reverse.
-// `lugh init` is genesis: the keyring, the store, and root.
+// `lugh-node init` is genesis: the keyring, the store, and root.
 
 #include <sys/resource.h>
 #include <unistd.h>
@@ -23,33 +23,33 @@
 #include <thread>
 #include <vector>
 
-#include "api/audit_routes.h"
-#include "api/group_routes.h"
-#include "api/policy_routes.h"
-#include "api/user_routes.h"
-#include "audit/audit_log.h"
-#include "authn/authenticator.h"
-#include "authn/genesis.h"
-#include "build_version.h"
-#include "cli.h"
-#include "config.h"
-#include "core/secure_memory.h"
-#include "directory/directory.h"
-#include "http/client_address.h"
-#include "http/health_routes.h"
-#include "http/http_server.h"
-#include "http/rate_limiter.h"
-#include "http/router.h"
-#include "http/tls_context.h"
-#include "keys/keyring_manager.h"
-#include "loggers/logger_stdio.h"
-#include "store/sealed_store.h"
-#include "store/tables.h"
-#include "system/system_clock.h"
-#include "system/system_console.h"
-#include "system/system_environment.h"
-#include "system/system_files.h"
-#include "system/system_random.h"
+#include "lugh/api/audit_routes.h"
+#include "lugh/api/group_routes.h"
+#include "lugh/api/policy_routes.h"
+#include "lugh/api/user_routes.h"
+#include "lugh/audit/audit_log.h"
+#include "lugh/authn/authenticator.h"
+#include "lugh/authn/genesis.h"
+#include "lugh/core/secure_memory.h"
+#include "lugh/directory/directory.h"
+#include "lugh/http/client_address.h"
+#include "lugh/http/health_routes.h"
+#include "lugh/http/http_server.h"
+#include "lugh/http/rate_limiter.h"
+#include "lugh/http/router.h"
+#include "lugh/http/tls_context.h"
+#include "lugh/keys/keyring_manager.h"
+#include "lugh/loggers/logger_stdio.h"
+#include "lugh/node/cli.h"
+#include "lugh/node/config.h"
+#include "lugh/store/sealed_store.h"
+#include "lugh/store/tables.h"
+#include "lugh/system/system_clock.h"
+#include "lugh/system/system_console.h"
+#include "lugh/system/system_environment.h"
+#include "lugh/system/system_files.h"
+#include "lugh/system/system_random.h"
+#include "lugh/version.h"
 
 namespace {
 
@@ -165,7 +165,7 @@ Task<int> genesis(Ports ports, keys::Keyring keyring, std::string state_director
   co_return 0;
 }
 
-// `lugh init`. With a credential, the master key goes to standard output, for
+// `lugh-node init`. With a credential, the master key goes to standard output, for
 // systemd-creds to encrypt, and only once it has gone is the keyring saved.
 Task<int> run_init(cli::Options options, Ports ports, std::string state_directory) {
   auto& keyrings = *ports.keyrings;

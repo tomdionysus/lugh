@@ -13,7 +13,7 @@
 #include <string>
 #include <string_view>
 
-#include "core/secure_bytes.h"
+#include "lugh/core/secure_bytes.h"
 
 namespace lugh::encoding {
 

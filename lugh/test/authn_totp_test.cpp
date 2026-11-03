@@ -5,9 +5,9 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "authn/totp.h"
-
 #include <gtest/gtest.h>
+
+#include "lugh/authn/totp.h"
 
 using lugh::byte_span;
 using namespace lugh::authn;

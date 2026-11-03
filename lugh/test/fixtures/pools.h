@@ -9,7 +9,7 @@
 
 #include <boost/asio/thread_pool.hpp>
 
-#include "core/task.h"
+#include "lugh/core/task.h"
 
 // The pools the service suspends on, for tests: one shared pool of real threads, so work
 // handed to it runs elsewhere and comes back, as in the service.

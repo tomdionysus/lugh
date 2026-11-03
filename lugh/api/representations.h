@@ -11,11 +11,11 @@
 #include <string>
 #include <string_view>
 
-#include "api/api_support.h"
-#include "audit/audit_log.h"
-#include "authn/factors.h"
-#include "core/encoding.h"
-#include "directory/records.h"
+#include "lugh/api/api_support.h"
+#include "lugh/audit/audit_log.h"
+#include "lugh/authn/factors.h"
+#include "lugh/core/encoding.h"
+#include "lugh/directory/records.h"
 
 namespace lugh::api {
 

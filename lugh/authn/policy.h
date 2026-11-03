@@ -13,11 +13,11 @@
 #include <string>
 #include <string_view>
 
-#include "audit/audit_log.h"
-#include "core/outcome.h"
-#include "core/task.h"
-#include "directory/directory.h"
-#include "store/store.h"
+#include "lugh/audit/audit_log.h"
+#include "lugh/core/outcome.h"
+#include "lugh/core/task.h"
+#include "lugh/directory/directory.h"
+#include "lugh/store/store.h"
 
 namespace lugh::authn {
 

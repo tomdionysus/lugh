@@ -15,18 +15,18 @@
 #include <string_view>
 #include <vector>
 
-#include "audit/audit_log.h"
-#include "authn/backoff.h"
-#include "authn/enrolment_links.h"
-#include "authn/factors.h"
-#include "authn/passwords.h"
-#include "authn/policy.h"
-#include "core/outcome.h"
-#include "core/secret.h"
-#include "core/task.h"
-#include "directory/directory.h"
-#include "loggers/logger.h"
-#include "system/clock.h"
+#include "lugh/audit/audit_log.h"
+#include "lugh/authn/backoff.h"
+#include "lugh/authn/enrolment_links.h"
+#include "lugh/authn/factors.h"
+#include "lugh/authn/passwords.h"
+#include "lugh/authn/policy.h"
+#include "lugh/core/outcome.h"
+#include "lugh/core/secret.h"
+#include "lugh/core/task.h"
+#include "lugh/directory/directory.h"
+#include "lugh/loggers/logger.h"
+#include "lugh/system/clock.h"
 
 namespace lugh::authn {
 

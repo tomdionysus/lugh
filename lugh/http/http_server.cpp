@@ -5,14 +5,14 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "http/http_server.h"
+#include "lugh/http/http_server.h"
 
 #include <exception>
 #include <optional>
 #include <utility>
 
-#include "http/api_json.h"
-#include "loggers/logger_scoped.h"
+#include "lugh/http/api_json.h"
+#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::http {
 

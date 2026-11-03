@@ -5,11 +5,10 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "authn/genesis.h"
-
 #include <gtest/gtest.h>
 
-#include "helpers/authn_rig.h"
+#include "lugh/authn/genesis.h"
+#include "lugh/test/fixtures/authn_rig.h"
 
 using lugh::Fault;
 using lugh::Secret;

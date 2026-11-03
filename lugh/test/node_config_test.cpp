@@ -5,12 +5,11 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "config.h"
-
 #include <gtest/gtest.h>
 
-#include "fakes/map_environment.h"
-#include "helpers/temp_directory.h"
+#include "lugh/node/config.h"
+#include "lugh/test/fixtures/map_environment.h"
+#include "lugh/test/fixtures/temp_directory.h"
 
 using lugh::Config;
 using lugh::ConfigLoader;

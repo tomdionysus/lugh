@@ -5,7 +5,7 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "network/cidr.h"
+#include "lugh/network/cidr.h"
 
 #include <cctype>
 #include <vector>

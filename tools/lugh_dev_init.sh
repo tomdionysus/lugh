@@ -11,7 +11,7 @@
 # keyring in config/dev/state, the master key in config/dev/credentials as systemd would
 # hand it over. Genesis shows root's password once, on the terminal: copy it. Then:
 #
-#   CREDENTIALS_DIRECTORY=config/dev/credentials ./build/lugh --config config/config.yaml
+#   CREDENTIALS_DIRECTORY=config/dev/credentials ./build/lugh-node --config config/config.yaml
 #
 # Safe to repeat: an existing keyring is left alone, because a new master key would not
 # open it. Remove config/dev/state and config/dev/credentials to start again.
@@ -19,7 +19,7 @@
 set -eu
 
 cd "$(dirname "$0")/.."
-LUGH=${LUGH:-./build/lugh}
+LUGH=${LUGH:-./build/lugh-node}
 umask 077
 
 if [ -f config/dev/state/keyring ]; then

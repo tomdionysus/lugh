@@ -5,11 +5,10 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "keys/keyring_format.h"
-
 #include <gtest/gtest.h>
 
-#include "helpers/hex.h"
+#include "lugh/keys/keyring_format.h"
+#include "lugh/test/fixtures/hex.h"
 
 using namespace lugh::keys;
 

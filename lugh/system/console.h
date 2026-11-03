@@ -10,8 +10,8 @@
 #include <optional>
 #include <string>
 
-#include "core/secret.h"
-#include "core/task.h"
+#include "lugh/core/secret.h"
+#include "lugh/core/task.h"
 
 namespace lugh::system {
 

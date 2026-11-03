@@ -12,9 +12,9 @@
 
 #include <thread>
 
-#include "fakes/memory_store.h"
-#include "helpers/run.h"
-#include "helpers/sealed_store_rig.h"
+#include "lugh/test/fixtures/memory_store.h"
+#include "lugh/test/fixtures/run.h"
+#include "lugh/test/fixtures/sealed_store_rig.h"
 
 using lugh::byte_span;
 using lugh::store::Store;

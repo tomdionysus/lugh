@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "system/console.h"
+#include "lugh/system/console.h"
 
 namespace lugh::system {
 

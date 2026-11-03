@@ -12,11 +12,11 @@
 #include <string>
 #include <vector>
 
-#include "cli.h"
-#include "core/status.h"
-#include "loggers/logger.h"
-#include "network/cidr.h"
-#include "system/environment.h"
+#include "lugh/core/status.h"
+#include "lugh/loggers/logger.h"
+#include "lugh/network/cidr.h"
+#include "lugh/node/cli.h"
+#include "lugh/system/environment.h"
 
 namespace lugh {
 
@@ -34,7 +34,7 @@ struct Config {
   std::uint16_t port = 8443;
   unsigned threads = 2;
 
-  // Both required to serve: there is no plaintext listener. `lugh init` needs neither.
+  // Both required to serve: there is no plaintext listener. `lugh-node init` needs neither.
   std::string tls_certificate;
   std::string tls_key;
 

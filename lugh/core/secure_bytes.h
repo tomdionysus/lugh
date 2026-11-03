@@ -13,7 +13,7 @@
 #include <string_view>
 #include <vector>
 
-#include "core/secure_memory.h"
+#include "lugh/core/secure_memory.h"
 
 namespace lugh {
 

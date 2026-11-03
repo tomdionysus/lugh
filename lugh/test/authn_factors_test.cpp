@@ -5,14 +5,13 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "authn/factors.h"
-
 #include <gtest/gtest.h>
 
 #include <set>
 
-#include "authn/totp.h"
-#include "helpers/authn_rig.h"
+#include "lugh/authn/factors.h"
+#include "lugh/authn/totp.h"
+#include "lugh/test/fixtures/authn_rig.h"
 
 using lugh::Fault;
 using lugh::Secret;

@@ -5,7 +5,7 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "config.h"
+#include "lugh/node/config.h"
 
 #include <yaml-cpp/yaml.h>
 

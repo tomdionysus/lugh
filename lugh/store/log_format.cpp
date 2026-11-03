@@ -5,14 +5,14 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "store/log_format.h"
+#include "lugh/store/log_format.h"
 
 #include <algorithm>
 #include <utility>
 
-#include "core/byte_io.h"
-#include "crypto/aead.h"
-#include "crypto/digest.h"
+#include "lugh/core/byte_io.h"
+#include "lugh/crypto/aead.h"
+#include "lugh/crypto/digest.h"
 
 namespace lugh::store {
 

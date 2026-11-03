@@ -14,18 +14,18 @@
 #include <string>
 #include <string_view>
 
-#include "audit/audit_log.h"
-#include "authn/password_hash.h"
-#include "core/outcome.h"
-#include "core/secret.h"
-#include "core/task.h"
-#include "crypto/digest.h"
-#include "directory/directory.h"
-#include "loggers/logger.h"
-#include "store/store.h"
-#include "system/clock.h"
-#include "system/files.h"
-#include "system/random.h"
+#include "lugh/audit/audit_log.h"
+#include "lugh/authn/password_hash.h"
+#include "lugh/core/outcome.h"
+#include "lugh/core/secret.h"
+#include "lugh/core/task.h"
+#include "lugh/crypto/digest.h"
+#include "lugh/directory/directory.h"
+#include "lugh/loggers/logger.h"
+#include "lugh/store/store.h"
+#include "lugh/system/clock.h"
+#include "lugh/system/files.h"
+#include "lugh/system/random.h"
 
 namespace lugh::authn {
 

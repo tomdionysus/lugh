@@ -5,13 +5,13 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "keys/keyring_format.h"
+#include "lugh/keys/keyring_format.h"
 
 #include <algorithm>
 #include <set>
 #include <utility>
 
-#include "core/byte_io.h"
+#include "lugh/core/byte_io.h"
 
 namespace lugh::keys {
 

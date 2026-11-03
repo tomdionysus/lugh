@@ -5,11 +5,11 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "keys/keyring_manager.h"
+#include "lugh/keys/keyring_manager.h"
 
 #include <utility>
 
-#include "loggers/logger_scoped.h"
+#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::keys {
 
@@ -110,7 +110,7 @@ Task<Status> KeyringManager::save(const Keyring& keyring) {
 Task<Result<Keyring>> KeyringManager::open() {
   using Answer = Result<Keyring>;
 
-  if (!co_await _files->exists(path())) co_return Answer::failure("no keyring at " + path() + ": run `lugh init` first");
+  if (!co_await _files->exists(path())) co_return Answer::failure("no keyring at " + path() + ": run `lugh-node init` first");
 
   const auto file = co_await _files->read(path(), kMostKeyringBytes);
   if (!file.ok) co_return Answer::failure(file.error);

@@ -10,11 +10,11 @@
 #include <optional>
 #include <span>
 
-#include "core/byte_io.h"
-#include "core/secure_bytes.h"
-#include "core/status.h"
-#include "crypto/argon2.h"
-#include "system/random.h"
+#include "lugh/core/byte_io.h"
+#include "lugh/core/secure_bytes.h"
+#include "lugh/core/status.h"
+#include "lugh/crypto/argon2.h"
+#include "lugh/system/random.h"
 
 namespace lugh::authn {
 

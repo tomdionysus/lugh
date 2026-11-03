@@ -8,7 +8,7 @@
 
 """/api/v1 through the real binary, over TLS, before P6.
 
-A node made with `lugh init` has root and nothing else: no token, key or
+A node made with `lugh-node init` has root and nothing else: no token, key or
 setting opens the API. Until sessions and OAuth tokens resolve a caller (P6),
 every route refuses everyone with 401, whatever is presented, and an unknown
 path is still a JSON 404.

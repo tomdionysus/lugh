@@ -5,7 +5,7 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "system/system_random.h"
+#include "lugh/system/system_random.h"
 
 #include <openssl/rand.h>
 

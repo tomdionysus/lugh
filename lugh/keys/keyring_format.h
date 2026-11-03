@@ -15,8 +15,8 @@
 #include <string_view>
 #include <vector>
 
-#include "core/secure_bytes.h"
-#include "crypto/argon2.h"
+#include "lugh/core/secure_bytes.h"
+#include "lugh/crypto/argon2.h"
 
 namespace lugh::keys {
 

@@ -5,9 +5,9 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "http/client_address.h"
-
 #include <gtest/gtest.h>
+
+#include "lugh/http/client_address.h"
 
 using lugh::http::ClientAddress;
 using lugh::http::HttpRequest;

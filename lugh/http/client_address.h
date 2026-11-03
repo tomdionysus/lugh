@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "http/http_types.h"
-#include "network/cidr.h"
+#include "lugh/http/http_types.h"
+#include "lugh/network/cidr.h"
 
 namespace lugh::http {
 

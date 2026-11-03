@@ -9,11 +9,11 @@
 
 #include <memory>
 
-#include "authn/authenticator.h"
-#include "core/task.h"
-#include "directory/directory.h"
-#include "http/router.h"
-#include "system/clock.h"
+#include "lugh/authn/authenticator.h"
+#include "lugh/core/task.h"
+#include "lugh/directory/directory.h"
+#include "lugh/http/router.h"
+#include "lugh/system/clock.h"
 
 namespace lugh::api {
 

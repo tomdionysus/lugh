@@ -5,11 +5,11 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "http/health_routes.h"
+#include "lugh/http/health_routes.h"
 
 #include <boost/json.hpp>
 
-#include "http/api_json.h"
+#include "lugh/http/api_json.h"
 
 namespace lugh::http {
 

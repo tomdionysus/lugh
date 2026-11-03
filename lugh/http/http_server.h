@@ -13,10 +13,10 @@
 #include <string>
 #include <vector>
 
-#include "core/status.h"
-#include "http/client_address.h"
-#include "http/http_types.h"
-#include "loggers/logger.h"
+#include "lugh/core/status.h"
+#include "lugh/http/client_address.h"
+#include "lugh/http/http_types.h"
+#include "lugh/loggers/logger.h"
 
 namespace lugh::http {
 

@@ -5,10 +5,10 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "api/policy_routes.h"
+#include "lugh/api/policy_routes.h"
 
-#include "api/api_support.h"
-#include "api/scopes.h"
+#include "lugh/api/api_support.h"
+#include "lugh/api/scopes.h"
 
 namespace lugh::api {
 

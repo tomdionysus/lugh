@@ -15,9 +15,9 @@
 #include <memory>
 #include <string>
 
-#include "api/api_support.h"
-#include "http/router.h"
-#include "system/clock.h"
+#include "lugh/api/api_support.h"
+#include "lugh/http/router.h"
+#include "lugh/system/clock.h"
 
 namespace {
 

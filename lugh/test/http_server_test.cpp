@@ -5,7 +5,7 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "http/http_server.h"
+#include "lugh/http/http_server.h"
 
 #include <gtest/gtest.h>
 #include <openssl/ssl.h>
@@ -14,11 +14,11 @@
 #include <stdexcept>
 #include <thread>
 
-#include "helpers/temp_directory.h"
-#include "helpers/test_certificate.h"
-#include "http/api_json.h"
-#include "http/tls_context.h"
-#include "mocks/logger_mock.h"
+#include "lugh/http/api_json.h"
+#include "lugh/http/tls_context.h"
+#include "lugh/test/fixtures/logger_mock.h"
+#include "lugh/test/fixtures/temp_directory.h"
+#include "lugh/test/fixtures/test_certificate.h"
 
 using lugh::http::ClientAddress;
 using lugh::http::HttpMiddleware;

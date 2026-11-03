@@ -11,7 +11,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/use_future.hpp>
 
-#include "core/task.h"
+#include "lugh/core/task.h"
 
 // Runs a coroutine to its end on an io_context of its own and answers what it answered:
 // how a test, which is not a coroutine, calls one. Work it hands to another pool comes

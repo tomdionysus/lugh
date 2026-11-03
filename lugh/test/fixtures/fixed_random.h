@@ -10,7 +10,7 @@
 #include <atomic>
 #include <mutex>
 
-#include "system/random.h"
+#include "lugh/system/random.h"
 
 // Bytes that are different every call and the same every run: 0, 1, 2, ... carrying on
 // across calls. `fail` makes it answer as a broken source does. Thread-safe, as the real

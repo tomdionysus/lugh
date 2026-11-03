@@ -9,8 +9,8 @@
 
 #include <span>
 
-#include "core/secure_bytes.h"
-#include "core/status.h"
+#include "lugh/core/secure_bytes.h"
+#include "lugh/core/status.h"
 
 namespace lugh::crypto {
 

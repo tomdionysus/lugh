@@ -11,8 +11,8 @@
 #include <cstdint>
 #include <mutex>
 
-#include "crypto/digest.h"
-#include "system/random.h"
+#include "lugh/crypto/digest.h"
+#include "lugh/system/random.h"
 
 // Bytes that never repeat within a test and are the same every run: SHA-256 of a counter.
 // FixedRandom's bytes come round every 256, which is too soon for IDs, salts and secrets

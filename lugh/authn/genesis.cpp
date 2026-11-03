@@ -5,9 +5,9 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "authn/genesis.h"
+#include "lugh/authn/genesis.h"
 
-#include "core/encoding.h"
+#include "lugh/core/encoding.h"
 
 namespace lugh::authn {
 

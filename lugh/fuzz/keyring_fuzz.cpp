@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <span>
 
-#include "keys/keyring_format.h"
+#include "lugh/keys/keyring_format.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
   if (size == 0) return 0;

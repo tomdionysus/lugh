@@ -15,9 +15,9 @@
 #include <thread>
 #include <vector>
 
-#include "core/async_mutex.h"
-#include "core/task.h"
-#include "helpers/run.h"
+#include "lugh/core/async_mutex.h"
+#include "lugh/core/task.h"
+#include "lugh/test/fixtures/run.h"
 
 using lugh::AsyncMutex;
 using lugh::Task;

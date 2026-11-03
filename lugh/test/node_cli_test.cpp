@@ -5,12 +5,12 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "cli.h"
-
 #include <gtest/gtest.h>
 
 #include <string>
 #include <vector>
+
+#include "lugh/node/cli.h"
 
 using lugh::cli::Options;
 

@@ -13,10 +13,10 @@
 #include <string_view>
 #include <vector>
 
-#include "core/secure_bytes.h"
-#include "core/status.h"
-#include "keys/keyring_format.h"
-#include "system/random.h"
+#include "lugh/core/secure_bytes.h"
+#include "lugh/core/status.h"
+#include "lugh/keys/keyring_format.h"
+#include "lugh/system/random.h"
 
 namespace lugh::keys {
 

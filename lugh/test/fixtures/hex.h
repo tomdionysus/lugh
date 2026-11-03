@@ -12,7 +12,7 @@
 #include <string>
 #include <string_view>
 
-#include "core/secure_bytes.h"
+#include "lugh/core/secure_bytes.h"
 
 // Test vectors are written in hex, as the RFCs print them.
 inline lugh::Bytes from_hex(std::string_view text) {

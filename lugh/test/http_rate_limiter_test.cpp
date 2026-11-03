@@ -5,11 +5,10 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "http/rate_limiter.h"
-
 #include <gtest/gtest.h>
 
-#include "fakes/manual_clock.h"
+#include "lugh/http/rate_limiter.h"
+#include "lugh/test/fixtures/manual_clock.h"
 
 using lugh::http::RateLimiter;
 using lugh::http::Throttle;

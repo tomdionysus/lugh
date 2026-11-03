@@ -9,18 +9,18 @@
 
 #include <memory>
 
-#include "audit/audit_log.h"
-#include "authn/enrolment_links.h"
-#include "authn/passwords.h"
-#include "core/outcome.h"
-#include "core/secret.h"
-#include "core/task.h"
-#include "directory/directory.h"
-#include "system/random.h"
+#include "lugh/audit/audit_log.h"
+#include "lugh/authn/enrolment_links.h"
+#include "lugh/authn/passwords.h"
+#include "lugh/core/outcome.h"
+#include "lugh/core/secret.h"
+#include "lugh/core/task.h"
+#include "lugh/directory/directory.h"
+#include "lugh/system/random.h"
 
 namespace lugh::authn {
 
-// The birth of a cluster, once in its life, as `lugh init` makes its first node: the user
+// The birth of a cluster, once in its life, as `lugh-node init` makes its first node: the user
 // root, in the group administrators, with a password made here at random. That password is
 // the one credential Lugh is born with. There is no other: no token, no key in a file, no
 // setting. It is returned to be shown once and kept nowhere but as its hash.

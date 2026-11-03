@@ -51,7 +51,7 @@ else
     echo "host-setup: WARNING: no $CONFDIR/tls/key.pem; put the certificate pair there before the service can start" >&2
 fi
 
-# The state directory, before the first start, so `lugh init` can make the keyring in it.
+# The state directory, before the first start, so `lugh-node init` can make the keyring in it.
 # systemd's StateDirectory= keeps it so afterwards.
 mkdir -p "$STATEDIR"
 chown lugh:lugh "$STATEDIR"
@@ -62,5 +62,5 @@ chmod 0700 "$STATEDIR"
 mkdir -p "$CREDSTORE"
 chmod 0700 "$CREDSTORE"
 if [ ! -f "$CREDSTORE/lugh-master-key" ]; then
-    echo "host-setup: WARNING: no master key credential; run lugh init (see the README) before the service can start" >&2
+    echo "host-setup: WARNING: no master key credential; run lugh-node init (see the README) before the service can start" >&2
 fi

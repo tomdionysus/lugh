@@ -13,7 +13,7 @@
 #include <cstdint>
 #include <span>
 
-#include "store/log_format.h"
+#include "lugh/store/log_format.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
   static const lugh::SecureBytes key(32, 0x42);

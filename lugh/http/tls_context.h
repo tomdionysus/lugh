@@ -10,8 +10,8 @@
 #include <memory>
 #include <string>
 
-#include "core/status.h"
-#include "http/http_types.h"
+#include "lugh/core/status.h"
+#include "lugh/http/http_types.h"
 
 namespace lugh::http {
 

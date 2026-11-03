@@ -5,13 +5,12 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "core/secure_memory.h"
-
 #include <gtest/gtest.h>
 
 #include <cstring>
 
-#include "core/secure_bytes.h"
+#include "lugh/core/secure_bytes.h"
+#include "lugh/core/secure_memory.h"
 
 namespace secure_memory = lugh::secure_memory;
 

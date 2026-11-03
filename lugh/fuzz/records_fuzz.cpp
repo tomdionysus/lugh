@@ -17,11 +17,11 @@
 #include <span>
 #include <string_view>
 
-#include "audit/audit_log.h"
-#include "authn/enrolment_links.h"
-#include "authn/factors.h"
-#include "core/encoding.h"
-#include "directory/records.h"
+#include "lugh/audit/audit_log.h"
+#include "lugh/authn/enrolment_links.h"
+#include "lugh/authn/factors.h"
+#include "lugh/core/encoding.h"
+#include "lugh/directory/records.h"
 
 namespace {
 

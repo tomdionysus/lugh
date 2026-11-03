@@ -9,7 +9,7 @@
 """The service stops on SIGTERM and SIGINT, promptly and cleanly.
 
 A shutdown that hangs would stall every deploy for systemd's stop timeout.
-This makes a certificate and a keyring (`lugh init`, with the master key as
+This makes a certificate and a keyring (`lugh-node init`, with the master key as
 the credential systemd would load), starts the real binary on a config of its
 own on a free port, waits until /health answers over TLS, sends the signal,
 and requires it to exit with status 0 within 5 seconds, saying so in its log.
@@ -69,7 +69,7 @@ def clean_environment():
 
 
 def initialise(binary, config_path, credentials):
-    """`lugh init`, its master key written where systemd would put the credential."""
+    """`lugh-node init`, its master key written where systemd would put the credential."""
     os.makedirs(credentials, mode=0o700)
     with open(os.path.join(credentials, "lugh-master-key"), "wb") as key:
         subprocess.run([binary, "init", "--config", config_path], stdout=key, stderr=subprocess.DEVNULL,

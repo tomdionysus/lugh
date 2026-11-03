@@ -5,16 +5,15 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "http/router.h"
-
 #include <gtest/gtest.h>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/json.hpp>
 
-#include "fakes/manual_clock.h"
-#include "helpers/route_call.h"
+#include "lugh/http/router.h"
+#include "lugh/test/fixtures/manual_clock.h"
+#include "lugh/test/fixtures/route_call.h"
 
 using lugh::http::RateLimits;
 using lugh::http::RouteContext;

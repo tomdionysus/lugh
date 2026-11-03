@@ -5,12 +5,11 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "keys/keyring.h"
-
 #include <gtest/gtest.h>
 
-#include "fakes/fixed_random.h"
-#include "helpers/hex.h"
+#include "lugh/keys/keyring.h"
+#include "lugh/test/fixtures/fixed_random.h"
+#include "lugh/test/fixtures/hex.h"
 
 using namespace lugh::keys;
 

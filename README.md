@@ -13,19 +13,21 @@ replicated, sealed store built on Macha's technology.
 Design: [docs/architecture.md](docs/architecture.md). Code style and what is lifted from
 blackraven-admin, AthenaSIP and Macha: [docs/code-style.md](docs/code-style.md). What is
 being worked on: [TODO/ACTIVE.md](TODO/ACTIVE.md); what shipped:
-[TODO/COMPLETE.md](TODO/COMPLETE.md).
+[TODO/COMPLETED.md](TODO/COMPLETED.md).
 
 ## Repository layout
 
 ```text
-src/<subsystem>/  the service: headers and sources side by side, and main.cpp
-config/           config.yaml, no secrets
-deploy/           the systemd unit and host setup
-tests/            GoogleTest, mirroring src/, and the shutdown test
-fuzz/             libFuzzer targets, one per parser
-scripts/          the IoC check, and the development certificate and keyring
-docs/             how it works
-TODO/             now and next, and what shipped
+lugh/<subsystem>/   the library: headers and sources side by side
+lugh/include/lugh/  the public headers
+lugh/test/          GoogleTest, flat, one binary (lugh_tests); fixtures in lugh/test/fixtures/
+lugh/fuzz/          libFuzzer targets, one per parser of untrusted bytes
+tools/              lugh-node (the service), the IoC check, the development certificate and keyring
+test/process/       the real binary's tests: shutdown, init, the API
+config/             config.yaml, no secrets
+deploy/             the systemd unit and host setup
+docs/               how it works
+TODO/               now and next (ACTIVE.md), and what shipped (COMPLETED.md)
 ```
 
 ## Build
@@ -47,14 +49,14 @@ Lugh has no plaintext listener, so it needs a certificate before it will start, 
 opens its keyring before it serves, so it needs a master key too:
 
 ```bash
-scripts/dev-cert.sh
-scripts/dev-init.sh
-CREDENTIALS_DIRECTORY=config/dev/credentials ./build/lugh --config config/config.yaml
+tools/lugh_dev_cert.sh
+tools/lugh_dev_init.sh
+CREDENTIALS_DIRECTORY=config/dev/credentials ./build/lugh-node --config config/config.yaml
 ```
 
-`dev-init.sh` runs `lugh init`, which makes the keyring in `config/dev/state`, writes the
+`dev-init.sh` runs `lugh-node init`, which makes the keyring in `config/dev/state`, writes the
 master key where systemd would hand it over, and shows the development root password. To type a passphrase at each start instead,
-run `./build/lugh init --config config/config.yaml --passphrase` and leave
+run `./build/lugh-node init --config config/config.yaml --passphrase` and leave
 `CREDENTIALS_DIRECTORY` unset.
 
 That listens on 8443 with a self-signed certificate for `localhost`. `GET /health` and
@@ -90,7 +92,7 @@ On a new node, once, make the keyring and seal the master key with `systemd-cred
 TPM where there is one. The key passes through the pipe and is never on disk in clear:
 
 ```bash
-sudo -u lugh /usr/local/bin/lugh init --config /usr/local/etc/lugh/config.yaml \
+sudo -u lugh /usr/local/bin/lugh-node init --config /usr/local/etc/lugh/config.yaml \
     --state-directory /var/lib/lugh \
   | sudo systemd-creds encrypt --name=lugh-master-key - /etc/credstore.encrypted/lugh-master-key
 sudo systemctl restart lugh
@@ -99,7 +101,7 @@ sudo systemctl restart lugh
 The unit loads it with `LoadCredentialEncrypted=`. If the encrypt step fails, remove
 `/var/lib/lugh/keyring` and run it again: init never replaces a keyring.
 
-`lugh init` on the first node is the cluster's **genesis**: it also makes the user `root`,
+`lugh-node init` on the first node is the cluster's **genesis**: it also makes the user `root`,
 in the group `administrators`, with a random password that it shows once on standard error
 and keeps nowhere but as its hash. That password is the only credential Lugh is born with:
 there is no token, key or setting that opens it. Root's first sign-in (P6) goes from that

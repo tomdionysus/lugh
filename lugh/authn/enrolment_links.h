@@ -14,14 +14,14 @@
 #include <span>
 #include <string>
 
-#include "audit/audit_log.h"
-#include "core/outcome.h"
-#include "core/secret.h"
-#include "core/task.h"
-#include "directory/directory.h"
-#include "store/store.h"
-#include "system/clock.h"
-#include "system/random.h"
+#include "lugh/audit/audit_log.h"
+#include "lugh/core/outcome.h"
+#include "lugh/core/secret.h"
+#include "lugh/core/task.h"
+#include "lugh/directory/directory.h"
+#include "lugh/store/store.h"
+#include "lugh/system/clock.h"
+#include "lugh/system/random.h"
 
 namespace lugh::authn {
 

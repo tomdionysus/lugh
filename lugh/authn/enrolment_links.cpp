@@ -5,11 +5,11 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "authn/enrolment_links.h"
+#include "lugh/authn/enrolment_links.h"
 
-#include "core/byte_io.h"
-#include "core/encoding.h"
-#include "crypto/digest.h"
+#include "lugh/core/byte_io.h"
+#include "lugh/core/encoding.h"
+#include "lugh/crypto/digest.h"
 
 namespace lugh::authn {
 

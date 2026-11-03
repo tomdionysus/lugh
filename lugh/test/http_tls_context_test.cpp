@@ -5,12 +5,11 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "http/tls_context.h"
-
 #include <gtest/gtest.h>
 
-#include "helpers/temp_directory.h"
-#include "helpers/test_certificate.h"
+#include "lugh/http/tls_context.h"
+#include "lugh/test/fixtures/temp_directory.h"
+#include "lugh/test/fixtures/test_certificate.h"
 
 using lugh::http::TlsContext;
 

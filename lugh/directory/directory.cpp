@@ -5,12 +5,12 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "directory/directory.h"
+#include "lugh/directory/directory.h"
 
 #include <set>
 
-#include "core/encoding.h"
-#include "loggers/logger_scoped.h"
+#include "lugh/core/encoding.h"
+#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::directory {
 

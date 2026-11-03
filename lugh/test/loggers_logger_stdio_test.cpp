@@ -5,15 +5,14 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "loggers/logger_stdio.h"
-
 #include <gtest/gtest.h>
 
 #include <boost/json.hpp>
 #include <regex>
 #include <sstream>
 
-#include "loggers/logger_scoped.h"
+#include "lugh/loggers/logger_scoped.h"
+#include "lugh/loggers/logger_stdio.h"
 
 using lugh::loggers::LogFormat;
 using lugh::loggers::LoggerScoped;

@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "http/http_types.h"
+#include "lugh/http/http_types.h"
 
 namespace lugh::http {
 

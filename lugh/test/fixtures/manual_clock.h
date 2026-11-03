@@ -10,7 +10,7 @@
 #include <chrono>
 #include <mutex>
 
-#include "system/clock.h"
+#include "lugh/system/clock.h"
 
 // A clock that moves only when the test says.
 class ManualClock : public lugh::system::Clock {

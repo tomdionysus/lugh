@@ -5,7 +5,7 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "system/system_clock.h"
+#include "lugh/system/system_clock.h"
 
 namespace lugh::system {
 

@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include "cli.h"
+#include "lugh/node/cli.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
   std::vector<std::string> arguments{"lugh"};

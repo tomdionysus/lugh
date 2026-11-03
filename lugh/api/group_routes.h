@@ -9,9 +9,9 @@
 
 #include <memory>
 
-#include "core/task.h"
-#include "directory/directory.h"
-#include "http/router.h"
+#include "lugh/core/task.h"
+#include "lugh/directory/directory.h"
+#include "lugh/http/router.h"
 
 namespace lugh::api {
 

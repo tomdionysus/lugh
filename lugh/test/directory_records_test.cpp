@@ -5,9 +5,9 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "directory/records.h"
-
 #include <gtest/gtest.h>
+
+#include "lugh/directory/records.h"
 
 using namespace lugh::directory;
 

@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "system/random.h"
+#include "lugh/system/random.h"
 
 namespace lugh::system {
 

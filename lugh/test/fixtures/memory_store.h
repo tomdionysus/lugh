@@ -11,12 +11,12 @@
 #include <mutex>
 #include <set>
 
-#include "store/log_format.h"
-#include "store/store.h"
+#include "lugh/store/log_format.h"
+#include "lugh/store/store.h"
 
 // The store's rules, in memory and nowhere else: versions, final removals, conditional
 // writes and unique indexes, as SealedStore keeps them. The contract tests run against
-// both (tests/store/store_contract_test.cpp). Every answer is ready at once.
+// both (lugh/test/store_contract_test.cpp). Every answer is ready at once.
 class MemoryStore : public lugh::store::Store {
  public:
   explicit MemoryStore(std::vector<lugh::store::TableSpec> tables) {

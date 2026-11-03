@@ -5,7 +5,7 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "crypto/aead.h"
+#include "lugh/crypto/aead.h"
 
 #include <openssl/evp.h>
 

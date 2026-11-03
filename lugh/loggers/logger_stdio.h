@@ -13,7 +13,7 @@
 #include <mutex>
 #include <string>
 
-#include "loggers/logger.h"
+#include "lugh/loggers/logger.h"
 
 namespace lugh::loggers {
 

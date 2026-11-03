@@ -10,7 +10,7 @@
 #include <map>
 #include <string>
 
-#include "system/environment.h"
+#include "lugh/system/environment.h"
 
 // An environment holding exactly what the test put in it.
 class MapEnvironment : public lugh::system::Environment {

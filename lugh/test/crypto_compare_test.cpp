@@ -5,11 +5,10 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "crypto/compare.h"
-
 #include <gtest/gtest.h>
 
-#include "core/secure_bytes.h"
+#include "lugh/core/secure_bytes.h"
+#include "lugh/crypto/compare.h"
 
 using lugh::byte_span;
 using lugh::crypto::equal;

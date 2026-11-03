@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include "loggers/logger.h"
+#include "lugh/loggers/logger.h"
 
 // A silent logger that records every line, for tests about what the service logs.
 class MockLogger : public lugh::loggers::Logger {

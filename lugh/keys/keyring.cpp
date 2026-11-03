@@ -5,12 +5,12 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "keys/keyring.h"
+#include "lugh/keys/keyring.h"
 
 #include <utility>
 
-#include "crypto/aead.h"
-#include "crypto/hkdf.h"
+#include "lugh/crypto/aead.h"
+#include "lugh/crypto/hkdf.h"
 
 namespace lugh::keys {
 

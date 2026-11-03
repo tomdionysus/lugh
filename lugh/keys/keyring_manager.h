@@ -10,16 +10,16 @@
 #include <memory>
 #include <string>
 
-#include "core/secure_bytes.h"
-#include "core/status.h"
-#include "core/task.h"
-#include "crypto/argon2.h"
-#include "keys/keyring.h"
-#include "loggers/logger.h"
-#include "system/console.h"
-#include "system/environment.h"
-#include "system/files.h"
-#include "system/random.h"
+#include "lugh/core/secure_bytes.h"
+#include "lugh/core/status.h"
+#include "lugh/core/task.h"
+#include "lugh/crypto/argon2.h"
+#include "lugh/keys/keyring.h"
+#include "lugh/loggers/logger.h"
+#include "lugh/system/console.h"
+#include "lugh/system/environment.h"
+#include "lugh/system/files.h"
+#include "lugh/system/random.h"
 
 namespace lugh::keys {
 
@@ -30,7 +30,7 @@ inline constexpr const char* kCredentialName = "lugh-master-key";
 // A passphrase is all that stands between a stolen disk and the keys: no shorter than this.
 inline constexpr std::size_t kShortestPassphrase = 16;
 
-// The keyring in the state directory: making it (`lugh init`), finding its master key, and
+// The keyring in the state directory: making it (`lugh-node init`), finding its master key, and
 // opening it at start.
 class KeyringManager {
  public:
@@ -47,12 +47,12 @@ class KeyringManager {
     SecureBytes master_key;
   };
 
-  // `lugh init`: a new master key and an empty keyring under it, not yet saved. The caller
+  // `lugh-node init`: a new master key and an empty keyring under it, not yet saved. The caller
   // hands the key to systemd-creds and then calls save_new(), so a key that never reached
   // its credential leaves nothing behind. Refused if there is a keyring already.
   Task<Result<Created>> create_for_credential();
 
-  // `lugh init --passphrase`: asks for a passphrase twice, stretches it with Argon2id into
+  // `lugh-node init --passphrase`: asks for a passphrase twice, stretches it with Argon2id into
   // the master key, and saves the new keyring.
   Task<Result<Keyring>> create_with_passphrase(crypto::Argon2Params params);
 

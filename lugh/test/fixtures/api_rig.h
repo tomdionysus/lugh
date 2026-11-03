@@ -13,14 +13,14 @@
 #include <utility>
 #include <vector>
 
-#include "api/audit_routes.h"
-#include "api/group_routes.h"
-#include "api/policy_routes.h"
-#include "api/scopes.h"
-#include "api/user_routes.h"
-#include "fakes/fixed_callers.h"
-#include "helpers/authn_rig.h"
-#include "helpers/route_call.h"
+#include "lugh/api/audit_routes.h"
+#include "lugh/api/group_routes.h"
+#include "lugh/api/policy_routes.h"
+#include "lugh/api/scopes.h"
+#include "lugh/api/user_routes.h"
+#include "lugh/test/fixtures/authn_rig.h"
+#include "lugh/test/fixtures/fixed_callers.h"
+#include "lugh/test/fixtures/route_call.h"
 
 // The whole of /api/v1 over AuthnRig, behind a router where the token kToken is an
 // administrator holding every scope and "reader" holds directory.read alone, as P6's

@@ -15,10 +15,10 @@
 #include <unordered_map>
 #include <vector>
 
-#include "core/task.h"
-#include "http/caller.h"
-#include "http/http_types.h"
-#include "http/rate_limiter.h"
+#include "lugh/core/task.h"
+#include "lugh/http/caller.h"
+#include "lugh/http/http_types.h"
+#include "lugh/http/rate_limiter.h"
 
 namespace lugh::http {
 

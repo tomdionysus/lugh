@@ -15,10 +15,10 @@
 #include <string>
 #include <string_view>
 
-#include "audit/audit_log.h"
-#include "core/outcome.h"
-#include "http/api_json.h"
-#include "http/router.h"
+#include "lugh/audit/audit_log.h"
+#include "lugh/core/outcome.h"
+#include "lugh/http/api_json.h"
+#include "lugh/http/router.h"
 
 namespace lugh::api {
 

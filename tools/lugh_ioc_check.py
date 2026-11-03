@@ -16,7 +16,7 @@ any hit fails.
 
 Comments are not searched: a comment naming getenv is not a call.
 
-Usage: ioc-check.py [ROOT]
+Usage: lugh_ioc_check.py [ROOT]
 """
 
 import pathlib
@@ -46,20 +46,20 @@ PATTERNS = {
 # is to be the one place that names the real thing. Add each adapter here as
 # it is written.
 ADAPTERS = {
-    "src/main.cpp",
-    "src/system/system_clock.h",
-    "src/system/system_clock.cpp",
-    "src/system/system_environment.h",
-    "src/system/system_environment.cpp",
-    "src/loggers/logger_stdio.h",  # LoggerStdIO: stamps each line with the time
-    "src/loggers/logger_stdio.cpp",
-    "src/system/system_random.h",  # SystemRandom: OpenSSL's CSPRNG
-    "src/system/system_random.cpp",
-    "src/system/system_files.h",  # SystemFiles: the keyring on disk
-    "src/system/system_files.cpp",
-    "src/system/system_console.h",  # SystemConsole: a passphrase typed without echo
-    "src/system/system_console.cpp",
-    "src/core/secure_memory.cpp",  # locked pages for key material
+    "tools/lugh_node.cpp",
+    "lugh/system/system_clock.h",
+    "lugh/system/system_clock.cpp",
+    "lugh/system/system_environment.h",
+    "lugh/system/system_environment.cpp",
+    "lugh/loggers/logger_stdio.h",  # LoggerStdIO: stamps each line with the time
+    "lugh/loggers/logger_stdio.cpp",
+    "lugh/system/system_random.h",  # SystemRandom: OpenSSL's CSPRNG
+    "lugh/system/system_random.cpp",
+    "lugh/system/system_files.h",  # SystemFiles: the keyring on disk
+    "lugh/system/system_files.cpp",
+    "lugh/system/system_console.h",  # SystemConsole: a passphrase typed without echo
+    "lugh/system/system_console.cpp",
+    "lugh/core/secure_memory.cpp",  # locked pages for key material
 }
 
 # Exempt from one pattern only.
@@ -93,7 +93,12 @@ def strip_comments(text):
 
 def main():
     root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else pathlib.Path(__file__).resolve().parent.parent)
-    files = sorted(path for path in (root / "src").rglob("*") if path.suffix in (".cpp", ".h"))
+    # The library and the service; the tests and fuzz targets are not the service.
+    files = sorted(
+        path
+        for path in [*(root / "lugh").rglob("*"), *(root / "tools").rglob("*")]
+        if path.suffix in (".cpp", ".h") and not path.relative_to(root).as_posix().startswith(("lugh/test/", "lugh/fuzz/"))
+    )
 
     hits = []
     for path in files:
@@ -111,9 +116,9 @@ def main():
     for hit in hits:
         print(hit)
     if hits:
-        print(f"FAIL: {len(hits)} hits; outside main.cpp and the adapters, nothing may name these")
+        print(f"FAIL: {len(hits)} hits; outside the composition root (tools/lugh_node.cpp) and the adapters, nothing may name these")
         return 1
-    print(f"ok: {len(files)} files, nothing outside main.cpp and the adapters names a clock, the environment, a thread, a process or a file write")
+    print(f"ok: {len(files)} files, nothing outside the composition root (tools/lugh_node.cpp) and the adapters names a clock, the environment, a thread, a process or a file write")
     return 0
 
 

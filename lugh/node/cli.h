@@ -118,8 +118,8 @@ inline Options parse(int argc, char* argv[]) {
 }
 
 inline std::string usage() {
-  return "Usage: lugh [options]          serve\n"
-         "       lugh init [options]     make this node's keyring and master key\n"
+  return "Usage: lugh-node [options]       serve\n"
+         "       lugh-node init [options]  make this node's keyring and master key\n"
          "\n"
          "  -c, --config PATH        the configuration to read\n"
          "  --address ADDRESS        the address to listen on (server.address)\n"
@@ -144,7 +144,7 @@ inline std::string usage() {
          "  $LUGH_CONFIG\n"
          "  /usr/local/etc/lugh/config.yaml\n"
          "\n"
-         "The master key is in none of these. `lugh init` writes a new one, 32 raw\n"
+         "The master key is in none of these. `lugh-node init` writes a new one, 32 raw\n"
          "bytes, to standard output, which must not be a terminal; pipe it to\n"
          "\n"
          "  systemd-creds encrypt --name=lugh-master-key - \\\n"

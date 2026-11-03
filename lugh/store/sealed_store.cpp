@@ -5,12 +5,12 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "store/sealed_store.h"
+#include "lugh/store/sealed_store.h"
 
 #include <set>
 #include <utility>
 
-#include "loggers/logger_scoped.h"
+#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::store {
 
