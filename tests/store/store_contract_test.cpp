@@ -1,3 +1,10 @@
+//
+// Lugh - The Directory
+//
+// Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+// Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+//
+
 // The store's rules, run against SealedStore and the MemoryStore fake alike, so a test
 // written against the fake means what it says.
 

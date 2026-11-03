@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+#
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+
 """Inversion of control, enforced.
 
 Outside the composition root and the adapters, nothing names a clock, the

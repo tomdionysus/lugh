@@ -1,3 +1,10 @@
+//
+// Lugh - The Directory
+//
+// Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+// Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+//
+
 // The command line parser: the input split on NUL into arguments. The smallest parser Lugh
 // owns, and the one that proves the fuzz build works before the ones that matter arrive.
 

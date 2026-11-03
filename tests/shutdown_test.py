@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+#
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+
 """The service stops on SIGTERM and SIGINT, promptly and cleanly.
 
 A shutdown that hangs would stall every deploy for systemd's stop timeout.

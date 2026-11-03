@@ -1,3 +1,10 @@
+//
+// Lugh - The Directory
+//
+// Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+// Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+//
+
 // The composition root: the one file that names every concrete class. It builds the
 // adapters and the pools they block on, opens the keyring and the store in a coroutine on
 // the io_context, starts the server, waits for SIGTERM or SIGINT, and stops in reverse.

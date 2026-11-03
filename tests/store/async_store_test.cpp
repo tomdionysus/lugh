@@ -1,3 +1,10 @@
+//
+// Lugh - The Directory
+//
+// Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+// Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+//
+
 // What async means for the store: while one write waits on the disk, nothing else waits
 // with it. A held append on one table leaves reads of that table, and writes to another,
 // to finish; the held write is not seen until it is acknowledged; and a second writer on

@@ -1,5 +1,12 @@
 #!/bin/sh
 #
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+
+#
 # Prepares a node for lugh. Run by `cmake --install`, as root, on every install; every step
 # is safe to repeat. The certificate pair under /usr/local/etc/lugh/tls and the master key
 # credential are the operator's to put there; this only sets who may read them.

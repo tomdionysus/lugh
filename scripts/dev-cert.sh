@@ -1,5 +1,12 @@
 #!/bin/sh
 #
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+
+#
 # A self-signed certificate for development, where config/config.yaml expects it. Lugh has
 # no plaintext listener, so there is no running it without one. Safe to repeat: an existing
 # pair is left alone unless --force is given.

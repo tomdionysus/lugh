@@ -1,3 +1,10 @@
+//
+// Lugh - The Directory
+//
+// Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+// Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+//
+
 // The directory's and authn's record parsers: users, groups, memberships, TOTP factors,
 // recovery codes, enrolment links and audit entries. Each reads a value the store has
 // opened, so it is reached only with the keys, but a parser that trusts its input is one

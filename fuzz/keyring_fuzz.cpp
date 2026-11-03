@@ -1,3 +1,10 @@
+//
+// Lugh - The Directory
+//
+// Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+// Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+//
+
 // The keyring's two parsers: the header, read before anything is decrypted and so open to
 // whoever can write the file, and the body, read after. The first byte picks which, so one
 // corpus covers both.

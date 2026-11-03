@@ -1,3 +1,10 @@
+//
+// Lugh - The Directory
+//
+// Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+// Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+//
+
 // The API as it runs in the service: handlers as coroutines on a pool of threads, many at
 // once, suspending on the store's locks and the hashing pool. Under the tsan preset this is
 // where a race in the store, the directory or the audit log would show.

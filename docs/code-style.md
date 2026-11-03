@@ -35,11 +35,20 @@ lifted from where.
   pair, small classes header-only. Includes rooted at `src/` (`#include "http/router.h"`),
   never relative. The one `include/` directory, `include/lugh/`, is the client library's
   public face and arrives in P10; nothing of the service goes there.
-- **Licence as T.O.M.S and blackraven-admin**: no licence file, no copyright or licence
-  header on our own files, and `"private": true` in the dashboard's `package.json`. A file
-  starts with `#pragma once` or its first include. AthenaSIP's GPLv3 header block and
-  Macha's GPL-3.0-or-later block are removed from anything lifted from them. Code from a
-  third party keeps its own notice.
+- **Licence: GPLv3, as Dannan and Dagda** (the maintainer, 2026-11-03). `LICENSE` is the GPLv3 text.
+  Every source file starts with this block, copied exactly (`#` in place of `//` in CMake,
+  Python, shell and the unit file, after any `#!` line):
+
+  ```
+  //
+  // Lugh - The Directory
+  //
+  // Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+  // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+  //
+  ```
+
+  Code from a third party keeps its own notice.
 - **Comments** are sparse, `//` only, and say why, not what. Match the density of the
   surrounding file. No Doxygen. No emoji, anywhere.
 

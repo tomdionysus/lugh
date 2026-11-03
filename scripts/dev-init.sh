@@ -1,5 +1,12 @@
 #!/bin/sh
 #
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+
+#
 # A keyring and master key for development, where config/config.yaml expects them: the
 # keyring in config/dev/state, the master key in config/dev/credentials as systemd would
 # hand it over. Genesis shows root's password once, on the terminal: copy it. Then:

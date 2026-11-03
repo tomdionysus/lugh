@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+#
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+
 """/api/v1 through the real binary, over TLS, before P6.
 
 A node made with `lugh init` has root and nothing else: no token, key or

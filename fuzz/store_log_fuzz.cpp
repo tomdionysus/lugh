@@ -1,3 +1,10 @@
+//
+// Lugh - The Directory
+//
+// Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+// Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+//
+
 // A table's log as it is read at open: the header parse, the frame scan, and the
 // torn-or-damaged decision, over whatever is on the disk. The key is fixed, so most frames
 // fail to open; the header and framing are what is under test.

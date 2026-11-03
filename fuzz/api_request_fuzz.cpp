@@ -1,3 +1,10 @@
+//
+// Lugh - The Directory
+//
+// Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+// Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+//
+
 // What the API parses itself before a handler sees a request: the path against the route
 // table, the query, percent-encoding, If-Match, and a body checked member by member. The
 // JSON grammar is Boost's. Input: a target line, an If-Match line, then the body.

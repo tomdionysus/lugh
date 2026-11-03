@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+#
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+
 """`lugh init`, and the start that needs what it made.
 
 With a credential: init writes 32 raw bytes to standard output and the

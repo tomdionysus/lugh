@@ -1,3 +1,10 @@
+#
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+
 cmake_minimum_required(VERSION 3.23)
 
 # The root README carries this version in italics under its title. Bump both.
@@ -21,22 +28,36 @@ set_property(CACHE LUGH_SANITIZE PROPERTY STRINGS none address thread)
 include(CheckCXXCompilerFlag)
 include(CheckPIESupported)
 
-# Boost 1.87 is what blackraven-admin builds against; Asio, Beast and JSON are all used
-# header-only, and Boost.JSON's definitions are compiled once, in src/boost_json.cpp.
+# Boost 1.87 is the floor Dannan and AthenaSIP share, and Lugh's must be the one Dannan is
+# built with; Asio, Beast and JSON are all used header-only, and Boost.JSON's definitions
+# are compiled once, in src/boost_json.cpp.
 find_package(Boost 1.87 REQUIRED CONFIG)
 find_package(Threads REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
-# TLS, AEAD, Argon2id, signatures and randomness all come from OpenSSL 3. Homebrew keeps
-# it out of the default search path.
-if (APPLE AND NOT OPENSSL_ROOT_DIR)
-    foreach(prefix /opt/homebrew/opt/openssl@3 /usr/local/opt/openssl@3)
-        if (EXISTS "${prefix}")
-            set(OPENSSL_ROOT_DIR "${prefix}")
-        endif()
-    endforeach()
-endif()
+# TLS, AEAD, Argon2id, signatures and randomness all come from OpenSSL 3, the same one
+# Dannan links: one process, one OpenSSL. On the laptop that is MacPorts', as everything is
+# (the presets say where).
 find_package(OpenSSL 3.0 REQUIRED)
+
+# Dannan, the network layer Lugh hosts on (and Dagda, the store, built beside it). From
+# the sibling checkout, pinned to one commit and cloned into the build tree, so building
+# Lugh never touches ../dannan. Its Context exists only on feature/wire-v1 so far, which
+# has no tag; the pin moves to a tag once one carries it (the maintainer, 2026-11-03).
+set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
+set(LUGH_DANNAN_COMMIT "785e393afe963a40a4878e2f16869ce6c022b0a0" CACHE STRING "The Dannan commit Lugh builds against")
+# A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
+if (LUGH_SANITIZE STREQUAL "address")
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+elseif (LUGH_SANITIZE STREQUAL "thread")
+    add_compile_options(-fsanitize=thread)
+    add_link_options(-fsanitize=thread)
+endif()
+include(FetchContent)
+FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_COMMIT}")
+set(DANNAN_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(dannan)
 
 # ---------------------------------------------------------------- hardening
 #
