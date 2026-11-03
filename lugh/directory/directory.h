@@ -20,7 +20,6 @@
 #include "lugh/directory/records.h"
 #include "lugh/loggers/logger.h"
 #include "lugh/store/store.h"
-#include "lugh/system/random.h"
 
 namespace lugh::directory {
 
@@ -60,8 +59,8 @@ struct GroupChange {
 // while either works. Arguments are owned.
 class Directory {
  public:
-  Directory(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
-            const dannan::contract::WallClock& wall, std::shared_ptr<audit::AuditLog> audit);
+  Directory(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+            std::shared_ptr<audit::AuditLog> audit);
 
   // Told, in the order added, when a user is removed. Set up before anything is served.
   void dependent_add(std::shared_ptr<Dependent> dependent);
@@ -109,7 +108,6 @@ class Directory {
 
   std::shared_ptr<loggers::Logger> _logger;
   std::shared_ptr<store::Store> _store;
-  std::shared_ptr<system::Random> _random;
   const dannan::contract::WallClock& _wall;
   std::shared_ptr<audit::AuditLog> _audit_log;
   std::vector<std::shared_ptr<Dependent>> _dependents;

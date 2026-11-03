@@ -8,7 +8,6 @@
 #include <gtest/gtest.h>
 
 #include "lugh/keys/keyring.h"
-#include "lugh/test/fixtures/fixed_random.h"
 #include "lugh/test/fixtures/hex.h"
 
 using namespace lugh::keys;
@@ -41,10 +40,9 @@ TEST(Keyring, ANewKeyringIsEmpty) {
 }
 
 TEST(Keyring, SealThenOpen) {
-  FixedRandom random;
   auto keyring = made();
-  ASSERT_TRUE(keyring.rotate("users", random).ok);
-  ASSERT_TRUE(keyring.rotate("audit", random).ok);
+  ASSERT_TRUE(keyring.rotate("users").ok);
+  ASSERT_TRUE(keyring.rotate("audit").ok);
 
   const auto file = keyring.seal();
   ASSERT_TRUE(file.ok) << file.error;
@@ -58,16 +56,14 @@ TEST(Keyring, SealThenOpen) {
 }
 
 TEST(Keyring, TheKeysAreNotInTheFile) {
-  FixedRandom random;
   auto keyring = made();
-  ASSERT_TRUE(keyring.rotate("users", random).ok);
+  ASSERT_TRUE(keyring.rotate("users").ok);
   const auto file = keyring.seal().value;
   const auto key = plain(keyring.current("users")->key);
   EXPECT_EQ(std::search(file.begin(), file.end(), key.begin(), key.end()), file.end());
 }
 
 TEST(Keyring, TheWrongMasterKeyOpensNothing) {
-  FixedRandom random;
   const auto file = made().seal().value;
 
   auto wrong = kMaster;
@@ -81,9 +77,8 @@ TEST(Keyring, TheWrongMasterKeyOpensNothing) {
 }
 
 TEST(Keyring, AnyEditIsRefused) {
-  FixedRandom random;
   auto keyring = made();
-  ASSERT_TRUE(keyring.rotate("users", random).ok);
+  ASSERT_TRUE(keyring.rotate("users").ok);
   const auto file = keyring.seal().value;
 
   for (std::size_t i = 0; i < file.size(); ++i) {
@@ -99,7 +94,6 @@ TEST(Keyring, AnyEditIsRefused) {
 // The header is bound into the seal: a keyring's body moved under another header (another
 // id, so another KEK salt) does not open.
 TEST(Keyring, ABodyCannotMoveToAnotherHeader) {
-  FixedRandom random;
   const auto first = made().seal().value;
   auto second = Keyring::create(header(0x99), kMaster).value.seal().value;
 
@@ -110,7 +104,6 @@ TEST(Keyring, ABodyCannotMoveToAnotherHeader) {
 }
 
 TEST(Keyring, EachSealIsFresh) {
-  FixedRandom random;
   const auto keyring = made();
   const auto a = keyring.seal().value;
   const auto b = keyring.seal().value;
@@ -120,13 +113,12 @@ TEST(Keyring, EachSealIsFresh) {
 }
 
 TEST(Keyring, RotationAddsAnEpoch) {
-  FixedRandom random;
   auto keyring = made();
 
-  EXPECT_EQ(keyring.rotate("users", random).value, 1u);
+  EXPECT_EQ(keyring.rotate("users").value, 1u);
   const auto first = plain(keyring.current("users")->key);
-  EXPECT_EQ(keyring.rotate("users", random).value, 2u);
-  EXPECT_EQ(keyring.rotate("audit", random).value, 1u);
+  EXPECT_EQ(keyring.rotate("users").value, 2u);
+  EXPECT_EQ(keyring.rotate("audit").value, 1u);
 
   EXPECT_EQ(keyring.current("users")->epoch, 2u);
   EXPECT_NE(plain(keyring.current("users")->key), first);
@@ -136,14 +128,10 @@ TEST(Keyring, RotationAddsAnEpoch) {
   EXPECT_EQ(keyring.size(), 3u);
 }
 
-TEST(Keyring, RotationRefusesBadNamesAndBadRandomness) {
-  FixedRandom random;
+TEST(Keyring, RotationRefusesBadNames) {
   auto keyring = made();
-  EXPECT_FALSE(keyring.rotate("Users", random).ok);
-  EXPECT_FALSE(keyring.rotate("", random).ok);
-
-  random.fail = true;
-  EXPECT_FALSE(keyring.rotate("users", random).ok);
+  EXPECT_FALSE(keyring.rotate("Users").ok);
+  EXPECT_FALSE(keyring.rotate("").ok);
   EXPECT_EQ(keyring.size(), 0u);
 }
 
@@ -161,9 +149,8 @@ TEST(Keyring, AddTakesAKeyMadeElsewhere) {
 }
 
 TEST(Keyring, RekeyMovesToANewMasterKey) {
-  FixedRandom random;
   auto keyring = made();
-  ASSERT_TRUE(keyring.rotate("users", random).ok);
+  ASSERT_TRUE(keyring.rotate("users").ok);
   const auto key = plain(keyring.current("users")->key);
 
   const auto next = repeated(0x77, kMasterKeyBytes);
@@ -191,7 +178,4 @@ TEST(Keyring, RefusesBadHeaders) {
   EXPECT_FALSE(Keyring::create(passphrase, kMaster).ok);
 }
 
-TEST(Keyring, AnEmptyKeyringSealsNothing) {
-  FixedRandom random;
-  EXPECT_FALSE(Keyring().seal().ok);
-}
+TEST(Keyring, AnEmptyKeyringSealsNothing) { EXPECT_FALSE(Keyring().seal().ok); }

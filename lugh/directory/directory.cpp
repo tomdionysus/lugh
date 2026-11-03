@@ -63,13 +63,9 @@ Fault fault_of(store::StoreError error) {
   return Fault::failed;
 }
 
-Directory::Directory(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
-                     const dannan::contract::WallClock& wall, std::shared_ptr<audit::AuditLog> audit)
-    : _logger(std::make_shared<loggers::LoggerScoped>("directory", std::move(logger))),
-      _store(std::move(store)),
-      _random(std::move(random)),
-      _wall(wall),
-      _audit_log(std::move(audit)) {}
+Directory::Directory(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+                     std::shared_ptr<audit::AuditLog> audit)
+    : _logger(std::make_shared<loggers::LoggerScoped>("directory", std::move(logger))), _store(std::move(store)), _wall(wall), _audit_log(std::move(audit)) {}
 
 void Directory::dependent_add(std::shared_ptr<Dependent> dependent) { _dependents.push_back(std::move(dependent)); }
 
@@ -319,7 +315,7 @@ Task<Outcome<>> Directory::add_member(audit::Actor actor, std::string group_id, 
     if (membership.group_id == group_id && membership.user_id == user_id) co_return Answer::success();
   }
 
-  const auto instance = _random->bytes(8);
+  const auto instance = dannan::identity::random_bytes(8);
   if (instance.empty()) co_return Answer::failure(Fault::failed, "no randomness for an ID");
 
   Membership membership;
@@ -367,7 +363,7 @@ Task<std::vector<std::string>> Directory::groups_of(std::string user_id) const {
 }
 
 std::optional<std::string> Directory::_new_id() {
-  const auto bytes = _random->bytes(kIdBytes);
+  const auto bytes = dannan::identity::random_bytes(kIdBytes);
   if (bytes.empty()) return std::nullopt;
   return dannan::identity::hex(bytes);
 }

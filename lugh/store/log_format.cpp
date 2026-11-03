@@ -126,15 +126,14 @@ std::optional<Change> decode_change(std::span<const unsigned char> plaintext) {
 
 }  // namespace
 
-Result<FileHeader> make_file_header(std::string_view table, std::uint32_t epoch, std::span<const unsigned char> key, system::Random& random) {
+Result<FileHeader> make_file_header(std::string_view table, std::uint32_t epoch, std::span<const unsigned char> key) {
   using Answer = Result<FileHeader>;
   if (table.empty() || table.size() > kMostTableNameBytes || epoch == 0) return Answer::failure("a header needs a table and an epoch");
 
   FileHeader header;
   header.table = std::string(table);
   header.epoch = epoch;
-  header.id = random.bytes(kFileIdBytes);
-  if (header.id.size() != kFileIdBytes) return Answer::failure("no randomness for a file id");
+  header.id = dannan::identity::random_bytes(kFileIdBytes);
 
   auto seal = crypto::seal(key, {}, header_associated(header));
   if (!seal.ok) return Answer::failure(seal.error);

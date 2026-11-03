@@ -8,7 +8,6 @@
 #include <gtest/gtest.h>
 
 #include "lugh/store/log_format.h"
-#include "lugh/test/fixtures/fixed_random.h"
 #include "lugh/test/fixtures/hex.h"
 
 using namespace lugh::store;
@@ -30,8 +29,8 @@ Change put(std::string key, std::uint64_t version, std::string value) {
 }
 
 // A log of the changes given, under epoch 1.
-lugh::Bytes log_of(const std::vector<Change>& changes, FixedRandom& random, std::string table = "users") {
-  const auto header = make_file_header(table, 1, kKey, random).value;
+lugh::Bytes log_of(const std::vector<Change>& changes, std::string table = "users") {
+  const auto header = make_file_header(table, 1, kKey).value;
   auto file = encode_file_header(header);
   auto previous = header.tag();
   for (const auto& change : changes) {
@@ -47,8 +46,7 @@ std::size_t header_length(const lugh::Bytes& file) { return decode_file_header(f
 }  // namespace
 
 TEST(LogFormat, AHeader) {
-  FixedRandom random;
-  const auto header = make_file_header("users", 3, kKey, random);
+  const auto header = make_file_header("users", 3, kKey);
   ASSERT_TRUE(header.ok) << header.error;
   const auto bytes = encode_file_header(header.value);
   EXPECT_EQ(bytes.size(), 8u + 1 + 5 + 16 + 4 + 28);
@@ -63,8 +61,7 @@ TEST(LogFormat, AHeader) {
 }
 
 TEST(LogFormat, AnEditedHeaderDoesNotVerify) {
-  FixedRandom random;
-  const auto bytes = encode_file_header(make_file_header("users", 1, kKey, random).value);
+  const auto bytes = encode_file_header(make_file_header("users", 1, kKey).value);
   for (std::size_t i = 8; i < bytes.size(); ++i) {
     auto edited = bytes;
     edited[i] ^= 1;
@@ -74,12 +71,11 @@ TEST(LogFormat, AnEditedHeaderDoesNotVerify) {
 }
 
 TEST(LogFormat, ScanReadsEveryFrame) {
-  FixedRandom random;
   Change removal;
   removal.operation = Operation::remove;
   removal.key = "u1";
   removal.version = 2;
-  const auto file = log_of({put("u1", 1, "alice"), put("u2", 1, "bob"), removal}, random);
+  const auto file = log_of({put("u1", 1, "alice"), put("u2", 1, "bob"), removal});
 
   const auto scan = scan_log(file, "users", only_epoch_one());
   ASSERT_TRUE(scan.ok) << scan.error;
@@ -92,8 +88,7 @@ TEST(LogFormat, ScanReadsEveryFrame) {
 }
 
 TEST(LogFormat, NoPlaintextOnDisk) {
-  FixedRandom random;
-  const auto file = log_of({put("u1", 1, "a secret value")}, random);
+  const auto file = log_of({put("u1", 1, "a secret value")});
   const std::string secret = "a secret value";
   EXPECT_EQ(std::search(file.begin(), file.end(), secret.begin(), secret.end()), file.end());
   const std::string key = "u1";
@@ -101,16 +96,14 @@ TEST(LogFormat, NoPlaintextOnDisk) {
 }
 
 TEST(LogFormat, TheHeaderMustBeThisTables) {
-  FixedRandom random;
-  const auto file = log_of({}, random, "groups");
+  const auto file = log_of({}, "groups");
   const auto scan = scan_log(file, "users", only_epoch_one());
   EXPECT_FALSE(scan.ok);
   EXPECT_NE(scan.error.find("groups"), std::string::npos);
 }
 
 TEST(LogFormat, TheWrongKeyIsRefusedAtTheHeader) {
-  FixedRandom random;
-  const auto file = log_of({put("u1", 1, "alice")}, random);
+  const auto file = log_of({put("u1", 1, "alice")});
   const lugh::SecureBuffer other(32, 0x99);
   const auto scan = scan_log(file, "users", [&](std::uint32_t) { return &other; });
   EXPECT_FALSE(scan.ok);
@@ -120,8 +113,7 @@ TEST(LogFormat, TheWrongKeyIsRefusedAtTheHeader) {
 }
 
 TEST(LogFormat, EveryTruncationIsATornTail) {
-  FixedRandom random;
-  const auto file = log_of({put("u1", 1, "alice"), put("u2", 1, "bob")}, random);
+  const auto file = log_of({put("u1", 1, "alice"), put("u2", 1, "bob")});
   const auto first_end = header_length(file) + scan_log(file, "users", only_epoch_one()).value.entries[0].frame.size();
 
   for (std::size_t length = header_length(file) + 1; length < file.size(); ++length) {
@@ -134,8 +126,7 @@ TEST(LogFormat, EveryTruncationIsATornTail) {
 }
 
 TEST(LogFormat, ZerosAfterTheLastFrameAreATornTail) {
-  FixedRandom random;
-  auto file = log_of({put("u1", 1, "alice")}, random);
+  auto file = log_of({put("u1", 1, "alice")});
   const auto clean = file.size();
   file.resize(file.size() + 4096, 0);
   const auto scan = scan_log(file, "users", only_epoch_one());
@@ -146,8 +137,7 @@ TEST(LogFormat, ZerosAfterTheLastFrameAreATornTail) {
 }
 
 TEST(LogFormat, DamageBeforeAGoodFrameIsDamage) {
-  FixedRandom random;
-  auto file = log_of({put("u1", 1, "alice"), put("u2", 1, "bob")}, random);
+  auto file = log_of({put("u1", 1, "alice"), put("u2", 1, "bob")});
   file[header_length(file) + 30] ^= 1;  // inside the first frame's ciphertext
   const auto scan = scan_log(file, "users", only_epoch_one());
   ASSERT_TRUE(scan.ok);
@@ -157,8 +147,7 @@ TEST(LogFormat, DamageBeforeAGoodFrameIsDamage) {
 }
 
 TEST(LogFormat, FramesCannotBeReordered) {
-  FixedRandom random;
-  const auto file = log_of({put("u1", 1, "alice"), put("u2", 1, "bob")}, random);
+  const auto file = log_of({put("u1", 1, "alice"), put("u2", 1, "bob")});
   const auto start = header_length(file);
   const auto half = (file.size() - start) / 2;
 
@@ -173,8 +162,7 @@ TEST(LogFormat, FramesCannotBeReordered) {
 }
 
 TEST(LogFormat, AFrameCannotBeReplayed) {
-  FixedRandom random;
-  const auto file = log_of({put("u1", 1, "alice"), put("u1", 2, "alicia")}, random);
+  const auto file = log_of({put("u1", 1, "alice"), put("u1", 2, "alicia")});
   const auto start = header_length(file);
   const auto half = (file.size() - start) / 2;
 
@@ -188,9 +176,8 @@ TEST(LogFormat, AFrameCannotBeReplayed) {
 }
 
 TEST(LogFormat, AFrameCannotMoveToAnotherTable) {
-  FixedRandom random;
-  const auto users = log_of({put("u1", 1, "alice")}, random, "users");
-  const auto groups = log_of({}, random, "groups");
+  const auto users = log_of({put("u1", 1, "alice")}, "users");
+  const auto groups = log_of({}, "groups");
 
   auto moved = groups;
   moved.insert(moved.end(), users.begin() + static_cast<std::ptrdiff_t>(header_length(users)), users.end());
@@ -200,8 +187,7 @@ TEST(LogFormat, AFrameCannotMoveToAnotherTable) {
 }
 
 TEST(LogFormat, AnEpochWithNoKeyIsDamageNotATear) {
-  FixedRandom random;
-  const auto header = make_file_header("users", 1, kKey, random).value;
+  const auto header = make_file_header("users", 1, kKey).value;
   auto file = encode_file_header(header);
   const auto framed = seal_change(put("u1", 1, "alice"), "users", 2, kKey, header.tag()).value;
   file.insert(file.end(), framed.bytes.begin(), framed.bytes.end());
@@ -213,7 +199,6 @@ TEST(LogFormat, AnEpochWithNoKeyIsDamageNotATear) {
 }
 
 TEST(LogFormat, SealRefusesWhatCannotBeRead) {
-  FixedRandom random;
   const lugh::Bytes previous(kTagBytes, 0);
   EXPECT_FALSE(seal_change(put("", 1, "x"), "users", 1, kKey, previous).ok);
   EXPECT_FALSE(seal_change(put("k", 0, "x"), "users", 1, kKey, previous).ok);

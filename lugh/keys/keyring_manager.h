@@ -19,7 +19,6 @@
 #include "lugh/system/console.h"
 #include "lugh/system/environment.h"
 #include "lugh/system/files.h"
-#include "lugh/system/random.h"
 
 namespace lugh::keys {
 
@@ -37,8 +36,8 @@ class KeyringManager {
   static constexpr const char* kFileName = "keyring";
 
   // `hashing` runs Argon2id over a passphrase, which takes its whole 64 MiB and a while.
-  KeyringManager(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files, std::shared_ptr<system::Random> random,
-                 std::shared_ptr<system::Console> console, std::shared_ptr<system::Environment> environment, std::string state_directory, Executor hashing);
+  KeyringManager(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files, std::shared_ptr<system::Console> console,
+                 std::shared_ptr<system::Environment> environment, std::string state_directory, Executor hashing);
 
   std::string path() const;
 
@@ -73,7 +72,6 @@ class KeyringManager {
 
   std::shared_ptr<loggers::Logger> _logger;
   std::shared_ptr<system::Files> _files;
-  std::shared_ptr<system::Random> _random;
   std::shared_ptr<system::Console> _console;
   std::shared_ptr<system::Environment> _environment;
   std::string _state_directory;

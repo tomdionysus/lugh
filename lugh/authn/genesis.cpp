@@ -12,8 +12,8 @@
 namespace lugh::authn {
 
 Genesis::Genesis(std::shared_ptr<directory::Directory> directory, std::shared_ptr<Passwords> passwords, std::shared_ptr<EnrolmentLinks> links,
-                 std::shared_ptr<system::Random> random, std::shared_ptr<audit::AuditLog> audit)
-    : _directory(std::move(directory)), _passwords(std::move(passwords)), _links(std::move(links)), _random(std::move(random)), _audit(std::move(audit)) {}
+                 std::shared_ptr<audit::AuditLog> audit)
+    : _directory(std::move(directory)), _passwords(std::move(passwords)), _links(std::move(links)), _audit(std::move(audit)) {}
 
 Task<Outcome<Secret>> Genesis::run() {
   using Answer = Outcome<Secret>;
@@ -28,8 +28,7 @@ Task<Outcome<Secret>> Genesis::run() {
   if (!administrators.ok()) co_return Answer::from(administrators);
   if (const auto added = co_await _directory->add_member(actor, administrators.value.id, root.value.id); !added.ok()) co_return Answer::from(added);
 
-  SecureBuffer raw(kPasswordBytes);
-  if (!_random->fill(raw)) co_return Answer::failure(Fault::failed, "no randomness for root's password");
+  const auto raw = secure_random(kPasswordBytes);
   auto password = text_secret(encoding::base64url(raw));
 
   if (const auto set = co_await _passwords->set(actor, root.value, Secret(password.reveal())); !set.ok()) co_return Answer::from(set);

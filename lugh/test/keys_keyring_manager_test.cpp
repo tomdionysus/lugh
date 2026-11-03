@@ -8,7 +8,6 @@
 #include <gtest/gtest.h>
 
 #include "lugh/keys/keyring_manager.h"
-#include "lugh/test/fixtures/fixed_random.h"
 #include "lugh/test/fixtures/hex.h"
 #include "lugh/test/fixtures/logger_mock.h"
 #include "lugh/test/fixtures/map_environment.h"
@@ -26,7 +25,7 @@ const std::string kPassphrase = "correct horse battery staple";
 
 class KeyringManagerTest : public ::testing::Test {
  protected:
-  KeyringManager manager() { return KeyringManager(logger, files, random, console, environment, "/var/lib/lugh", test_pool()); }
+  KeyringManager manager() { return KeyringManager(logger, files, console, environment, "/var/lib/lugh", test_pool()); }
 
   // A keyring made for a credential, saved, and the credential where systemd puts it.
   lugh::SecureBuffer initialise() {
@@ -41,7 +40,6 @@ class KeyringManagerTest : public ::testing::Test {
 
   std::shared_ptr<MockLogger> logger = std::make_shared<MockLogger>();
   std::shared_ptr<MemoryFiles> files = std::make_shared<MemoryFiles>();
-  std::shared_ptr<FixedRandom> random = std::make_shared<FixedRandom>();
   std::shared_ptr<ScriptedConsole> console = std::make_shared<ScriptedConsole>();
   std::shared_ptr<MapEnvironment> environment = std::make_shared<MapEnvironment>();
 };
@@ -194,7 +192,7 @@ TEST_F(KeyringManagerTest, ARotationIsSavedAndReopened) {
   initialise();
   auto keys = manager();
   auto keyring = run(keys.open()).value;
-  ASSERT_TRUE(keyring.rotate("users", *random).ok);
+  ASSERT_TRUE(keyring.rotate("users").ok);
   ASSERT_TRUE(run(keys.save(keyring)).ok);
 
   const auto reopened = run(manager().open());
@@ -209,9 +207,4 @@ TEST_F(KeyringManagerTest, AFailedWriteSavesNothing) {
   files->fail_writes = true;
   EXPECT_FALSE(run(keys.save_new(created.value.keyring)).ok);
   EXPECT_FALSE(run(files->exists("/var/lib/lugh/keyring")));
-}
-
-TEST_F(KeyringManagerTest, NoRandomnessNoKeyring) {
-  random->fail = true;
-  EXPECT_FALSE(run(manager().create_for_credential()).ok);
 }

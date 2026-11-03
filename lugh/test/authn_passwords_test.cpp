@@ -100,7 +100,7 @@ TEST_F(PasswordsTest, AnOldHashMovesToTheCurrentCosts) {
   const auto alice = rig.person("alice");
   {
     // Set under cheaper costs, as an older release would have.
-    Passwords older(rig.logger, rig.store, rig.random, rig.wall, rig.audit, test_pool(), lugh::crypto::Argon2Costs{32, 1, 1}, {}, {});
+    Passwords older(rig.logger, rig.store, rig.wall, rig.audit, test_pool(), lugh::crypto::Argon2Costs{32, 1, 1}, {}, {});
     ASSERT_TRUE(run(older.set(rig.admin, alice, text_secret("correct horse battery"))).ok());
   }
   const auto before = rig.store->get_now(Passwords::kTable, alice.id)->version;

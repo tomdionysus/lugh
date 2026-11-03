@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "dannan/identity/crypto.h"
 #include "dannan/net/codec.h"
 #include "lugh/core/codec.h"
 #include "lugh/store/sealed_store.h"
@@ -188,10 +189,7 @@ TEST(SealedStore, AnotherKeyringIsRefusedNotTruncated) {
   const auto file = rig.file("users");
 
   // The same tables under a keyring made afresh: its keys are not these.
-  // Its random source moved on, so its keys are not the first rig's. FixedRandom repeats
-  // every 256 bytes, so not by a multiple of that.
   SealedStoreRig stranger(specs());
-  stranger.random->bytes(100);
   stranger.file_set("users", file);
   const auto opened = stranger.open();
   EXPECT_FALSE(opened.ok);
@@ -312,17 +310,16 @@ TEST(SealedStore, OnDiskATornTailIsCut) {
   TempDirectory dir;
   auto files = std::make_shared<lugh::system::SystemFiles>(test_pool());
   auto logger = std::make_shared<MockLogger>();
-  auto random = std::make_shared<FixedRandom>();
-  auto keyrings = std::make_shared<lugh::keys::KeyringManager>(logger, files, random, std::make_shared<ScriptedConsole>(), std::make_shared<MapEnvironment>(),
+  auto keyrings = std::make_shared<lugh::keys::KeyringManager>(logger, files, std::make_shared<ScriptedConsole>(), std::make_shared<MapEnvironment>(),
                                                                dir.path().string(), test_pool());
   lugh::keys::KeyringHeader header;
-  header.id = random->bytes(16);
+  header.id = dannan::identity::random_bytes(16);
   const auto master = lugh::Bytes(32, 0x11);
   const auto store_directory = (dir.path() / "store").string();
 
   {
     auto keyring = lugh::keys::Keyring::create(header, master).value;
-    auto store = run(lugh::store::SealedStore::open(logger, files, random, keyrings, keyring, store_directory, specs()));
+    auto store = run(lugh::store::SealedStore::open(logger, files, keyrings, keyring, store_directory, specs()));
     ASSERT_TRUE(store.ok) << store.error;
     run(store.value->put("users", "u1", secure("alice:x")));
   }
@@ -332,7 +329,7 @@ TEST(SealedStore, OnDiskATornTailIsCut) {
   ASSERT_TRUE(run(files->append(path, lugh::Bytes(5000, 0))).ok);
 
   auto keyring = lugh::keys::Keyring::open(run(files->read(dir.path().string() + "/keyring", 1 << 20)).value, master).value;
-  auto store = run(lugh::store::SealedStore::open(logger, files, random, keyrings, keyring, store_directory, specs()));
+  auto store = run(lugh::store::SealedStore::open(logger, files, keyrings, keyring, store_directory, specs()));
   ASSERT_TRUE(store.ok) << store.error;
   EXPECT_EQ(text(run(store.value->get("users", "u1"))->value), "alice:x");
   EXPECT_EQ(run(files->read(path, 1 << 20)).value, good);

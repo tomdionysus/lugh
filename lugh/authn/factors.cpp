@@ -134,11 +134,10 @@ std::optional<Secret> normal_recovery_code(std::string_view code) {
   return Secret(std::move(out));
 }
 
-Factors::Factors(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
-                 const dannan::contract::WallClock& wall, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs recovery_params)
+Factors::Factors(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+                 std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs recovery_params)
     : _logger(std::make_shared<loggers::LoggerScoped>("factors", std::move(logger))),
       _store(std::move(store)),
-      _random(std::move(random)),
       _wall(wall),
       _audit_log(std::move(audit)),
       _hashing(std::move(hashing)),
@@ -186,8 +185,7 @@ Task<Outcome<TotpSetup>> Factors::totp_begin(audit::Actor actor, std::string use
 
   TotpRecord record;
   record.created = (_wall.unix_ms() / 1000);
-  record.secret.resize(kTotpSecretBytes);
-  if (!_random->fill(record.secret)) co_return Answer::failure(Fault::failed, "no randomness for a secret");
+  record.secret = secure_random(kTotpSecretBytes);
 
   const auto written = co_await _store->put(kTable, *key, encode(record), 0);
   if (!written.ok()) co_return Answer::failure(directory::fault_of(written.error), written.message);
@@ -253,22 +251,18 @@ Task<Outcome<std::vector<Secret>>> Factors::recovery_generate(audit::Actor actor
     RecoveryRecord record;
     std::vector<Secret> codes;
   };
-  auto made = co_await offload(_hashing, [random = _random, params = _recovery_params, created = (_wall.unix_ms() / 1000)] {
+  auto made = co_await offload(_hashing, [params = _recovery_params, created = (_wall.unix_ms() / 1000)] {
     Made out;
     out.record.created = created;
     while (out.codes.size() < kRecoveryCodes) {
-      SecureBuffer raw(kRecoveryCodeBytes);
-      if (!random->fill(raw)) {
-        out.error = "no randomness for a recovery code";
-        return out;
-      }
+      const auto raw = secure_random(kRecoveryCodeBytes);
       auto normal = encoding::base32(raw);
       const auto selector = normal.substr(0, kSelectorCharacters);
 
       bool taken = false;
       for (const auto& slot : out.record.slots) taken = taken || slot.selector == selector;
       if (!taken) {
-        auto hashed = hash_password(byte_span(normal), params, *random);
+        auto hashed = hash_password(byte_span(normal), params);
         if (!hashed.ok) {
           OPENSSL_cleanse(normal.data(), normal.size());
           out.error = hashed.error;
@@ -364,7 +358,7 @@ Task<std::vector<Factors::Stored>> Factors::_records(std::string user_id, std::o
 }
 
 std::optional<std::string> Factors::_new_key(std::string_view user_id, FactorKind kind) {
-  const auto instance = _random->bytes(8);
+  const auto instance = dannan::identity::random_bytes(8);
   if (instance.empty()) return std::nullopt;
   return std::string(user_id) + "/" + std::string(kind_name(kind)) + "/" + dannan::identity::hex(instance);
 }

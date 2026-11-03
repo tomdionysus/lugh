@@ -24,7 +24,6 @@
 #include "lugh/directory/directory.h"
 #include "lugh/loggers/logger.h"
 #include "lugh/store/store.h"
-#include "lugh/system/random.h"
 
 namespace lugh::authn {
 
@@ -70,9 +69,8 @@ class Factors : public directory::Dependent {
   static constexpr crypto::Argon2Costs kRecoveryParams{19 * 1024, 2, 1};
 
   // `hashing` runs the recovery codes' Argon2id, as Passwords' does.
-  Factors(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
-          const dannan::contract::WallClock& wall, std::shared_ptr<audit::AuditLog> audit, Executor hashing,
-          crypto::Argon2Costs recovery_params = kRecoveryParams);
+  Factors(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+          std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs recovery_params = kRecoveryParams);
 
   Task<std::vector<FactorInfo>> list(std::string user_id) const;
 
@@ -114,7 +112,6 @@ class Factors : public directory::Dependent {
 
   std::shared_ptr<loggers::Logger> _logger;
   std::shared_ptr<store::Store> _store;
-  std::shared_ptr<system::Random> _random;
   const dannan::contract::WallClock& _wall;
   std::shared_ptr<audit::AuditLog> _audit_log;
   Executor _hashing;

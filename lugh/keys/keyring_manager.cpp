@@ -9,6 +9,7 @@
 
 #include <utility>
 
+#include "dannan/identity/crypto.h"
 #include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::keys {
@@ -20,12 +21,10 @@ constexpr std::size_t kMostCredentialBytes = 4096;
 
 }  // namespace
 
-KeyringManager::KeyringManager(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files, std::shared_ptr<system::Random> random,
-                               std::shared_ptr<system::Console> console, std::shared_ptr<system::Environment> environment, std::string state_directory,
-                               Executor hashing)
+KeyringManager::KeyringManager(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files, std::shared_ptr<system::Console> console,
+                               std::shared_ptr<system::Environment> environment, std::string state_directory, Executor hashing)
     : _logger(std::make_shared<loggers::LoggerScoped>("keys", std::move(logger))),
       _files(std::move(files)),
-      _random(std::move(random)),
       _console(std::move(console)),
       _environment(std::move(environment)),
       _state_directory(std::move(state_directory)),
@@ -46,11 +45,8 @@ Task<Result<KeyringManager::Created>> KeyringManager::create_for_credential() {
 
   KeyringHeader header;
   header.source = MasterKeySource::credential;
-  header.id = _random->bytes(kKeyringIdBytes);
-  if (header.id.size() != kKeyringIdBytes) co_return Answer::failure("no randomness for a keyring id");
-
-  SecureBuffer master_key(kMasterKeyBytes);
-  if (!_random->fill(master_key)) co_return Answer::failure("no randomness for a master key");
+  header.id = dannan::identity::random_bytes(kKeyringIdBytes);
+  const auto master_key = secure_random(kMasterKeyBytes);
 
   auto keyring = Keyring::create(std::move(header), master_key);
   if (!keyring.ok) co_return Answer::failure(keyring.error);
@@ -73,8 +69,8 @@ Task<Result<Keyring>> KeyringManager::create_with_passphrase(crypto::Argon2Costs
 
   KeyringHeader header;
   header.source = MasterKeySource::passphrase;
-  header.id = _random->bytes(kKeyringIdBytes);
-  header.salt = _random->bytes(kPassphraseSaltBytes);
+  header.id = dannan::identity::random_bytes(kKeyringIdBytes);
+  header.salt = dannan::identity::random_bytes(kPassphraseSaltBytes);
   header.argon2 = params;
   if (header.id.size() != kKeyringIdBytes || header.salt.size() != kPassphraseSaltBytes) co_return Answer::failure("no randomness for a keyring");
 

@@ -21,9 +21,9 @@ const std::string kFirstSignIn = "first-sign-in/";
 
 }  // namespace
 
-EnrolmentLinks::EnrolmentLinks(std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random, const dannan::contract::WallClock& wall,
-                               std::shared_ptr<directory::Directory> directory, std::shared_ptr<audit::AuditLog> audit, std::chrono::seconds lifetime)
-    : _store(std::move(store)), _random(std::move(random)), _wall(wall), _directory(std::move(directory)), _audit(std::move(audit)), _lifetime(lifetime) {}
+EnrolmentLinks::EnrolmentLinks(std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall, std::shared_ptr<directory::Directory> directory,
+                               std::shared_ptr<audit::AuditLog> audit, std::chrono::seconds lifetime)
+    : _store(std::move(store)), _wall(wall), _directory(std::move(directory)), _audit(std::move(audit)), _lifetime(lifetime) {}
 
 Task<Outcome<Secret>> EnrolmentLinks::issue(audit::Actor actor, std::string user_id) {
   using Answer = Outcome<Secret>;
@@ -39,8 +39,7 @@ Task<Outcome<Secret>> EnrolmentLinks::issue(audit::Actor actor, std::string user
     if (link && link->user_id == user_id) co_await _store->remove(kTable, record.key, record.version);
   }
 
-  SecureBuffer raw(kTokenBytes);
-  if (!_random->fill(raw)) co_return Answer::failure(Fault::failed, "no randomness for a token");
+  const auto raw = secure_random(kTokenBytes);
   auto token = text_secret(encoding::base64url(raw));
 
   Link link;

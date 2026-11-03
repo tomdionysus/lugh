@@ -45,6 +45,17 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   still needs a secret it passes on, the copy is written out at the call site.
 - Finding: the unit count went from 353 to 351: the copy and growth tests of Lugh's
   `Secret`, which no longer exist to test.
+- Randomness is Dannan's: `random_bytes` for what is not secret (ids, salts) and
+  `Secret::random` for what is, through `secure_random()` in `lugh/core/secure_bytes.h`
+  when it must land in a `SecureBuffer`. The `Random` port, `SystemRandom` and the test
+  doubles `FixedRandom` and `CountingRandom` are deleted, as is the `random` argument of
+  every constructor and of `hash_password`, `make_file_header` and `Keyring::rotate`. A
+  failed generator throws: a route that meets one answers 500, and a start or `init` that
+  meets one stops.
+- Finding: the unit count went from 351 to 347. The four tests that went made the random
+  source fail and saw a user, a factor, root's password or a keyring refused; with Dannan
+  drawing the bytes, a test cannot make it fail. The tests that relied on two rigs drawing
+  different bytes now draw from the real generator.
 
 ## 2026-10-18: P5, the management API (not committed)
 

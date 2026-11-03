@@ -11,9 +11,9 @@
 #include <string>
 #include <vector>
 
+#include "dannan/identity/crypto.h"
 #include "lugh/keys/keyring_manager.h"
 #include "lugh/store/sealed_store.h"
-#include "lugh/test/fixtures/fixed_random.h"
 #include "lugh/test/fixtures/logger_mock.h"
 #include "lugh/test/fixtures/map_environment.h"
 #include "lugh/test/fixtures/memory_files.h"
@@ -27,7 +27,7 @@ class SealedStoreRig {
  public:
   explicit SealedStoreRig(std::vector<lugh::store::TableSpec> tables) : tables(std::move(tables)) {
     lugh::keys::KeyringHeader header;
-    header.id = random->bytes(lugh::keys::kKeyringIdBytes);
+    header.id = dannan::identity::random_bytes(lugh::keys::kKeyringIdBytes);
     keyring = lugh::keys::Keyring::create(header, lugh::Bytes(lugh::keys::kMasterKeyBytes, 0x5a)).value;
   }
 
@@ -36,7 +36,7 @@ class SealedStoreRig {
     if (const auto saved = files->get("/state/keyring")) {
       keyring = lugh::keys::Keyring::open(*saved, lugh::Bytes(lugh::keys::kMasterKeyBytes, 0x5a)).value;
     }
-    return run(lugh::store::SealedStore::open(logger, files, random, keyrings, keyring, "/state/store", tables));
+    return run(lugh::store::SealedStore::open(logger, files, keyrings, keyring, "/state/store", tables));
   }
 
   std::shared_ptr<lugh::store::SealedStore> open_ok() {
@@ -51,9 +51,8 @@ class SealedStoreRig {
   std::vector<lugh::store::TableSpec> tables;
   std::shared_ptr<MockLogger> logger = std::make_shared<MockLogger>();
   std::shared_ptr<MemoryFiles> files = std::make_shared<MemoryFiles>();
-  std::shared_ptr<FixedRandom> random = std::make_shared<FixedRandom>();
   std::shared_ptr<lugh::keys::KeyringManager> keyrings = std::make_shared<lugh::keys::KeyringManager>(
-      logger, files, random, std::make_shared<ScriptedConsole>(), std::make_shared<MapEnvironment>(), "/state", test_pool());
+      logger, files, std::make_shared<ScriptedConsole>(), std::make_shared<MapEnvironment>(), "/state", test_pool());
   lugh::keys::Keyring keyring;
 };
 

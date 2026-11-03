@@ -14,7 +14,6 @@
 #include "lugh/core/secure_bytes.h"
 #include "lugh/core/status.h"
 #include "lugh/crypto/argon2.h"
-#include "lugh/system/random.h"
 
 namespace lugh::authn {
 
@@ -31,7 +30,7 @@ inline constexpr std::size_t kPasswordSaltBytes = 16;
 inline constexpr std::size_t kPasswordHashBytes = 32;
 
 // A new hash of `secret` under `params`, with a fresh salt.
-Result<PasswordHash> hash_password(std::span<const unsigned char> secret, const crypto::Argon2Costs& params, system::Random& random);
+Result<PasswordHash> hash_password(std::span<const unsigned char> secret, const crypto::Argon2Costs& params);
 
 // Constant time over the hash. False for a hash whose costs are out of bounds, without
 // spending anything on it.

@@ -23,4 +23,12 @@ using SecureBuffer = dannan::identity::SecureBuffer;
 
 inline std::span<const unsigned char> byte_span(std::string_view text) { return {reinterpret_cast<const unsigned char*>(text.data()), text.size()}; }
 
+// `count` bytes from Dannan's generator, made in secure memory: a key, a token, a password.
+// Throws std::runtime_error if the generator fails. Bytes that are not secret (an id, a
+// salt) are dannan::identity::random_bytes.
+inline SecureBuffer secure_random(std::size_t count) {
+  const auto secret = dannan::identity::Secret::random(count);
+  return SecureBuffer(secret.reveal().begin(), secret.reveal().end());
+}
+
 }  // namespace lugh

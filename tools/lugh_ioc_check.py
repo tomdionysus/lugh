@@ -53,8 +53,6 @@ ADAPTERS = {
     "lugh/system/system_environment.cpp",
     "lugh/loggers/logger_stdio.h",  # LoggerStdIO: stamps each line with the time
     "lugh/loggers/logger_stdio.cpp",
-    "lugh/system/system_random.h",  # SystemRandom: OpenSSL's CSPRNG
-    "lugh/system/system_random.cpp",
     "lugh/system/system_files.h",  # SystemFiles: the keyring on disk
     "lugh/system/system_files.cpp",
     "lugh/system/system_console.h",  # SystemConsole: a passphrase typed without echo

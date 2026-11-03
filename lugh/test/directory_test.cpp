@@ -178,11 +178,6 @@ TEST_F(DirectoryTest, GroupUpdates) {
   EXPECT_EQ(run(directory.update_group(admin, group.id, {std::nullopt, "x"}, group.version)).fault, Fault::conflict);
 }
 
-TEST_F(DirectoryTest, NoRandomnessNoUser) {
-  rig.random->fail = true;
-  EXPECT_EQ(run(directory.create_user(admin, {Kind::person, "alice", "a@example.com", ""})).fault, Fault::failed);
-}
-
 TEST_F(DirectoryTest, EveryChangeNamesItsActor) {
   rig.person("alice");
   const auto entry = run(rig.audit->entries(1, 1)).at(0);

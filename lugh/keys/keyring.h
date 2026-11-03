@@ -16,7 +16,6 @@
 #include "lugh/core/secure_bytes.h"
 #include "lugh/core/status.h"
 #include "lugh/keys/keyring_format.h"
-#include "lugh/system/random.h"
 
 namespace lugh::keys {
 
@@ -56,7 +55,7 @@ class Keyring {
 
   // A new key for the name, one epoch past the newest (the first is epoch 1). The answer is
   // the new epoch.
-  Result<std::uint32_t> rotate(std::string_view name, system::Random& random);
+  Result<std::uint32_t> rotate(std::string_view name);
 
   // A key made elsewhere: another node's, delivered when this one joins.
   Status add(DataKey key);

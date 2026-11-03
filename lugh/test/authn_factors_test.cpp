@@ -82,7 +82,7 @@ TEST_F(FactorsTest, TheUsedStepSurvivesARestart) {
   const auto setup = confirmed_totp();
   const auto code = rig.code_for(setup.secret);
   ASSERT_TRUE(run(factors.totp_check(alice.id, code)).ok());
-  Factors again(rig.logger, rig.store, rig.random, rig.wall, rig.audit, test_pool(), kTestArgon2);
+  Factors again(rig.logger, rig.store, rig.wall, rig.audit, test_pool(), kTestArgon2);
   EXPECT_EQ(run(again.totp_check(alice.id, code)).fault, Fault::refused);
 }
 
@@ -190,11 +190,4 @@ TEST_F(FactorsTest, RecordsRoundTripAndRefuseTheRest) {
 
   totp.last_step.reset();
   EXPECT_FALSE(decode_totp(encode(totp))->last_step);
-}
-
-TEST_F(FactorsTest, NoRandomnessNoFactor) {
-  rig.random->fail = true;
-  EXPECT_EQ(run(factors.totp_begin(rig.admin, alice.id, "Lugh", "alice")).fault, Fault::failed);
-  EXPECT_EQ(run(factors.recovery_generate(rig.admin, alice.id)).fault, Fault::failed);
-  EXPECT_TRUE(run(factors.list(alice.id)).empty());
 }

@@ -18,7 +18,6 @@
 
 #include "lugh/core/secure_bytes.h"
 #include "lugh/core/status.h"
-#include "lugh/system/random.h"
 
 namespace lugh::store {
 
@@ -90,7 +89,7 @@ struct FileHeader {
 };
 
 // A new header for a table, with a fresh id, sealed under the epoch's key.
-Result<FileHeader> make_file_header(std::string_view table, std::uint32_t epoch, std::span<const unsigned char> key, system::Random& random);
+Result<FileHeader> make_file_header(std::string_view table, std::uint32_t epoch, std::span<const unsigned char> key);
 
 Bytes encode_file_header(const FileHeader& header);
 

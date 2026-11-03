@@ -18,8 +18,8 @@
 #include <boost/asio/steady_timer.hpp>
 #include <set>
 
+#include "dannan/identity/crypto.h"
 #include "lugh/store/sealed_store.h"
-#include "lugh/test/fixtures/fixed_random.h"
 #include "lugh/test/fixtures/logger_mock.h"
 #include "lugh/test/fixtures/map_environment.h"
 #include "lugh/test/fixtures/memory_files.h"
@@ -61,13 +61,12 @@ TEST(AsyncStore, AWriteWaitingOnTheDiskHoldsNothingElseUp) {
   boost::asio::io_context io;
   auto files = std::make_shared<HeldFiles>(io.get_executor());
   auto logger = std::make_shared<MockLogger>();
-  auto random = std::make_shared<FixedRandom>();
-  auto keyrings = std::make_shared<lugh::keys::KeyringManager>(logger, files, random, std::make_shared<ScriptedConsole>(), std::make_shared<MapEnvironment>(),
-                                                               "/state", test_pool());
+  auto keyrings = std::make_shared<lugh::keys::KeyringManager>(logger, files, std::make_shared<ScriptedConsole>(), std::make_shared<MapEnvironment>(), "/state",
+                                                               test_pool());
   lugh::keys::KeyringHeader header;
-  header.id = random->bytes(16);
+  header.id = dannan::identity::random_bytes(16);
   auto keyring = lugh::keys::Keyring::create(header, lugh::Bytes(32, 0x5a)).value;
-  auto opened = run(lugh::store::SealedStore::open(logger, files, random, keyrings, keyring, "/state/store",
+  auto opened = run(lugh::store::SealedStore::open(logger, files, keyrings, keyring, "/state/store",
                                                    {lugh::store::TableSpec{"users", {name_index()}}, lugh::store::TableSpec{"groups", {}}}));
   ASSERT_TRUE(opened.ok) << opened.error;
   auto store = opened.value;

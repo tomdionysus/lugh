@@ -11,12 +11,11 @@
 
 namespace lugh::authn {
 
-Result<PasswordHash> hash_password(std::span<const unsigned char> secret, const crypto::Argon2Costs& params, system::Random& random) {
+Result<PasswordHash> hash_password(std::span<const unsigned char> secret, const crypto::Argon2Costs& params) {
   using Answer = Result<PasswordHash>;
   PasswordHash out;
   out.params = params;
-  out.salt = random.bytes(kPasswordSaltBytes);
-  if (out.salt.empty()) return Answer::failure("no randomness for a salt");
+  out.salt = dannan::identity::random_bytes(kPasswordSaltBytes);
 
   auto hashed = crypto::stretch(secret, out.salt, params, kPasswordHashBytes);
   if (!hashed.ok) return Answer::failure(hashed.error);

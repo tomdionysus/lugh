@@ -23,7 +23,7 @@ constexpr const char* kSource = "192.0.2.1";
 
 class GenesisTest : public ::testing::Test {
  protected:
-  lugh::Outcome<Secret> genesis() { return run(Genesis(rig.directory, rig.passwords, rig.links, rig.random, rig.audit).run()); }
+  lugh::Outcome<Secret> genesis() { return run(Genesis(rig.directory, rig.passwords, rig.links, rig.audit).run()); }
 
   AuthnRig rig;
 };
@@ -62,17 +62,10 @@ TEST_F(GenesisTest, NotOnADirectoryWithAnyoneInIt) {
 
 TEST_F(GenesisTest, EachGenesisAPasswordOfItsOwn) {
   const auto first = genesis().value;
-  // Another cluster, whose randomness has gone another way.
+  // Another cluster.
   AuthnRig other;
-  lugh::SecureBuffer skip(7);
-  other.random->fill(skip);
-  const auto second = run(Genesis(other.directory, other.passwords, other.links, other.random, other.audit).run()).value;
+  const auto second = run(Genesis(other.directory, other.passwords, other.links, other.audit).run()).value;
   EXPECT_FALSE(first == second);
-}
-
-TEST_F(GenesisTest, NoRandomnessNoPassword) {
-  rig.random->fail = true;
-  EXPECT_EQ(genesis().fault, Fault::failed);
 }
 
 TEST_F(GenesisTest, RootsFirstSignInIsEnrolment) {

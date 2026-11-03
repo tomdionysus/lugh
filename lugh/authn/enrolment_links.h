@@ -21,7 +21,6 @@
 #include "lugh/core/task.h"
 #include "lugh/directory/directory.h"
 #include "lugh/store/store.h"
-#include "lugh/system/random.h"
 
 namespace lugh::authn {
 
@@ -35,9 +34,8 @@ class EnrolmentLinks {
   static constexpr const char* kTable = "grants";
   static constexpr std::size_t kTokenBytes = 32;
 
-  EnrolmentLinks(std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random, const dannan::contract::WallClock& wall,
-                 std::shared_ptr<directory::Directory> directory, std::shared_ptr<audit::AuditLog> audit,
-                 std::chrono::seconds lifetime = std::chrono::hours(72));
+  EnrolmentLinks(std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall, std::shared_ptr<directory::Directory> directory,
+                 std::shared_ptr<audit::AuditLog> audit, std::chrono::seconds lifetime = std::chrono::hours(72));
 
   // A new token, base64url, for a person who is not enrolled. Any earlier link of theirs
   // stops working.
@@ -75,7 +73,6 @@ class EnrolmentLinks {
   Task<Outcome<std::pair<Link, std::uint64_t>>> _live(std::string key) const;
 
   std::shared_ptr<store::Store> _store;
-  std::shared_ptr<system::Random> _random;
   const dannan::contract::WallClock& _wall;
   std::shared_ptr<directory::Directory> _directory;
   std::shared_ptr<audit::AuditLog> _audit;

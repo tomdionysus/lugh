@@ -90,12 +90,10 @@ std::array<unsigned char, 32> BreachedPasswords::_fold_and_hash(std::span<const 
   return dannan::identity::sha256(folded).bytes;
 }
 
-Passwords::Passwords(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
-                     const dannan::contract::WallClock& wall, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs params,
-                     PasswordRules rules, BreachedPasswords breached)
+Passwords::Passwords(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+                     std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs params, PasswordRules rules, BreachedPasswords breached)
     : _logger(std::make_shared<loggers::LoggerScoped>("passwords", std::move(logger))),
       _store(std::move(store)),
-      _random(std::move(random)),
       _wall(wall),
       _audit(std::move(audit)),
       _hashing(std::move(hashing)),
@@ -123,8 +121,7 @@ Task<Outcome<>> Passwords::set(audit::Actor actor, directory::User user, Secret 
   if (user.kind != directory::Kind::person) co_return Answer::failure(Fault::refused, "a service has no password");
   if (const auto ok = acceptable(password, user); !ok.ok()) co_return ok;
 
-  auto hashed = co_await offload(
-      _hashing, [params = _params, random = _random, password = std::move(password)] { return hash_password(password.reveal(), params, *random); });
+  auto hashed = co_await offload(_hashing, [params = _params, password = std::move(password)] { return hash_password(password.reveal(), params); });
   if (!hashed.ok) co_return Answer::failure(Fault::failed, hashed.error);
 
   const auto written = co_await _store->put(kTable, user.id, encode(Credential{std::move(hashed.value), (_wall.unix_ms() / 1000)}));
@@ -146,12 +143,12 @@ Task<bool> Passwords::verify(std::string user_id, Secret password) {
     bool right = false;
     std::optional<PasswordHash> again;
   };
-  auto checked = co_await offload(_hashing, [params = _params, random = _random, hash = std::move(credential->hash), password = std::move(password)] {
+  auto checked = co_await offload(_hashing, [params = _params, hash = std::move(credential->hash), password = std::move(password)] {
     Checked out;
     const auto secret = password.reveal();
     out.right = verify_password(secret, hash);
     if (out.right && !same_costs(hash.params, params)) {
-      if (auto hashed = hash_password(secret, params, *random); hashed.ok) out.again = std::move(hashed.value);
+      if (auto hashed = hash_password(secret, params); hashed.ok) out.again = std::move(hashed.value);
     }
     return out;
   });

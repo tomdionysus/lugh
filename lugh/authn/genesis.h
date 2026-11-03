@@ -16,7 +16,6 @@
 #include "lugh/core/secret.h"
 #include "lugh/core/task.h"
 #include "lugh/directory/directory.h"
-#include "lugh/system/random.h"
 
 namespace lugh::authn {
 
@@ -35,7 +34,7 @@ class Genesis {
   static constexpr std::size_t kPasswordBytes = 18;
 
   Genesis(std::shared_ptr<directory::Directory> directory, std::shared_ptr<Passwords> passwords, std::shared_ptr<EnrolmentLinks> links,
-          std::shared_ptr<system::Random> random, std::shared_ptr<audit::AuditLog> audit);
+          std::shared_ptr<audit::AuditLog> audit);
 
   // Root's password. refused when the directory already has anyone in it: genesis happens
   // once.
@@ -45,7 +44,6 @@ class Genesis {
   std::shared_ptr<directory::Directory> _directory;
   std::shared_ptr<Passwords> _passwords;
   std::shared_ptr<EnrolmentLinks> _links;
-  std::shared_ptr<system::Random> _random;
   std::shared_ptr<audit::AuditLog> _audit;
 };
 

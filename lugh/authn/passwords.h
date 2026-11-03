@@ -25,7 +25,6 @@
 #include "lugh/loggers/logger.h"
 #include "lugh/store/store.h"
 #include "lugh/system/files.h"
-#include "lugh/system/random.h"
 
 namespace lugh::authn {
 
@@ -69,9 +68,8 @@ class Passwords : public directory::Dependent {
  public:
   static constexpr const char* kTable = "credentials";
 
-  Passwords(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, std::shared_ptr<system::Random> random,
-            const dannan::contract::WallClock& wall, std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs params, PasswordRules rules,
-            BreachedPasswords breached);
+  Passwords(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+            std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs params, PasswordRules rules, BreachedPasswords breached);
 
   // Whether the password may be used by this user, and if not, why, without saying what it
   // was: too short, too long, on the breached list, or the user's own name or address.
@@ -95,7 +93,6 @@ class Passwords : public directory::Dependent {
  private:
   std::shared_ptr<loggers::Logger> _logger;
   std::shared_ptr<store::Store> _store;
-  std::shared_ptr<system::Random> _random;
   const dannan::contract::WallClock& _wall;
   std::shared_ptr<audit::AuditLog> _audit;
   Executor _hashing;

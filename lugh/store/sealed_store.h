@@ -23,7 +23,6 @@
 #include "lugh/store/log_format.h"
 #include "lugh/store/store.h"
 #include "lugh/system/files.h"
-#include "lugh/system/random.h"
 
 namespace lugh::store {
 
@@ -54,8 +53,8 @@ class SealedStore : public Store {
   static constexpr std::size_t kCompactAfterBytes = 1024 * 1024;
 
   static Task<Result<std::shared_ptr<SealedStore>>> open(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files,
-                                                         std::shared_ptr<system::Random> random, std::shared_ptr<keys::KeyringManager> keyrings,
-                                                         keys::Keyring keyring, std::string directory, std::vector<TableSpec> tables);
+                                                         std::shared_ptr<keys::KeyringManager> keyrings, keys::Keyring keyring, std::string directory,
+                                                         std::vector<TableSpec> tables);
 
   Task<std::optional<Record>> get(std::string table, std::string key) const override;
   Task<std::optional<Record>> find(std::string table, std::string index, std::string value) const override;
@@ -107,8 +106,8 @@ class SealedStore : public Store {
     bool broken = false;
   };
 
-  SealedStore(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files, std::shared_ptr<system::Random> random,
-              std::shared_ptr<keys::KeyringManager> keyrings, keys::Keyring keyring, std::string directory);
+  SealedStore(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files, std::shared_ptr<keys::KeyringManager> keyrings,
+              keys::Keyring keyring, std::string directory);
 
   Task<Status> _open_table(TableSpec spec);
   Task<Status> _load_keys(Table& table);
@@ -121,7 +120,6 @@ class SealedStore : public Store {
 
   std::shared_ptr<loggers::Logger> _logger;
   std::shared_ptr<system::Files> _files;
-  std::shared_ptr<system::Random> _random;
   std::shared_ptr<keys::KeyringManager> _keyrings;
   std::string _directory;
 

@@ -109,7 +109,7 @@ const DataKey* Keyring::find(std::string_view name, std::uint32_t epoch) const {
   return nullptr;
 }
 
-Result<std::uint32_t> Keyring::rotate(std::string_view name, system::Random& random) {
+Result<std::uint32_t> Keyring::rotate(std::string_view name) {
   using Answer = Result<std::uint32_t>;
   if (!valid_key_name(name)) return Answer::failure("a data key's name is 1 to 64 of a-z, 0-9 and _");
   if (_keys.size() >= kMostDataKeys) return Answer::failure("the keyring is full");
@@ -121,8 +121,7 @@ Result<std::uint32_t> Keyring::rotate(std::string_view name, system::Random& ran
   DataKey key;
   key.name = std::string(name);
   key.epoch = epoch;
-  key.key.resize(kDataKeyBytes);
-  if (!random.fill(key.key)) return Answer::failure("no randomness for a data key");
+  key.key = secure_random(kDataKeyBytes);
 
   _keys.push_back(std::move(key));
   return Answer::success(epoch);

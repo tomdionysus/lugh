@@ -31,22 +31,20 @@ std::map<std::string, std::vector<std::string>> index_values(const TableSpec& sp
 
 }  // namespace
 
-SealedStore::SealedStore(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files, std::shared_ptr<system::Random> random,
-                         std::shared_ptr<keys::KeyringManager> keyrings, keys::Keyring keyring, std::string directory)
+SealedStore::SealedStore(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files, std::shared_ptr<keys::KeyringManager> keyrings,
+                         keys::Keyring keyring, std::string directory)
     : _logger(std::make_shared<loggers::LoggerScoped>("store", std::move(logger))),
       _files(std::move(files)),
-      _random(std::move(random)),
       _keyrings(std::move(keyrings)),
       _directory(std::move(directory)),
       _keyring(std::move(keyring)) {}
 
 Task<Result<std::shared_ptr<SealedStore>>> SealedStore::open(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files,
-                                                             std::shared_ptr<system::Random> random, std::shared_ptr<keys::KeyringManager> keyrings,
-                                                             keys::Keyring keyring, std::string directory, std::vector<TableSpec> tables) {
+                                                             std::shared_ptr<keys::KeyringManager> keyrings, keys::Keyring keyring, std::string directory,
+                                                             std::vector<TableSpec> tables) {
   using Answer = Result<std::shared_ptr<SealedStore>>;
 
-  std::shared_ptr<SealedStore> store(
-      new SealedStore(std::move(logger), std::move(files), std::move(random), std::move(keyrings), std::move(keyring), std::move(directory)));
+  std::shared_ptr<SealedStore> store(new SealedStore(std::move(logger), std::move(files), std::move(keyrings), std::move(keyring), std::move(directory)));
 
   if (const auto made = co_await store->_files->make_directory(store->_directory); !made.ok) co_return Answer::failure(made.error);
 
@@ -65,7 +63,7 @@ Task<Status> SealedStore::_load_keys(Table& table) {
   const auto& name = table.spec.name;
 
   if (_keyring.current(name) == nullptr) {
-    if (const auto made = _keyring.rotate(name, *_random); !made.ok) co_return Status::failure(made.error);
+    if (const auto made = _keyring.rotate(name); !made.ok) co_return Status::failure(made.error);
     if (const auto saved = co_await _keyrings->save(_keyring); !saved.ok) co_return saved;
     _logger->info("Made the first data key for table " + name);
   }
@@ -88,7 +86,7 @@ Task<Status> SealedStore::_open_table(TableSpec spec) {
   if (const auto loaded = co_await _load_keys(*table); !loaded.ok) co_return refuse(path, loaded.error);
 
   if (!co_await _files->exists(path)) {
-    const auto header = make_file_header(table->spec.name, table->epoch, table->keys.at(table->epoch), *_random);
+    const auto header = make_file_header(table->spec.name, table->epoch, table->keys.at(table->epoch));
     if (!header.ok) co_return refuse(path, header.error);
     if (const auto written = co_await _files->write(path, encode_file_header(header.value), false); !written.ok) co_return written;
   }
@@ -358,7 +356,7 @@ Task<Status> SealedStore::_compact(Table& table) {
     was = table.length;
 
     const auto& key = table.keys.at(epoch);
-    const auto header = make_file_header(name, epoch, key, *_random);
+    const auto header = make_file_header(name, epoch, key);
     if (!header.ok) co_return Status::failure(header.error);
 
     file = encode_file_header(header.value);
@@ -399,7 +397,7 @@ Task<Status> SealedStore::rotate(std::string name) {
   std::uint32_t epoch = 0;
   {
     auto keyring = co_await _keyring_lock.lock();
-    const auto rotated = _keyring.rotate(table->spec.name, *_random);
+    const auto rotated = _keyring.rotate(table->spec.name);
     if (!rotated.ok) co_return Status::failure(rotated.error);
     // Saved before anything is sealed under it: a crash after this leaves a key unused,
     // never a record without its key.

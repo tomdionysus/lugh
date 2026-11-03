@@ -44,7 +44,6 @@ add_library(lugh STATIC
     system/system_console.cpp
     system/system_environment.cpp
     system/system_files.cpp
-    system/system_random.cpp
 )
 
 target_include_directories(lugh

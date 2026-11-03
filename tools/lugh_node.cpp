@@ -46,7 +46,6 @@
 #include "lugh/system/system_console.h"
 #include "lugh/system/system_environment.h"
 #include "lugh/system/system_files.h"
-#include "lugh/system/system_random.h"
 #include "lugh/version.h"
 
 namespace {
@@ -112,7 +111,6 @@ struct Ports {
   std::shared_ptr<loggers::Logger> logger;
   const dannan::contract::TimeSource& time;
   const dannan::contract::WallClock& wall;
-  std::shared_ptr<system::Random> random;
   std::shared_ptr<system::Files> files;
   std::shared_ptr<system::Console> console;
   std::shared_ptr<keys::KeyringManager> keyrings;
@@ -140,16 +138,16 @@ Task<int> genesis(Ports ports, keys::Keyring keyring, std::string state_director
   };
 
   const auto opened =
-      co_await store::SealedStore::open(ports.logger, ports.files, ports.random, ports.keyrings, std::move(keyring), state_directory + "/store", all_tables());
+      co_await store::SealedStore::open(ports.logger, ports.files, ports.keyrings, std::move(keyring), state_directory + "/store", all_tables());
   if (!opened.ok) co_return failed(opened.error);
   const auto audit = co_await audit::AuditLog::open(ports.logger, opened.value, ports.wall);
   if (!audit.ok) co_return failed(audit.error);
 
-  auto directory = std::make_shared<directory::Directory>(ports.logger, opened.value, ports.random, ports.wall, audit.value);
-  auto passwords = std::make_shared<authn::Passwords>(ports.logger, opened.value, ports.random, ports.wall, audit.value, ports.hashing, crypto::Argon2Costs{},
+  auto directory = std::make_shared<directory::Directory>(ports.logger, opened.value, ports.wall, audit.value);
+  auto passwords = std::make_shared<authn::Passwords>(ports.logger, opened.value, ports.wall, audit.value, ports.hashing, crypto::Argon2Costs{},
                                                       authn::PasswordRules{}, authn::BreachedPasswords{});
-  auto links = std::make_shared<authn::EnrolmentLinks>(opened.value, ports.random, ports.wall, directory, audit.value);
-  const auto password = co_await authn::Genesis(directory, passwords, links, ports.random, audit.value).run();
+  auto links = std::make_shared<authn::EnrolmentLinks>(opened.value, ports.wall, directory, audit.value);
+  const auto password = co_await authn::Genesis(directory, passwords, links, audit.value).run();
   if (!password.ok()) co_return failed(password.message);
 
   ports.logger->info("Genesis: root, in administrators");
@@ -210,8 +208,8 @@ Task<Result<Services>> start(Ports ports, Config config) {
   auto keyring = co_await ports.keyrings->open();
   if (!keyring.ok) co_return Answer::failure(keyring.error);
 
-  auto opened = co_await store::SealedStore::open(logger, ports.files, ports.random, ports.keyrings, std::move(keyring.value),
-                                                  config.state_directory + "/store", all_tables());
+  auto opened =
+      co_await store::SealedStore::open(logger, ports.files, ports.keyrings, std::move(keyring.value), config.state_directory + "/store", all_tables());
   if (!opened.ok) co_return Answer::failure(opened.error);
   warn_if_unlocked(*logger);
 
@@ -230,14 +228,14 @@ Task<Result<Services>> start(Ports ports, Config config) {
   }
 
   const auto& store = services.store;
-  services.directory = std::make_shared<directory::Directory>(logger, store, ports.random, ports.wall, services.audit);
-  auto passwords = std::make_shared<authn::Passwords>(logger, store, ports.random, ports.wall, services.audit, ports.hashing, crypto::Argon2Costs{},
-                                                      authn::PasswordRules{}, std::move(breached));
-  services.factors = std::make_shared<authn::Factors>(logger, store, ports.random, ports.wall, services.audit, ports.hashing);
+  services.directory = std::make_shared<directory::Directory>(logger, store, ports.wall, services.audit);
+  auto passwords = std::make_shared<authn::Passwords>(logger, store, ports.wall, services.audit, ports.hashing, crypto::Argon2Costs{}, authn::PasswordRules{},
+                                                      std::move(breached));
+  services.factors = std::make_shared<authn::Factors>(logger, store, ports.wall, services.audit, ports.hashing);
   services.directory->dependent_add(passwords);
   services.directory->dependent_add(services.factors);
   services.policies = std::make_shared<authn::Policies>(store, services.directory, services.audit);
-  services.links = std::make_shared<authn::EnrolmentLinks>(store, ports.random, ports.wall, services.directory, services.audit);
+  services.links = std::make_shared<authn::EnrolmentLinks>(store, ports.wall, services.directory, services.audit);
   // Reached by the API now, and by the sign-in routes from P6.
   services.authenticator = std::make_shared<authn::Authenticator>(logger, ports.time, services.directory, passwords, services.factors, services.policies,
                                                                   services.links, services.audit, authn::Authenticator::Settings{});
@@ -254,7 +252,6 @@ int run(const cli::Options& options) {
   const auto& time = dannan::contract::steady_time_source();
   const auto& wall = dannan::contract::system_wall_clock();
   auto environment = std::make_shared<system::SystemEnvironment>();
-  auto random = std::make_shared<system::SystemRandom>();
 
   logger->info(std::string("Lugh ") + LUGH_VERSION);
 
@@ -286,8 +283,8 @@ int run(const cli::Options& options) {
 
   auto files = std::make_shared<system::SystemFiles>(blocking.get_executor());
   auto console = std::make_shared<system::SystemConsole>(blocking.get_executor());
-  auto keyrings = std::make_shared<keys::KeyringManager>(logger, files, random, console, environment, config.state_directory, hashing.get_executor());
-  const Ports ports{logger, time, wall, random, files, console, keyrings, blocking.get_executor(), hashing.get_executor()};
+  auto keyrings = std::make_shared<keys::KeyringManager>(logger, files, console, environment, config.state_directory, hashing.get_executor());
+  const Ports ports{logger, time, wall, files, console, keyrings, blocking.get_executor(), hashing.get_executor()};
 
   if (options.command == cli::Command::init) return run_until(io_context, run_init(options, ports, config.state_directory));
 

@@ -18,7 +18,6 @@
 #include "lugh/core/encoding.h"
 #include "lugh/directory/directory.h"
 #include "lugh/store/tables.h"
-#include "lugh/test/fixtures/counting_random.h"
 #include "lugh/test/fixtures/logger_mock.h"
 #include "lugh/test/fixtures/memory_store.h"
 #include "lugh/test/fixtures/pools.h"
@@ -45,21 +44,21 @@ inline std::vector<lugh::store::TableSpec> all_tables() {
 // Costs small enough for a test to hash freely; the hashing is Argon2id all the same.
 inline constexpr lugh::crypto::Argon2Costs kTestArgon2{64, 1, 1};
 
-// The directory and authn, wired as main wires them, over a MemoryStore, stepped time and
-// CountingRandom, with hashing on a pool of real threads. The helpers here run their
+// The directory and authn, wired as main wires them, over a MemoryStore and stepped time,
+// with hashing on a pool of real threads. The helpers here run their
 // coroutines to the end, for tests that are not coroutines.
 class AuthnRig {
  public:
   explicit AuthnRig(lugh::authn::BreachedPasswords breached = {}, lugh::authn::Authenticator::Settings settings = {}) {
     audit = run(lugh::audit::AuditLog::open(logger, store, wall)).value;
-    directory = std::make_shared<lugh::directory::Directory>(logger, store, random, wall, audit);
-    passwords = std::make_shared<lugh::authn::Passwords>(logger, store, random, wall, audit, test_pool(), kTestArgon2, lugh::authn::PasswordRules{},
-                                                         std::move(breached));
-    factors = std::make_shared<lugh::authn::Factors>(logger, store, random, wall, audit, test_pool(), kTestArgon2);
+    directory = std::make_shared<lugh::directory::Directory>(logger, store, wall, audit);
+    passwords =
+        std::make_shared<lugh::authn::Passwords>(logger, store, wall, audit, test_pool(), kTestArgon2, lugh::authn::PasswordRules{}, std::move(breached));
+    factors = std::make_shared<lugh::authn::Factors>(logger, store, wall, audit, test_pool(), kTestArgon2);
     directory->dependent_add(passwords);
     directory->dependent_add(factors);
     policies = std::make_shared<lugh::authn::Policies>(store, directory, audit);
-    links = std::make_shared<lugh::authn::EnrolmentLinks>(store, random, wall, directory, audit);
+    links = std::make_shared<lugh::authn::EnrolmentLinks>(store, wall, directory, audit);
     authenticator = std::make_shared<lugh::authn::Authenticator>(logger, time, directory, passwords, factors, policies, links, audit, settings);
   }
 
@@ -120,7 +119,6 @@ class AuthnRig {
 
   dannan::test::SteppedTime time;
   dannan::test::SteppedWall wall{1792281600000ull};
-  std::shared_ptr<CountingRandom> random = std::make_shared<CountingRandom>();
   std::shared_ptr<lugh::audit::AuditLog> audit;
   std::shared_ptr<lugh::directory::Directory> directory;
   std::shared_ptr<lugh::authn::Passwords> passwords;
