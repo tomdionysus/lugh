@@ -117,6 +117,16 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   Dannan's `Lock`) are not caught; a `getenv` planted in a library file was named and failed
   it. A plain-text prefilter keeps the scan near 0.2 s in a debug build. Unit count 335 to
   339; `ctest` 5 to 4.
+- No Python, second part: the shutdown, `init` and API process tests are GoogleTest tests in
+  `lugh_tests` (`node_process_shutdown_test.cpp`, `node_process_init_test.cpp`,
+  `node_process_api_test.cpp`), check for check what the Python ones did, over a fixture
+  (`lugh/test/fixtures/node_process.h`) on Dannan's `ChildProcess`. Dannan gave
+  `ChildProcess` an environment, standard input, a pseudo-terminal, raw reads and any signal
+  for them (ca029bb, Lugh's pin until the next tag; the pin is now `LUGH_DANNAN_REF`, a tag
+  or a commit). The certificate is made in-process rather than by the `openssl` command,
+  and every request and wait has a deadline. `test/process/` and the ctest entries are gone;
+  `ctest` runs `lugh_tests` alone. Seven tests where there were three scripts: 339 to 346,
+  passing in the debug, ASan and TSan builds.
 
 ## 2026-10-18: P5, the management API (not committed)
 

@@ -4,15 +4,14 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here
 
-2026-11-04: **Aligning with Dannan and Dagda** on `feature/dannan-alignment`, one commit per step, nothing pushed (COMPLETED.md, "Aligning with Dannan and Dagda", says what each step did and what it cost in tests). The stack, its seams and the maintainer's rules are in `../dagda/TODO/2026-11-03-stack.md`; Lugh must not duplicate Dannan or Dagda, and the three share one style, convention and layout. Done so far: the header and layout; Dannan's SHA-256, compare, hex, Argon2id, signing, time sources, secure memory, codec, HKDF, AES-GCM, `Secret`, randomness, logging (text and JSON sinks), checked locks and test temp directories; HMAC-SHA-1 kept inside TOTP. Dannan is pinned to its release tag 0.2.0 (`LUGH_DANNAN_TAG`) and linked as `dannan::dannan`.
+2026-11-04: **Aligning with Dannan and Dagda** on `feature/dannan-alignment`, one commit per step, nothing pushed (COMPLETED.md, "Aligning with Dannan and Dagda", says what each step did and what it cost in tests). The stack, its seams and the maintainer's rules are in `../dagda/TODO/2026-11-03-stack.md`; Lugh must not duplicate Dannan or Dagda, and the three share one style, convention and layout. Done so far: the header and layout; Dannan's SHA-256, compare, hex, Argon2id, signing, time sources, secure memory, codec, HKDF, AES-GCM, `Secret`, randomness, logging (text and JSON sinks), checked locks and test temp directories; HMAC-SHA-1 kept inside TOTP. Dannan is pinned by `LUGH_DANNAN_REF` to ca029bb, its 0.2.0 release with the `ChildProcess` options the process tests use; move it to the next tag when Dannan cuts one. Linked as `dannan::dannan`.
 
 Not next: the keyring's root from Dannan's key custody. The sealed store and `keys/` are frozen until Dagda carries Lugh's spaces and are deleted then (the maintainer: "Keep the store until Dagda"; the stack document's table), when Lugh's keys come from Dagda's domains under Dannan's custody through the Context (`derive_local`, `derive_key`). Rewiring them now would be work on code that is going. Until then they are changed only as far as the rest of the alignment needs.
 
 Next, in order:
-1. Process tests in GoogleTest, and no Python anywhere (the maintainer, 2026-11-04, for all the projects): `test/process/{shutdown,init,api}_test.py` become GoogleTest tests that start the real `lugh-node`, and the IoC check (`tools/lugh_ioc_check.py`) moves out of Python too.
-2. Callback style (the maintainer: "Lugh goes callback style"; Dannan's shape: one shared state per operation on a strand, the deadline and the caller's executor, completion posted there and never inline) for the directory, authn, API, HTTP and node layers. The frozen sealed store, keyring, `Files` and `Console` keep their coroutines behind a thin adapter until Dagda replaces them (the maintainer, 2026-11-04). `Task<T>`, `offload` and `AsyncMutex` go with the last of their users.
-3. Errors as `CONTRIBUTING.md` says (throw what could not happen), with the callback change.
-4. `docs/architecture.md` rewritten around the stack.
+1. Callback style (the maintainer: "Lugh goes callback style"; Dannan's shape: one shared state per operation on a strand, the deadline and the caller's executor, completion posted there and never inline) for the directory, authn, API, HTTP and node layers. The frozen sealed store, keyring, `Files` and `Console` keep their coroutines behind a thin adapter until Dagda replaces them (the maintainer, 2026-11-04). `Task<T>`, `offload` and `AsyncMutex` go with the last of their users.
+2. Errors as `CONTRIBUTING.md` says (throw what could not happen), with the callback change.
+3. `docs/architecture.md` rewritten around the stack.
 
 Not yet tried on Linux: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DONTDUMP` are written for Ubuntu 26.04's systemd and kernel, and only the macOS paths have run. Check them on the first node.
 

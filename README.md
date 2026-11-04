@@ -21,10 +21,10 @@ being worked on: [TODO/ACTIVE.md](TODO/ACTIVE.md); what shipped:
 ```text
 lugh/<subsystem>/   the library: headers and sources side by side
 lugh/include/lugh/  the public headers
-lugh/test/          GoogleTest, flat, one binary (lugh_tests); fixtures in lugh/test/fixtures/
+lugh/test/          GoogleTest, flat, one binary (lugh_tests), the real binary's tests among
+                    them (node_process_*); fixtures in lugh/test/fixtures/
 lugh/fuzz/          libFuzzer targets, one per parser of untrusted bytes
 tools/              lugh-node (the service), the development certificate and keyring
-test/process/       the real binary's tests: shutdown, init, the API
 config/             config.yaml, no secrets
 deploy/             the systemd unit and host setup
 docs/               how it works
@@ -33,8 +33,8 @@ TODO/               now and next (ACTIVE.md), and what shipped (COMPLETED.md)
 
 ## Build
 
-Boost 1.87 or newer (Asio, Beast, JSON, all header-only), OpenSSL 3, yaml-cpp, GoogleTest,
-Python 3 and a C++20 compiler.
+Dannan (fetched from `../dannan`), Boost 1.87 or newer (Asio, Beast, JSON, all header-only),
+OpenSSL 3, yaml-cpp, GoogleTest and a C++20 compiler.
 
 ```bash
 cmake --preset debug && cmake --build build -j8
@@ -76,8 +76,9 @@ to everyone.
 ## Test
 
 ```bash
-./build/lugh_tests                           # the unit suite
-ctest --test-dir build --output-on-failure   # that, and the shutdown, init and API tests
+./build/lugh_tests                           # every test: the units, the IoC check, and the
+                                             # shutdown, init and API tests on the real binary
+ctest --test-dir build --output-on-failure   # the same, as the install's gate
 ```
 
 ## Deploy

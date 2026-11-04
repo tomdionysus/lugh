@@ -42,13 +42,14 @@ find_package(yaml-cpp REQUIRED)
 # (the presets say where).
 find_package(OpenSSL 3.0 REQUIRED)
 
-# Dannan, the network layer Lugh hosts on (and Dagda, the store, built beside it), at a
-# release tag: from the sibling checkout, cloned into the build tree, so building Lugh never
-# touches ../dannan. Linked as dannan::dannan, the name an installed Dannan exports too
-# (find_package(dannan 0.2 CONFIG)).
+# Dannan, the network layer Lugh hosts on, at a release tag, or at a commit while Lugh needs
+# something not yet tagged: from the sibling checkout, cloned into the build tree, so
+# building Lugh never touches ../dannan. Linked as dannan::dannan, the name an installed
+# Dannan exports too (find_package(dannan 0.2 CONFIG)). Now: 0.2.0 and the ChildProcess
+# options Lugh's process tests use (ca029bb), until the next tag carries them.
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_TAG "0.2.0")
+set(LUGH_DANNAN_REF "ca029bb35fe69c7b86a602d075a885ffe027f789")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -58,7 +59,7 @@ elseif (LUGH_SANITIZE STREQUAL "thread")
     add_link_options(-fsanitize=thread)
 endif()
 include(FetchContent)
-FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_TAG}")
+FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_REF}")
 set(DANNAN_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(dannan)
 
@@ -140,33 +141,15 @@ add_subdirectory(tools)
 
 # ------------------------------------------------------------------- tests
 #
-# One GoogleTest binary, lugh_tests: run it directly for the unit suite. ctest runs it too,
-# beside the process tests (test/process/), and gates the install.
+# One GoogleTest binary, lugh_tests, holds every test: the units, the IoC check, and the
+# process tests that run the real lugh-node (node_process_*). ctest runs it, and gates the
+# install.
 
 if (LUGH_BUILD_TESTING)
     enable_testing()
     find_package(GTest REQUIRED)
-    find_package(Python3 COMPONENTS Interpreter REQUIRED)
     add_subdirectory(lugh/test)
-
     add_test(NAME unit COMMAND lugh_tests)
-
-    # The real binary stops on SIGTERM and SIGINT, promptly and with status 0.
-    add_test(NAME shutdown
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/process/shutdown_test.py $<TARGET_FILE:lugh-node>)
-
-    # `lugh-node init` and the start that follows it, with a credential and with a passphrase.
-    add_test(NAME init
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/process/init_test.py $<TARGET_FILE:lugh-node>)
-
-    # /api/v1 through the real binary: after genesis, nothing opens it until P6.
-    add_test(NAME api
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/process/api_test.py $<TARGET_FILE:lugh-node>)
-
-    # The process tests' temporary files and directories go inside the build tree too.
-    file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/test-tmp")
-    set_tests_properties(shutdown init api PROPERTIES ENVIRONMENT "TMPDIR=${PROJECT_BINARY_DIR}/test-tmp")
-
 endif()
 
 # -------------------------------------------------------------------- fuzz

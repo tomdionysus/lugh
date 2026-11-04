@@ -49,13 +49,15 @@ Lugh keeps CMake presets, the stack's one exception (the maintainer, 2026-11-04:
 of auth"): `debug` (into `build/`), `release`, `asan`, `tsan` and `fuzz`, each into
 `build-<preset>/` except `debug`. They carry the MacPorts paths.
 
-Dannan is fetched from `../dannan` at the release tag `LUGH_DANNAN_TAG` names
-(0.2.0), into the build tree, and linked as `dannan::dannan`; building Lugh never
-touches the sibling checkout.
+Dannan is fetched from `../dannan` at `LUGH_DANNAN_REF` (a release tag, or a
+commit while Lugh needs something not yet tagged), into the build tree, and
+linked as `dannan::dannan`; building Lugh never touches the sibling checkout.
 
-Run `lugh_tests` for the unit suite. `ctest` runs it too, beside what only a
-whole process shows: the shutdown, `init` and API tests in `test/process/`,
-which drive the real `lugh-node`. Everything runs on a
+Run `lugh_tests`: every test is in it, the units, the IoC check, and what only
+a whole process shows, the shutdown, `init` and API tests that drive the real
+`lugh-node` (`node_process_*`, through Dannan's `ChildProcess`). `ctest` runs
+the same binary, as the install's gate. There is no Python in Lugh, as in the
+rest of the stack (the maintainer, 2026-11-04). Everything runs on a
 developer machine (MacPorts for every dependency on the laptop); there is no
 hosted CI. `-DLUGH_BUILD_FUZZING=ON` builds the fuzz targets under a clang that
 has libFuzzer.
@@ -71,8 +73,7 @@ GoogleTest from MacPorts is not instrumented, and where its copy of libc++'s
 container code meets the instrumented one ASan reports an overflow that is not
 one.
 
-Tests write only inside the build tree: Dannan's `TempDir` (`build/test-tmp`),
-and `TMPDIR` there for the process tests. Time is stepped (Dannan's
+Tests write only inside the build tree: Dannan's `TempDir` (`build/test-tmp`). Time is stepped (Dannan's
 `SteppedTime` and `SteppedWall`), never slept. Cryptography Lugh owns is tested
 against the published vectors (RFC 4226 and RFC 6238 for TOTP, RFC 4648 for
 base32 and base64url); Dannan tests its own primitives against theirs.
@@ -115,8 +116,7 @@ TODO/ACTIVE.md, COMPLETED.md the plan and the record
 CLAUDE.md, CONTRIBUTING.md   the rules (CLAUDE.md is gitignored globally)
 ```
 
-Lugh's own beside these: `test/process/`, the tests that drive the real
-`lugh-node`; `config/`, the shipped configuration; `deploy/`, the systemd unit
+Lugh's own beside these: `config/`, the shipped configuration; `deploy/`, the systemd unit
 and host preparation; and `CMakePresets.json`, which Dannan and Dagda do not have.
 
 A file pair holds one component: a class and what serves only it. Names are

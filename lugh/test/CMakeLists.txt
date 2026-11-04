@@ -42,6 +42,9 @@ add_executable(lugh_tests
     node_cli_test.cpp
     node_config_test.cpp
     node_ioc_check_test.cpp
+    node_process_api_test.cpp
+    node_process_init_test.cpp
+    node_process_shutdown_test.cpp
     store_async_test.cpp
     store_contract_test.cpp
     store_log_format_test.cpp
@@ -57,6 +60,13 @@ endif()
 target_compile_definitions(lugh_tests PRIVATE DANNAN_TEST_TEMP_ROOT="${PROJECT_BINARY_DIR}/test-tmp")
 # The IoC check reads the source tree.
 target_compile_definitions(lugh_tests PRIVATE LUGH_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+# The process tests (node_process_*) run the real lugh-node, built first. Dannan's
+# ChildProcess puts a child on a pseudo-terminal, which is libutil's on Linux.
+add_dependencies(lugh_tests lugh-node)
+target_compile_definitions(lugh_tests PRIVATE LUGH_NODE_BINARY="$<TARGET_FILE:lugh-node>")
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_libraries(lugh_tests PRIVATE util)
+endif()
 target_precompile_headers(lugh_tests
     PRIVATE
         <boost/asio.hpp>
