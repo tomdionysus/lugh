@@ -64,6 +64,8 @@ struct Bearer {
   std::optional<std::string> jkt;
   // The thumbprint of the certificate the token is bound to (cnf.x5t#S256, RFC 8705), if it is.
   std::optional<std::string> x5t;
+  // Presented as an opaque handle, not as the JWT.
+  bool opaque = false;
 };
 
 // What an id_token_hint says (OIDC RP-Initiated Logout 1.0).
@@ -79,11 +81,16 @@ struct IdTokenHint {
 // and its scopes are cut to what those audiences can use. An ID token (OIDC Core 2) is made
 // when openid was granted: iss, sub, aud (the client), exp, iat, auth_time, nonce, acr, amr,
 // azp, sid, at_hash, and the claims profile, email and groups allow, with the application's
-// roles for the person's groups. Made with std::make_shared.
+// roles for the person's groups. An application registered for opaque tokens gets a random
+// handle in place of its access token, which only Lugh can read: at userinfo and introspection,
+// never at /api/v1. What stands behind a handle is the signed token, held in memory on this node
+// until P8. Made with std::make_shared.
 class TokenIssuer : public std::enable_shared_from_this<TokenIssuer> {
  public:
   TokenIssuer(std::shared_ptr<const tokens::SigningKeys> keys, std::string issuer, const dannan::contract::WallClock& wall,
               const dannan::contract::TimeSource& time, std::shared_ptr<directory::Directory> directory, std::shared_ptr<scopes::Grants> grants);
+
+  static constexpr const char* kOpaquePrefix = "lo_";
 
   const std::string& issuer() const { return _issuer; }
 
@@ -123,6 +130,8 @@ class TokenIssuer : public std::enable_shared_from_this<TokenIssuer> {
 
  private:
   std::uint64_t _now() const { return _wall.unix_ms() / 1000; }
+  // What the application is given for this signed access token.
+  std::string _as_issued(const apps::App& app, std::string signed_token) const;
 
   std::shared_ptr<const tokens::SigningKeys> _keys;
   std::string _issuer;
@@ -131,6 +140,8 @@ class TokenIssuer : public std::enable_shared_from_this<TokenIssuer> {
   std::shared_ptr<scopes::Grants> _grants;
   // The jti of each access token revoked, kept as long as any access token lives.
   std::shared_ptr<Expiring<bool>> _revoked;
+  // The signed token behind each opaque handle, kept as long as any access token lives.
+  std::shared_ptr<Expiring<std::string>> _opaque;
 };
 
 // The audiences an application's access tokens carry: its registered ones, or, for one that

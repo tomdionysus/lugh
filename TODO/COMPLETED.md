@@ -2,6 +2,12 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O10d, opaque access tokens
+
+- An application registered with `opaque_access_tokens` now gets what it asked for: a `lo_` handle in place of the JWT, read at introspection and userinfo, never at `/api/v1`. The signed token stands behind it, so binding, revocation and expiry are the JWT's, and `at_hash` and a DPoP proof's `ath` are over the handle the client holds.
+- For the maintainer to confirm: held in memory on the node until P8, not in `grants` as the plan has it, because `verify` never waits.
+- Tests: 518 to 521, green in the debug, ASan and TSan builds, repeated and shuffled.
+
 ## 2026-11-04: P6 step O10c, the whole flow on the real binary
 
 - `node_process_oauth_test.cpp`: root signs in and enrols, registers an application through the API, consents, redeems the code, reads userinfo and refreshes; the sign-out reaches a real HTTPS server over a verified post, and the logout token checks out against the published keys; the old cookie and the refresh token are dead after it. The same across a restart between sign-in and sign-out. Nothing secret reaches the log.

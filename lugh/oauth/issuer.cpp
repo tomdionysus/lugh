@@ -59,7 +59,13 @@ TokenIssuer::TokenIssuer(std::shared_ptr<const tokens::SigningKeys> keys, std::s
       _directory(std::move(directory)),
       _grants(std::move(grants)),
       // An access token lives an hour at most, and a minute's skew after.
-      _revoked(std::make_shared<Expiring<bool>>(time, std::chrono::seconds(3600 + 120), 100000)) {}
+      _revoked(std::make_shared<Expiring<bool>>(time, std::chrono::seconds(3600 + 120), 100000)),
+      _opaque(std::make_shared<Expiring<std::string>>(time, std::chrono::seconds(3600 + 120), 100000)) {}
+
+std::string TokenIssuer::_as_issued(const apps::App& app, std::string signed_token) const {
+  if (!app.opaque_access_tokens) return signed_token;
+  return kOpaquePrefix + _opaque->put(std::move(signed_token));
+}
 
 void TokenIssuer::revoke_access(const Bearer& bearer) {
   if (const auto jti = bearer.claims.if_contains("jti"); jti && jti->is_string()) _revoked->put_as(std::string(jti->as_string()), true);
@@ -144,7 +150,7 @@ void TokenIssuer::for_person(apps::App app, CodeGrant grant, Deadline deadline, 
       if (cnf) access["cnf"] = *cnf;
 
       Issued issued;
-      issued.access_token = tokens::jws_sign(*signer->key, signer->kid, "at+jwt", access);
+      issued.access_token = self->_as_issued(app, tokens::jws_sign(*signer->key, signer->kid, "at+jwt", access));
       if (cnf && cnf->contains("jkt")) issued.token_type = "DPoP";
       issued.expires_in = app.access_seconds;
       issued.scopes = scopes;
@@ -190,7 +196,7 @@ Outcome<Issued> TokenIssuer::for_client(const apps::App& app, const std::vector<
   access["scope"] = scopes::join(scopes);
   if (cnf) access["cnf"] = *cnf;
   Issued issued;
-  issued.access_token = tokens::jws_sign(*signer->key, signer->kid, "at+jwt", access);
+  issued.access_token = _as_issued(app, tokens::jws_sign(*signer->key, signer->kid, "at+jwt", access));
   if (cnf && cnf->contains("jkt")) issued.token_type = "DPoP";
   issued.expires_in = app.access_seconds;
   issued.scopes = scopes;
@@ -226,7 +232,12 @@ std::optional<std::string> TokenIssuer::logout_token(const std::string& client_i
 }
 
 std::optional<Bearer> TokenIssuer::verify(std::string_view token, std::optional<std::string_view> audience) const {
-  const auto jws = tokens::jws_parse(token);
+  std::optional<std::string> behind;
+  if (token.starts_with(kOpaquePrefix)) {
+    behind = _opaque->peek(token.substr(std::string_view(kOpaquePrefix).size()));
+    if (!behind) return std::nullopt;
+  }
+  const auto jws = tokens::jws_parse(behind ? std::string_view(*behind) : token);
   if (!jws || jws->typ != "at+jwt" || !tokens::jws_verify(*jws, _keys->published())) return std::nullopt;
   const auto& claims = jws->claims;
   const auto iss = claims.if_contains("iss");
@@ -254,6 +265,7 @@ std::optional<Bearer> TokenIssuer::verify(std::string_view token, std::optional<
   bearer.subject = std::string(sub->as_string());
   bearer.client_id = std::string(client->as_string());
   bearer.service = bearer.subject == bearer.client_id;
+  bearer.opaque = behind.has_value();
   if (const auto cnf = claims.if_contains("cnf"); cnf && cnf->is_object()) {
     const auto jkt = cnf->as_object().if_contains("jkt");
     const auto x5t = cnf->as_object().if_contains("x5t#S256");

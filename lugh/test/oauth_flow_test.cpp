@@ -66,7 +66,7 @@ class OAuthFlowTest : public ::testing::Test {
   }
 
   // A web application allowed to staff; first party unless said otherwise.
-  std::pair<lugh::apps::App, std::string> register_web(bool first_party = true, std::uint8_t grants = lugh::apps::kAuthorizationCode) {
+  std::pair<lugh::apps::App, std::string> register_web(bool first_party = true, std::uint8_t grants = lugh::apps::kAuthorizationCode, bool opaque = false) {
     lugh::apps::App draft;
     draft.name = "Client";
     draft.kind = lugh::apps::Kind::web;
@@ -76,6 +76,7 @@ class OAuthFlowTest : public ::testing::Test {
     draft.scopes = {"openid", "profile", "email", "groups", "lugh:directory.read"};
     draft.audiences = {"lugh"};
     draft.first_party = first_party;
+    draft.opaque_access_tokens = opaque;
     auto made = wait_for<lugh::Outcome<lugh::apps::Apps::Made>>(
         [&](lugh::Executor executor, auto done) { rig.apps->create(rig.admin, draft, kTestDeadline, executor, done); });
     EXPECT_TRUE(made.ok()) << made.message;
@@ -243,6 +244,88 @@ TEST_F(OAuthFlowTest, ConsentForThirdParties) {
   const auto again = rig.get(rig.get(authorize_target(app.client_id, "&prompt=consent")).location());
   const auto denied = rig.post("/oauth2/consent", {{"csrf", again.csrf()}, {"id", again.between("name=\"id\" value=\"", "\"")}, {"decision", "deny"}});
   EXPECT_EQ(query_value(denied.location(), "error"), "access_denied");
+}
+
+// The application gets a handle that says nothing; Lugh reads it for whoever may ask.
+TEST_F(OAuthFlowTest, AnOpaqueAccessToken) {
+  const auto [app, secret] = register_web(true, lugh::apps::kAuthorizationCode, true);
+
+  const auto first = rig.get(authorize_target(app.client_id));
+  const auto tokens = redeem(app.client_id, secret, query_value(sign_in_through(first.location()), "code"));
+  ASSERT_EQ(tokens.status, 200u) << tokens.body;
+  const auto body = boost::json::parse(tokens.body);
+  const auto access = std::string(body.at("access_token").as_string());
+  ASSERT_EQ(access.rfind("lo_", 0), 0u);
+  EXPECT_FALSE(lugh::tokens::jws_parse(access));
+
+  // The ID token's at_hash is of what the client was given (OIDC Core 3.1.3.6).
+  const auto digest = dannan::identity::sha256(lugh::byte_span(access));
+  const auto expected = lugh::encoding::base64url(std::span<const unsigned char>(digest.bytes).first(16));
+  EXPECT_EQ(claims_of(std::string(body.at("id_token").as_string())).at("at_hash"), boost::json::value(expected));
+
+  // Good at userinfo, and read by introspection with the same claims a JWT would carry.
+  const auto bearer = std::vector<std::pair<std::string, std::string>>{{"Authorization", "Bearer " + access}};
+  EXPECT_EQ(rig.request(verb::get, "/oauth2/userinfo", {}, bearer).status, 200u);
+  const auto looked = rig.request(verb::post, "/oauth2/introspect", {{"token", access}}, {{"Authorization", basic(app.client_id, secret)}});
+  ASSERT_EQ(looked.status, 200u) << looked.body;
+  const auto claims = boost::json::parse(looked.body);
+  EXPECT_EQ(claims.at("active"), true);
+  EXPECT_EQ(claims.at("sub"), boost::json::value(alice.id));
+  EXPECT_EQ(claims.at("client_id"), boost::json::value(app.client_id));
+
+  // Never at the API, though its audiences name it and its scopes would do.
+  EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, bearer).status, 401u);
+
+  // A handle Lugh did not make, and one revoked.
+  EXPECT_EQ(rig.request(verb::get, "/oauth2/userinfo", {}, {{"Authorization", "Bearer lo_madeup"}}).status, 401u);
+  EXPECT_EQ(rig.request(verb::post, "/oauth2/revoke", {{"token", access}}, {{"Authorization", basic(app.client_id, secret)}}).status, 200u);
+  EXPECT_EQ(rig.request(verb::get, "/oauth2/userinfo", {}, bearer).status, 401u);
+  const auto after = rig.request(verb::post, "/oauth2/introspect", {{"token", access}}, {{"Authorization", basic(app.client_id, secret)}});
+  EXPECT_EQ(boost::json::parse(after.body).at("active"), false);
+}
+
+// Its life is the signed token's.
+TEST_F(OAuthFlowTest, AnOpaqueAccessTokenExpires) {
+  const auto [app, secret] = register_web(true, lugh::apps::kAuthorizationCode, true);
+  const auto first = rig.get(authorize_target(app.client_id));
+  const auto tokens = redeem(app.client_id, secret, query_value(sign_in_through(first.location()), "code"));
+  const auto access = std::string(boost::json::parse(tokens.body).at("access_token").as_string());
+  const auto bearer = std::vector<std::pair<std::string, std::string>>{{"Authorization", "Bearer " + access}};
+  EXPECT_EQ(rig.request(verb::get, "/oauth2/userinfo", {}, bearer).status, 200u);
+  rig.advance(std::chrono::seconds(300 + 61));
+  EXPECT_EQ(rig.request(verb::get, "/oauth2/userinfo", {}, bearer).status, 401u);
+}
+
+// A client acting for itself, and bound to its key: the proof is over the handle it was given.
+TEST_F(OAuthFlowTest, AnOpaqueTokenBoundToAKey) {
+  lugh::apps::App draft;
+  draft.name = "hub";
+  draft.kind = lugh::apps::Kind::service;
+  draft.auth = lugh::apps::ClientAuth::client_secret_basic;
+  draft.grants = lugh::apps::kClientCredentials;
+  draft.client_scopes = {"lugh:directory.read"};
+  draft.audiences = {"lugh"};
+  draft.sender = lugh::apps::SenderConstraint::dpop;
+  draft.opaque_access_tokens = true;
+  const auto made = wait_for<lugh::Outcome<lugh::apps::Apps::Made>>(
+      [&](lugh::Executor executor, auto done) { rig.apps->create(rig.admin, draft, kTestDeadline, executor, done); });
+  ASSERT_TRUE(made.ok()) << made.message;
+  const auto credential = basic(made.value.app.client_id, std::string(lugh::secret_text(*made.value.secret)));
+  DpopClient client;
+  const auto now = rig.wall.unix_ms() / 1000;
+  const auto issued = rig.request(verb::post, "/oauth2/token", {{"grant_type", "client_credentials"}},
+                                  {{"Authorization", credential}, {"DPoP", client.proof("POST", std::string(SigninRig::kIssuer) + "/oauth2/token", now)}});
+  ASSERT_EQ(issued.status, 200u) << issued.body;
+  const auto access = std::string(boost::json::parse(issued.body).at("access_token").as_string());
+  ASSERT_EQ(access.rfind("lo_", 0), 0u);
+  const auto looked = rig.request(verb::post, "/oauth2/introspect", {{"token", access}}, {{"Authorization", credential}});
+  ASSERT_EQ(looked.status, 200u) << looked.body;
+  const auto claims = boost::json::parse(looked.body);
+  EXPECT_EQ(claims.at("active"), true);
+  EXPECT_EQ(claims.at("cnf").at("jkt"), boost::json::value(lugh::oauth::jwk_thumbprint({"", client.key.algorithm(), client.key.public_key()})));
+  // The API refuses it however it is presented.
+  const auto users = std::string(SigninRig::kIssuer) + "/api/v1/users";
+  EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, {{"Authorization", "DPoP " + access}, {"DPoP", client.proof("GET", users, now, access)}}).status, 401u);
 }
 
 // form-action 'self' follows a form's redirects, so what follows a form leaves Lugh by a page,

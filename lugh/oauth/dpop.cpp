@@ -133,7 +133,8 @@ std::optional<Bearer> presented_token(const TokenIssuer& issuer, DpopChecker& dp
 
 std::optional<http::Caller> api_caller(const TokenIssuer& issuer, DpopChecker& dpop, const http::HttpRequest& request) {
   const auto bearer = presented_token(issuer, dpop, request, issuer.issuer(), "lugh");
-  if (!bearer) return std::nullopt;
+  // The API takes JWTs only: a handle is for the application's own resource servers.
+  if (!bearer || bearer->opaque) return std::nullopt;
   return http::Caller{bearer->service ? http::Caller::Kind::service : http::Caller::Kind::user, bearer->subject, bearer->scopes};
 }
 

@@ -74,6 +74,11 @@ are the application's, or its own `client_id` if it registered none. A client ac
 has its `client_id` as `sub`. Scopes are cut to what the audiences can use. A token verifier
 needs the JWKS and nothing else from Lugh.
 
+An application registered with `opaque_access_tokens` gets a random handle (`lo_...`) in its place,
+which says nothing to anyone but Lugh. A resource server reads it at `/oauth2/introspect`, which
+answers the same claims; it is good at userinfo, and it is bound, revoked and expires as a JWT is.
+`/api/v1` takes JWTs only.
+
 **ID tokens** (`typ` `JWT`): `iss`, `sub`, `aud`, `azp`, `exp`, `iat`, `auth_time`, `nonce`, `acr`,
 `amr`, `sid`, `at_hash`, the claims `profile`, `email` and `groups` allow, and the application's
 roles for the person's groups. Role mappings appear in the ID token and userinfo, not in access
@@ -124,14 +129,13 @@ Until Lugh runs on Dagda (P8), these are in one node's memory, and a restart for
 - codes, pushed requests, waiting authorisation requests and device grants;
 - the revocation of an access token, so an access token stopped on one node is good at another
   until it expires;
+- what stands behind an opaque access token, so a restart ends it and the client refreshes;
 - back-channel logouts waiting to be delivered.
 
 Sessions, refresh tokens, consents, applications and signing keys are in the store and survive.
 
 ## Not built
 
-- `opaque_access_tokens` is accepted and stored but not yet honoured: the application still gets
-  a JWT.
 - `phr`, and WebAuthn with it: P11. An application requiring `phr` is refused until then.
 - Dynamic client registration, front-channel logout, and the implicit and password grants: never,
   or not planned.
