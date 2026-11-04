@@ -15,7 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "lugh/core/task.h"
+#include "lugh/core/completion.h"
 #include "lugh/http/caller.h"
 #include "lugh/http/http_types.h"
 #include "lugh/http/rate_limiter.h"
@@ -38,6 +38,9 @@ struct RouteContext {
 
   std::shared_ptr<HttpResponse> response;
 
+  // Where the handler is run and is answered by what it calls.
+  Executor executor;
+
   // Sends the response. Call once, on any thread; a second call does nothing.
   std::function<void()> done;
 
@@ -52,14 +55,16 @@ struct RouteContext {
 };
 
 // Method, path and the scope that admits it, in one table: authorisation is part of
-// declaring a route, not something a handler remembers to do. Every handler is a coroutine,
-// spawned on the router's executor once the credential, the limits and the scope have been
-// checked in memory; it awaits the store, the hashing pool or anything else without holding
-// a thread, and answers by calling done(). At most `most_in_flight` run at once: past that
-// a request is answered 503 at once, never queued.
+// declaring a route, not something a handler remembers to do. A handler is run on the
+// router's executor once the credential, the limits and the scope have been checked in
+// memory; it starts what it needs in Dannan's shape (core/completion.h), answered on
+// context.executor, and answers the request by calling done(). A request is in flight from
+// then until done(); at most `most_in_flight` are, and past that one is answered 503 at
+// once, never queued. A handler that throws while starting is answered 500; what it starts
+// answers through done(), and does not throw.
 class Router : public std::enable_shared_from_this<Router> {
  public:
-  using Handler = std::function<Task<void>(RouteContext)>;
+  using Handler = std::function<void(RouteContext)>;
 
   static constexpr std::size_t kMostInFlight = 256;
 
@@ -105,7 +110,7 @@ class Router : public std::enable_shared_from_this<Router> {
   static std::unordered_map<std::string, std::string> _parse_query(const std::string& query);
 
   std::shared_ptr<Throttle> _throttle;
-  void _spawn(const Handler& handler, RouteContext context);
+  void _dispatch(const Handler& handler, RouteContext context);
 
   Executor _executor;
   std::shared_ptr<CallerResolver> _resolver;

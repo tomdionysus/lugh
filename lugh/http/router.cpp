@@ -7,7 +7,7 @@
 
 #include "lugh/http/router.h"
 
-#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/post.hpp>
 #include <cctype>
 #include <utility>
 
@@ -95,14 +95,14 @@ void Router::_handle(const std::string& prefix, const HttpRequest& request, cons
         return next(false);
       }
 
-      return _spawn(route.handler, std::move(context));
+      return _dispatch(route.handler, std::move(context));
     }
 
     if (const auto wait = _throttle->take(_source_key(remote), _throttle->limits().open)) {
       write_too_many(response, *wait);
       return next(false);
     }
-    return _spawn(route.handler, std::move(context));
+    return _dispatch(route.handler, std::move(context));
   }
 
   // Unknown endpoints are limited too, against scanning.
@@ -120,7 +120,7 @@ void Router::_handle(const std::string& prefix, const HttpRequest& request, cons
   next(false);
 }
 
-void Router::_spawn(const Handler& handler, RouteContext context) {
+void Router::_dispatch(const Handler& handler, RouteContext context) {
   auto held = _in_flight.load();
   do {
     if (held >= _most_in_flight) {
@@ -130,14 +130,23 @@ void Router::_spawn(const Handler& handler, RouteContext context) {
     }
   } while (!_in_flight.compare_exchange_weak(held, held + 1));
 
-  auto response = context.response;
-  auto done = context.done;
-  boost::asio::co_spawn(_executor, handler(std::move(context)), [self = shared_from_this(), response, done](std::exception_ptr failure) {
-    --self->_in_flight;
-    if (!failure) return;
-    // A handler that threw has said nothing useful; what it was is not for the caller.
-    write_error(response, status::internal_server_error, "failed", "the request could not be completed");
-    done();
+  // In flight until it is answered, once, however it is.
+  auto self = shared_from_this();
+  context.done = [self, send = std::move(context.done), released = std::make_shared<std::atomic<bool>>(false)] {
+    if (!released->exchange(true)) --self->_in_flight;
+    send();
+  };
+  context.executor = _executor;
+  boost::asio::post(_executor, [handler, context = std::move(context)]() mutable {
+    const auto response = context.response;
+    const auto done = context.done;
+    try {
+      handler(std::move(context));
+    } catch (const std::exception&) {
+      // A handler that threw has said nothing useful; what it was is not for the caller.
+      write_error(response, status::internal_server_error, "failed", "the request could not be completed");
+      done();
+    }
   });
 }
 

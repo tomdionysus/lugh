@@ -9,7 +9,7 @@
 
 #include "lugh/api/api_support.h"
 #include "lugh/api/scopes.h"
-#include "lugh/core/awaited.h"
+#include "lugh/core/steps.h"
 
 namespace lugh::api {
 
@@ -38,67 +38,63 @@ PolicyRoutes::PolicyRoutes(std::shared_ptr<authn::Policies> policies, std::share
 
 void PolicyRoutes::register_routes(http::Router& router) {
   using http::verb;
-  router.add(verb::get, "/api/v1/policies", kDirectoryRead, [this](http::RouteContext context) -> Task<void> { return _get(std::move(context)); });
-  router.add(verb::put, "/api/v1/policies/global", kPoliciesWrite,
-             [this](http::RouteContext context) -> Task<void> { return _set_global(std::move(context)); });
-  router.add(verb::put, "/api/v1/policies/groups/{id}", kPoliciesWrite,
-             [this](http::RouteContext context) -> Task<void> { return _set_group(std::move(context)); });
+  router.add(verb::get, "/api/v1/policies", kDirectoryRead, [this](http::RouteContext context) { _get(std::move(context)); });
+  router.add(verb::put, "/api/v1/policies/global", kPoliciesWrite, [this](http::RouteContext context) { _set_global(std::move(context)); });
+  router.add(verb::put, "/api/v1/policies/groups/{id}", kPoliciesWrite, [this](http::RouteContext context) { _set_group(std::move(context)); });
 }
 
-Task<void> PolicyRoutes::_get(http::RouteContext context) const {
-  boost::json::object body;
-  body["global"] = std::string(authn::acr(co_await awaited_value<authn::Assurance>(
-      [&](Executor executor, Done<Outcome<authn::Assurance>> done) { _policies->global(kTransitionDeadline, std::move(executor), std::move(done)); })));
-  boost::json::array groups;
-  for (const auto& group : co_await awaited_value<std::vector<directory::Group>>([&](Executor executor, Done<Outcome<std::vector<directory::Group>>> done) {
-         _directory->groups(kTransitionDeadline, std::move(executor), std::move(done));
-       })) {
-    const auto level = co_await awaited_value<std::optional<authn::Assurance>>([&](Executor executor, Done<Outcome<std::optional<authn::Assurance>>> done) {
-      _policies->group(group.id, kTransitionDeadline, std::move(executor), std::move(done));
+void PolicyRoutes::_get(http::RouteContext context) const {
+  const auto policies = _policies;
+  const auto directory = _directory;
+  policies->global(kRouteDeadline, context.executor, [=](Outcome<authn::Assurance> global) {
+    if (!global.ok()) return answer_fault(context, global);
+    directory->groups(kRouteDeadline, context.executor, [=](Outcome<std::vector<directory::Group>> groups) {
+      if (!groups.ok()) return answer_fault(context, groups);
+      auto own = std::make_shared<boost::json::array>();
+      auto failed = std::make_shared<std::optional<Outcome<>>>();
+      in_turn<directory::Group>(
+          std::make_shared<std::vector<directory::Group>>(std::move(groups.value)), 0,
+          [=](const directory::Group& group, std::function<void()> next) {
+            if (*failed) return next();
+            policies->group(group.id, kRouteDeadline, context.executor, [=, id = group.id](Outcome<std::optional<authn::Assurance>> level) {
+              if (!level.ok()) {
+                *failed = Outcome<>::from(level);
+              } else if (level.value) {
+                boost::json::object one;
+                one["group"] = id;
+                one["acr"] = std::string(authn::acr(*level.value));
+                own->push_back(std::move(one));
+              }
+              next();
+            });
+          },
+          [=] {
+            if (*failed) return answer_fault(context, **failed);
+            boost::json::object body;
+            body["global"] = std::string(authn::acr(global.value));
+            body["groups"] = std::move(*own);
+            answer_json(context, http::status::ok, body);
+          });
     });
-    if (!level) continue;
-    boost::json::object one;
-    one["group"] = group.id;
-    one["acr"] = std::string(authn::acr(*level));
-    groups.push_back(std::move(one));
-  }
-  body["groups"] = std::move(groups);
-  http::write_json(context.response, http::status::ok, body);
-  context.done();
+  });
 }
 
-Task<void> PolicyRoutes::_set_global(http::RouteContext context) {
+void PolicyRoutes::_set_global(http::RouteContext context) {
   std::optional<authn::Assurance> level;
-  if (!acr_member(context, false, level)) {
-    context.done();
-    co_return;
-  }
-  const auto set = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
-    _policies->global_set(actor_of(context), *level, kTransitionDeadline, std::move(executor), std::move(done));
+  if (!acr_member(context, false, level)) return context.done();
+  _policies->global_set(actor_of(context), *level, kRouteDeadline, context.executor, [this, context](Outcome<> set) {
+    if (!set.ok()) return answer_fault(context, set);
+    _get(context);
   });
-  if (!set.ok()) {
-    write_fault(context.response, set);
-    context.done();
-    co_return;
-  }
-  co_await _get(std::move(context));
 }
 
-Task<void> PolicyRoutes::_set_group(http::RouteContext context) {
+void PolicyRoutes::_set_group(http::RouteContext context) {
   std::optional<authn::Assurance> level;
-  if (!acr_member(context, true, level)) {
-    context.done();
-    co_return;
-  }
-  const auto set = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
-    _policies->group_set(actor_of(context), context.parameter("id"), level, kTransitionDeadline, std::move(executor), std::move(done));
+  if (!acr_member(context, true, level)) return context.done();
+  _policies->group_set(actor_of(context), context.parameter("id"), level, kRouteDeadline, context.executor, [this, context](Outcome<> set) {
+    if (!set.ok()) return answer_fault(context, set);
+    _get(context);
   });
-  if (!set.ok()) {
-    write_fault(context.response, set);
-    context.done();
-    co_return;
-  }
-  co_await _get(std::move(context));
 }
 
 }  // namespace lugh::api

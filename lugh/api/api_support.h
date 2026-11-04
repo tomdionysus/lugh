@@ -44,13 +44,30 @@ inline void write_fault(const std::shared_ptr<http::HttpResponse>& response, Fau
     case Fault::failed:
       break;
   }
-  // The store or the randomness: what failed is in the log, not the response.
-  http::write_error(response, http::status::internal_server_error, "failed", "the change could not be made; nothing was changed");
+  // The store, the randomness or the deadline: what failed is in the log, not the response.
+  // Past a deadline a change may yet land, so this does not say nothing changed.
+  http::write_error(response, http::status::internal_server_error, "failed", "the request could not be completed");
 }
 
 template <typename T>
 void write_fault(const std::shared_ptr<http::HttpResponse>& response, const Outcome<T>& outcome) {
   write_fault(response, outcome.fault, outcome.message);
+}
+
+// What a route gives each component it calls.
+inline constexpr Deadline kRouteDeadline = std::chrono::seconds(10);
+
+// The refusal, sent.
+template <typename T>
+void answer_fault(const http::RouteContext& context, const Outcome<T>& outcome) {
+  write_fault(context.response, outcome);
+  context.done();
+}
+
+// The body, sent.
+inline void answer_json(const http::RouteContext& context, http::status status, const boost::json::value& body) {
+  http::write_json(context.response, status, body);
+  context.done();
 }
 
 // A strong ETag (RFC 9110, section 8.8.3) of the record's version.

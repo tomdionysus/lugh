@@ -35,11 +35,10 @@ struct Fixture {
   explicit Fixture(RateLimits limits = {{1000, 1000}}) { router = std::make_shared<Router>(io.get_executor(), std::make_shared<Throttle>(time, limits)); }
 
   void ok_route(http::verb method, const std::string& pattern) {
-    router->add_open(method, pattern, [](RouteContext context) -> lugh::Task<void> {
+    router->add_open(method, pattern, [](RouteContext context) {
       context.response->result(http::status::ok);
       context.response->body() = "id=" + context.parameter("id") + " from " + context.remote;
       context.done();
-      co_return;
     });
   }
 };
@@ -55,10 +54,9 @@ TEST(Router, PassesOnWhatIsNotUnderItsPrefix) {
 
 TEST(Router, AnOpenRouteAnswers) {
   Fixture f;
-  f.router->add_open(http::verb::get, "/health", [](RouteContext context) -> lugh::Task<void> {
+  f.router->add_open(http::verb::get, "/health", [](RouteContext context) {
     context.response->body() = "ok";
     context.done();
-    co_return;
   });
 
   const auto result = call(f.io, f.router->middleware("/health"), http::verb::get, "/health");
@@ -76,10 +74,9 @@ TEST(Router, PathParametersAreDecodedAndTheRemoteIsPassed) {
 
 TEST(Router, QueryIsParsedAndDoesNotAffectMatching) {
   Fixture f;
-  f.router->add_open(http::verb::get, "/api/v1/things", [](RouteContext context) -> lugh::Task<void> {
+  f.router->add_open(http::verb::get, "/api/v1/things", [](RouteContext context) {
     context.response->body() = context.query["a"] + "|" + context.query["b"] + "|" + std::to_string(context.query.count("c"));
     context.done();
-    co_return;
   });
 
   const auto result = call(f.io, f.router->middleware("/api/"), http::verb::get, "/api/v1/things?a=1+2&b=%41&c");
@@ -102,10 +99,7 @@ TEST(Router, KnownPathWrongMethodIs405) {
 
 TEST(Router, OpenRoutesAreLimitedByClientAddress) {
   Fixture f(RateLimits{{2, 1}});
-  f.router->add_open(http::verb::get, "/health", [](RouteContext context) -> lugh::Task<void> {
-    context.done();
-    co_return;
-  });
+  f.router->add_open(http::verb::get, "/health", [](RouteContext context) { context.done(); });
   const auto middleware = f.router->middleware("/health");
 
   EXPECT_EQ(call(f.io, middleware, http::verb::get, "/health").response->result(), http::status::ok);
@@ -160,18 +154,14 @@ struct Protected {
     router = std::make_shared<Router>(io.get_executor(), std::make_shared<Throttle>(time, limits), with_resolver ? std::make_shared<FixedResolver>() : nullptr,
                                       most_in_flight);
     for (const auto* scope : {"read", "write"}) {
-      router->add(http::verb::get, std::string("/api/") + scope, scope, [this](RouteContext context) -> lugh::Task<void> {
+      router->add(http::verb::get, std::string("/api/") + scope, scope, [this](RouteContext context) {
         ++ran;
         seen = context.caller.id;
         context.response->result(http::status::ok);
         context.done();
-        co_return;
       });
     }
-    router->add(http::verb::get, "/api/throws", "read", [](RouteContext) -> lugh::Task<void> {
-      throw std::runtime_error("a handler that fails");
-      co_return;
-    });
+    router->add(http::verb::get, "/api/throws", "read", [](RouteContext) { throw std::runtime_error("a handler that fails"); });
   }
 
   // Sent, and the io_context run until nothing is left.

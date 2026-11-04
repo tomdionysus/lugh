@@ -25,9 +25,9 @@ class PolicyRoutes {
   void register_routes(http::Router& router);
 
  private:
-  Task<void> _get(http::RouteContext context) const;
-  Task<void> _set_global(http::RouteContext context);
-  Task<void> _set_group(http::RouteContext context);
+  void _get(http::RouteContext context) const;
+  void _set_global(http::RouteContext context);
+  void _set_group(http::RouteContext context);
 
   std::shared_ptr<authn::Policies> _policies;
   std::shared_ptr<directory::Directory> _directory;

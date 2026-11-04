@@ -180,6 +180,15 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   answered `Step::Kind::failed`, the kind that was always meant for it. Every authn
   component and the directory and audit log are now callback style; the routes, router
   and node still reach them through the bridge. 353, in the debug, ASan and TSan builds.
+- Callback style, the router and every route. A handler is a plain function, run on the
+  router's executor with that executor in its context; a request is in flight until it is
+  answered, once, and one that throws while starting is answered 500 as before. The routes
+  call the directory, authn and the audit log directly, one chain each, with a deadline
+  each (`kRouteDeadline`), and answer a failed read as a 500 rather than by throwing. The
+  500 now says "the request could not be completed", not "nothing was changed": past a
+  deadline a change may yet land. The API fuzz target's handler follows (syntax-checked
+  with the library's flags; no libFuzzer here to build it). 353, in the debug, ASan and TSan
+  builds.
 
 ## 2026-10-18: P5, the management API (not committed)
 

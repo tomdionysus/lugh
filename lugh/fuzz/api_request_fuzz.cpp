@@ -39,7 +39,7 @@ std::shared_ptr<lugh::http::Router> make_router() {
   using namespace lugh;
   auto router = std::make_shared<http::Router>(io.get_executor(), std::make_shared<http::Throttle>(still_time, http::RateLimits{{0, 0}, {0, 0}}),
                                                std::make_shared<Everyone>());
-  const auto handler = [](http::RouteContext context) -> Task<void> {
+  const auto handler = [](http::RouteContext context) {
     const auto precondition = api::if_match(context);
     std::optional<std::string> name;
     std::optional<bool> flag;
@@ -52,7 +52,6 @@ std::shared_ptr<lugh::http::Router> make_router() {
     }
     (void)context.parameter("id");
     context.done();
-    co_return;
   };
   for (const auto* pattern : {"/api/v1/users", "/api/v1/users/{id}", "/api/v1/users/{id}/factors/{factor}", "/api/v1/groups/{id}/members/{user}"}) {
     for (const auto method : {http::verb::get, http::verb::post, http::verb::patch, http::verb::put, http::verb::delete_}) {

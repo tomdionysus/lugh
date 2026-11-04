@@ -27,16 +27,16 @@ class UserRoutes {
   void register_routes(http::Router& router);
 
  private:
-  Task<void> _list(http::RouteContext context) const;
-  Task<void> _create(http::RouteContext context);
-  Task<void> _get(http::RouteContext context) const;
-  Task<void> _update(http::RouteContext context);
-  Task<void> _remove(http::RouteContext context);
-  Task<void> _groups(http::RouteContext context) const;
-  Task<void> _factors(http::RouteContext context) const;
-  Task<void> _remove_factor(http::RouteContext context);
-  Task<void> _reset_factors(http::RouteContext context);
-  Task<void> _enrolment(http::RouteContext context);
+  void _list(http::RouteContext context) const;
+  void _create(http::RouteContext context);
+  void _get(http::RouteContext context) const;
+  void _update(http::RouteContext context);
+  void _remove(http::RouteContext context);
+  void _groups(http::RouteContext context) const;
+  void _factors(http::RouteContext context) const;
+  void _remove_factor(http::RouteContext context);
+  void _reset_factors(http::RouteContext context);
+  void _enrolment(http::RouteContext context);
 
   std::shared_ptr<directory::Directory> _directory;
   std::shared_ptr<authn::Factors> _factor_store;
