@@ -99,6 +99,10 @@ class Sessions : public std::enable_shared_from_this<Sessions> {
   // that opens none, or a session expired. Never waits.
   std::optional<Session> find(std::string_view handle);
 
+  // Whether a live session has this sid: what a refresh token's family is bound to. From
+  // memory; never waits.
+  bool live_sid(std::string_view sid) const;
+
   // The session's CSRF token, which every request through it that changes anything carries.
   static std::string csrf_token(const Session& session);
   static bool csrf_ok(const Session& session, std::string_view token);

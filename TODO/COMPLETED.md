@@ -2,6 +2,14 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O8a, refresh tokens, revocation and introspection
+
+- `lugh/oauth/refresh_tokens.h`: refresh tokens as the maintainer decided, replicated with the session and single use by the family's version. A token is `rt.<family>.<secret>`; the family, in the sealed `grants` table, keeps only the hash of the newest secret. Rotation writes the family at the version it read; a token that is not the newest, or the loser of two rotations racing, is reuse, and revokes the family (RFC 9700 section 4.14.2). A family ends with its Lugh session (`Sessions::live_sid`), at the application's idle and absolute lifetimes, and when revoked. A refresh may narrow the scopes, never widen them, and makes no new ID token.
+- The token endpoint takes `refresh_token`, and a code exchange gives one to an application with that grant.
+- `/oauth2/revoke` (RFC 7009): the client's own refresh token's family, or its access token, refused by jti until it expires (held in memory on the node; every node holds its own until P8). Always 200.
+- `/oauth2/introspect` (RFC 7662): for the client that holds a token, or an api among an access token's audiences; never for a public client.
+- Tests: 458 to 464 (rotation and reuse, narrowing, the session's end, the idle lifetime, revocation, introspection), green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: P6 step O7, the authorisation code flow
 
 - `lugh/oauth/request.h`: the authorisation request checked as RFC 6749, RFC 7636 and OIDC Core have it, with Lugh's profile: response_type code only, the redirect URI exactly as registered (any port on a native app's loopback URI, RFC 8252), PKCE S256 required, state required, a nonce with openid, prompt none, login or consent, max_age and acr_values. A request whose client or redirect URI cannot be trusted is refused on a page of Lugh's; every other refusal goes back with state and iss (RFC 9207). The scope cut: what was asked, of what the subject holds, for the token's audiences.

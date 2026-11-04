@@ -19,6 +19,7 @@
 #include "lugh/oauth/consents.h"
 #include "lugh/oauth/flow_routes.h"
 #include "lugh/oauth/issuer.h"
+#include "lugh/oauth/refresh_tokens.h"
 #include "lugh/session/pre_sessions.h"
 #include "lugh/session/session_callers.h"
 #include "lugh/session/sessions.h"
@@ -60,7 +61,7 @@ class SigninRig : public AuthnRig {
   SigninRig() {
     keys = std::make_shared<lugh::tokens::SigningKeys>(store, wall, audit, lugh::tokens::SigningKeys::Settings{});
     EXPECT_TRUE(wait_for<lugh::Status>([&](lugh::Executor executor, auto done) { keys->open(kTestDeadline, executor, done); }).ok);
-    issuer = std::make_shared<lugh::oauth::TokenIssuer>(keys, kIssuer, wall, directory, grants);
+    issuer = std::make_shared<lugh::oauth::TokenIssuer>(keys, kIssuer, wall, time, directory, grants);
     consents = std::make_shared<lugh::oauth::Consents>(store, audit);
     sessions = std::make_shared<lugh::session::Sessions>(store, wall, directory, grants, audit, lugh::session::Sessions::Settings{});
     EXPECT_TRUE(wait_for<lugh::Status>([&](lugh::Executor executor, auto done) { sessions->open(kTestDeadline, executor, done); }).ok);
@@ -78,7 +79,9 @@ class SigninRig : public AuthnRig {
     own_app_passwords = std::make_unique<lugh::api::AppPasswordRoutes>(app_passwords);
     own_app_passwords->register_routes(*router);
     clients = std::make_shared<lugh::oauth::ClientAuthenticator>(apps, test_pool(), wall, time, kIssuer);
-    flow = std::make_unique<lugh::oauth::FlowRoutes>(lugh::oauth::FlowRoutes::Parts{apps, directory, sessions, consents, issuer, clients, &time, &wall});
+    refresh = std::make_shared<lugh::oauth::RefreshTokens>(store, wall, sessions, audit);
+    flow =
+        std::make_unique<lugh::oauth::FlowRoutes>(lugh::oauth::FlowRoutes::Parts{apps, directory, sessions, consents, issuer, clients, refresh, &time, &wall});
     flow->register_routes(*router);
   }
 
@@ -155,6 +158,7 @@ class SigninRig : public AuthnRig {
   std::shared_ptr<lugh::oauth::TokenIssuer> issuer;
   std::shared_ptr<lugh::oauth::Consents> consents;
   std::shared_ptr<lugh::oauth::ClientAuthenticator> clients;
+  std::shared_ptr<lugh::oauth::RefreshTokens> refresh;
   std::unique_ptr<lugh::oauth::FlowRoutes> flow;
   std::map<std::string, std::string> jar;
 };

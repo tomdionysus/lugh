@@ -17,6 +17,7 @@
 #include "lugh/oauth/consents.h"
 #include "lugh/oauth/expiring.h"
 #include "lugh/oauth/issuer.h"
+#include "lugh/oauth/refresh_tokens.h"
 #include "lugh/oauth/request.h"
 #include "lugh/session/sessions.h"
 
@@ -43,7 +44,9 @@ struct Pushed {
 //   GET  /oauth2/consent            what a third-party application asks for, to allow or deny
 //   POST /oauth2/consent
 //   POST /oauth2/par                a pushed request (RFC 9126)
-//   POST /oauth2/token              authorization_code with PKCE, client_credentials
+//   POST /oauth2/token              authorization_code with PKCE, refresh_token, client_credentials
+//   POST /oauth2/revoke             a refresh token's family, or an access token (RFC 7009)
+//   POST /oauth2/introspect         whether a token is active, and its claims (RFC 7662)
 //   GET, POST /oauth2/userinfo      the person's claims, for an access token with openid
 //
 // A request whose client or redirect URI cannot be trusted is refused on a page of Lugh's and
@@ -58,6 +61,7 @@ class FlowRoutes {
     std::shared_ptr<Consents> consents;
     std::shared_ptr<TokenIssuer> issuer;
     std::shared_ptr<ClientAuthenticator> clients;
+    std::shared_ptr<RefreshTokens> refresh;
     const dannan::contract::TimeSource* time = nullptr;
     const dannan::contract::WallClock* wall = nullptr;
   };

@@ -198,6 +198,7 @@ void token_answer(const RouteContext& context, const Issued& issued) {
   boost::json::object body{
       {"access_token", issued.access_token}, {"token_type", "Bearer"}, {"expires_in", issued.expires_in}, {"scope", scopes::join(issued.scopes)}};
   if (issued.id_token) body["id_token"] = *issued.id_token;
+  if (issued.refresh_token) body["refresh_token"] = *issued.refresh_token;
   http::write_json(context.response, http::status::ok, body);
   context.response->set(http::field::pragma, "no-cache");
   context.done();
@@ -227,11 +228,46 @@ void token(const std::shared_ptr<Shared>& shared, RouteContext context) {
             return token_error(context, http::status::bad_request, "invalid_grant", "redirect_uri is not the one the code was given to");
           if (!pkce_ok(value_of("code_verifier"), grant->code_challenge))
             return token_error(context, http::status::bad_request, "invalid_grant", "the code_verifier does not match");
-          return shared->parts.issuer->for_person(app, *grant, kStepDeadline, context.executor, [context](Outcome<Issued> issued) {
+          return shared->parts.issuer->for_person(app, *grant, kStepDeadline, context.executor, [shared, context, app, grant = *grant](Outcome<Issued> issued) {
             if (issued.fault == Fault::refused) return token_error(context, http::status::bad_request, "invalid_grant", issued.message);
             if (!issued.ok()) return token_error(context, http::status::internal_server_error, "server_error", "no tokens could be made");
-            token_answer(context, issued.value);
+            if (!(app.grants & apps::kRefreshToken)) return token_answer(context, issued.value);
+            shared->parts.refresh->issue(app, grant, issued.value.scopes, kStepDeadline, context.executor,
+                                         [context, issued = issued.value](Outcome<std::string> refresh) mutable {
+                                           if (!refresh.ok())
+                                             return token_error(context, http::status::internal_server_error, "server_error", "no refresh token could be made");
+                                           issued.refresh_token = refresh.value;
+                                           token_answer(context, issued);
+                                         });
           });
+        }
+        if (grant_type == "refresh_token") {
+          if (!(app.grants & apps::kRefreshToken)) return token_error(context, http::status::bad_request, "unauthorized_client", "not this client's grant");
+          const auto asked = scopes::split(value_of("scope"));
+          if (!asked) return token_error(context, http::status::bad_request, "invalid_scope", "scope is a space-separated list of scopes");
+          return shared->parts.refresh->rotate(
+              value_of("refresh_token"), app.client_id, kStepDeadline, context.executor,
+              [shared, context, app, asked = *asked](Outcome<RefreshTokens::Rotated> rotated) {
+                if (rotated.fault == Fault::refused) return token_error(context, http::status::bad_request, "invalid_grant", rotated.message);
+                if (!rotated.ok()) return token_error(context, http::status::internal_server_error, "server_error", "the refresh token could not be read");
+                const auto& family = rotated.value.family;
+                // A refresh may narrow what it asks for, never widen it.
+                for (const auto& scope : asked) {
+                  if (!has(family.scopes, scope)) return token_error(context, http::status::bad_request, "invalid_scope", "this grant does not hold " + scope);
+                }
+                CodeGrant grant{family.client_id, {}, asked.empty() ? family.scopes : asked, {}, {}, family.user_id, family.sid, family.acr, family.amr,
+                                family.auth_time};
+                shared->parts.issuer->for_person(
+                    app, grant, kStepDeadline, context.executor,
+                    [context, token = rotated.value.token](Outcome<Issued> issued) {
+                      if (issued.fault == Fault::refused) return token_error(context, http::status::bad_request, "invalid_grant", issued.message);
+                      if (!issued.ok()) return token_error(context, http::status::internal_server_error, "server_error", "no tokens could be made");
+                      auto answer = issued.value;
+                      answer.refresh_token = token;
+                      token_answer(context, answer);
+                    },
+                    false);
+              });
         }
         if (grant_type == "client_credentials") {
           if (!(app.grants & apps::kClientCredentials) || app.auth == apps::ClientAuth::none)
@@ -243,8 +279,83 @@ void token(const std::shared_ptr<Shared>& shared, RouteContext context) {
           if (!issued.ok()) return token_error(context, http::status::internal_server_error, "server_error", "no token could be made");
           return token_answer(context, issued.value);
         }
-        token_error(context, http::status::bad_request, "unsupported_grant_type", "grant_type is authorization_code or client_credentials");
+        token_error(context, http::status::bad_request, "unsupported_grant_type", "grant_type is authorization_code, refresh_token or client_credentials");
       });
+}
+
+// RFC 7009: the client's own token stopped; anything else changes nothing, and every answer
+// is 200 so it says nothing about the token.
+void revoke(const std::shared_ptr<Shared>& shared, RouteContext context) {
+  const auto form = http::parse_form(context.body());
+  if (!form) return token_error(context, http::status::bad_request, "invalid_request", "the body is a form, one value per name");
+  shared->parts.clients->authenticate(*context.request, *form, kStepDeadline, context.executor, [shared, context, form = *form](Outcome<apps::App> client) {
+    if (!client.ok()) {
+      if (client.fault == Fault::refused) return token_error(context, http::status::unauthorized, "invalid_client", client.message);
+      return token_error(context, http::status::internal_server_error, "server_error", "the client could not be checked");
+    }
+    const auto token = form.count("token") ? form.at("token") : std::string();
+    const auto ok = [context] {
+      context.response->result(http::status::ok);
+      context.response->set(http::field::cache_control, "no-store");
+      context.done();
+    };
+    if (token.rfind(RefreshTokens::kPrefix, 0) == 0) {
+      return shared->parts.refresh->revoke(audit::Actor{client.value.client_id, context.remote}, token, client.value.client_id, kStepDeadline, context.executor,
+                                           [ok](Outcome<>) { ok(); });
+    }
+    if (const auto bearer = shared->parts.issuer->verify(token, std::nullopt); bearer && bearer->client_id == client.value.client_id) {
+      shared->parts.issuer->revoke_access(*bearer);
+    }
+    ok();
+  });
+}
+
+// RFC 7662: whether a token is active, for an api it was issued to (an access token whose
+// audiences include the api's prefix) or for the client that holds it.
+void introspect(const std::shared_ptr<Shared>& shared, RouteContext context) {
+  const auto form = http::parse_form(context.body());
+  if (!form) return token_error(context, http::status::bad_request, "invalid_request", "the body is a form, one value per name");
+  shared->parts.clients->authenticate(*context.request, *form, kStepDeadline, context.executor, [shared, context, form = *form](Outcome<apps::App> client) {
+    if (!client.ok()) {
+      if (client.fault == Fault::refused) return token_error(context, http::status::unauthorized, "invalid_client", client.message);
+      return token_error(context, http::status::internal_server_error, "server_error", "the client could not be checked");
+    }
+    if (client.value.auth == apps::ClientAuth::none)
+      return token_error(context, http::status::unauthorized, "invalid_client", "a public client cannot introspect");
+    const auto token = form.count("token") ? form.at("token") : std::string();
+    const auto inactive = [context] {
+      http::write_json(context.response, http::status::ok, boost::json::object{{"active", false}});
+      context.done();
+    };
+    if (token.rfind(RefreshTokens::kPrefix, 0) == 0) {
+      return shared->parts.refresh->inspect(token, client.value.client_id, kStepDeadline, context.executor,
+                                            [shared, context, inactive](Outcome<std::optional<Family>> family) {
+                                              if (!family.ok() || !family.value) return inactive();
+                                              http::write_json(context.response, http::status::ok,
+                                                               boost::json::object{{"active", true},
+                                                                                   {"token_type", "refresh_token"},
+                                                                                   {"scope", scopes::join(family.value->scopes)},
+                                                                                   {"client_id", family.value->client_id},
+                                                                                   {"sub", family.value->user_id},
+                                                                                   {"iss", shared->parts.issuer->issuer()},
+                                                                                   {"iat", family.value->created},
+                                                                                   {"exp", family.value->created + family.value->absolute_seconds}});
+                                              context.done();
+                                            });
+    }
+    const auto bearer = shared->parts.issuer->verify(token, std::nullopt);
+    if (!bearer) return inactive();
+    bool entitled = bearer->client_id == client.value.client_id;
+    if (const auto aud = bearer->claims.if_contains("aud"); !entitled && aud && aud->is_array() && !client.value.prefix.empty()) {
+      for (const auto& one : aud->as_array()) entitled = entitled || (one.is_string() && one.as_string() == client.value.prefix);
+    }
+    if (!entitled) return inactive();
+    auto body = bearer->claims;
+    body["active"] = true;
+    body["token_type"] = "Bearer";
+    http::write_json(context.response, http::status::ok, body);
+    context.done();
+  });
 }
 
 void par(const std::shared_ptr<Shared>& shared, RouteContext context) {
@@ -356,6 +467,8 @@ void FlowRoutes::register_routes(http::Router& router) {
   });
   router.add_open(verb::post, "/oauth2/par", [shared](RouteContext context) { par(shared, std::move(context)); });
   router.add_open(verb::post, "/oauth2/token", [shared](RouteContext context) { token(shared, std::move(context)); });
+  router.add_open(verb::post, "/oauth2/revoke", [shared](RouteContext context) { revoke(shared, std::move(context)); });
+  router.add_open(verb::post, "/oauth2/introspect", [shared](RouteContext context) { introspect(shared, std::move(context)); });
   router.add_open(verb::get, "/oauth2/userinfo", [shared](RouteContext context) { userinfo(shared, std::move(context)); });
   router.add_open(verb::post, "/oauth2/userinfo", [shared](RouteContext context) { userinfo(shared, std::move(context)); });
 }

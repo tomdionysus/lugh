@@ -53,6 +53,7 @@
 #include "lugh/oauth/flow_routes.h"
 #include "lugh/oauth/issuer.h"
 #include "lugh/oauth/metadata_routes.h"
+#include "lugh/oauth/refresh_tokens.h"
 #include "lugh/scopes/grants.h"
 #include "lugh/session/pre_sessions.h"
 #include "lugh/session/session_callers.h"
@@ -366,7 +367,7 @@ int run(const cli::Options& options) {
   // With an issuer, Lugh's own access tokens are callers too.
   std::shared_ptr<oauth::TokenIssuer> token_issuer;
   if (!config.issuer.empty()) {
-    token_issuer = std::make_shared<oauth::TokenIssuer>(services.keys, config.issuer, wall, services.directory, services.grants);
+    token_issuer = std::make_shared<oauth::TokenIssuer>(services.keys, config.issuer, wall, time, services.directory, services.grants);
   }
   session::SessionCallers::BearerCheck bearer;
   if (token_issuer) bearer = [token_issuer](std::string_view token) { return oauth::api_caller(*token_issuer, token); };
@@ -407,8 +408,9 @@ int run(const cli::Options& options) {
   std::unique_ptr<oauth::FlowRoutes> flow_routes;
   if (token_issuer) {
     auto clients = std::make_shared<oauth::ClientAuthenticator>(services.apps, ports.hashing, wall, time, config.issuer);
+    auto refresh = std::make_shared<oauth::RefreshTokens>(services.store, wall, services.sessions, services.audit);
     flow_routes = std::make_unique<oauth::FlowRoutes>(
-        oauth::FlowRoutes::Parts{services.apps, services.directory, services.sessions, services.consents, token_issuer, clients, &time, &wall});
+        oauth::FlowRoutes::Parts{services.apps, services.directory, services.sessions, services.consents, token_issuer, clients, refresh, &time, &wall});
     flow_routes->register_routes(*router);
   }
 

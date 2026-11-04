@@ -7,6 +7,8 @@
 
 #include "lugh/session/sessions.h"
 
+#include <algorithm>
+
 #include "dannan/identity/crypto.h"
 #include "lugh/core/codec.h"
 #include "lugh/core/encoding.h"
@@ -73,6 +75,12 @@ std::optional<Session> Sessions::decode(std::span<const unsigned char> value) {
     for (std::uint32_t i = 0; i < scopes; ++i) session.scopes.push_back(reader.string(scopes::kMostScopeBytes));
     return session;
   });
+}
+
+bool Sessions::live_sid(std::string_view sid) const {
+  const auto now = _now();
+  dannan::contract::Lock state(_mutex);
+  return std::any_of(_held.begin(), _held.end(), [&](const auto& one) { return one.second.sid == sid && _live(one.second, now); });
 }
 
 std::string Sessions::csrf_token(const Session& session) {

@@ -53,6 +53,7 @@ add_library(lugh STATIC
     oauth/flow_routes.cpp
     oauth/issuer.cpp
     oauth/metadata_routes.cpp
+    oauth/refresh_tokens.cpp
     oauth/request.cpp
     store/log_format.cpp
     session/pre_sessions.cpp

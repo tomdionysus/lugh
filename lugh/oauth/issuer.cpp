@@ -57,8 +57,18 @@ std::optional<http::Caller> api_caller(const TokenIssuer& issuer, std::string_vi
 std::vector<std::string> audiences_of(const apps::App& app) { return app.audiences.empty() ? std::vector<std::string>{app.client_id} : app.audiences; }
 
 TokenIssuer::TokenIssuer(std::shared_ptr<const tokens::SigningKeys> keys, std::string issuer, const dannan::contract::WallClock& wall,
-                         std::shared_ptr<directory::Directory> directory, std::shared_ptr<scopes::Grants> grants)
-    : _keys(std::move(keys)), _issuer(std::move(issuer)), _wall(wall), _directory(std::move(directory)), _grants(std::move(grants)) {}
+                         const dannan::contract::TimeSource& time, std::shared_ptr<directory::Directory> directory, std::shared_ptr<scopes::Grants> grants)
+    : _keys(std::move(keys)),
+      _issuer(std::move(issuer)),
+      _wall(wall),
+      _directory(std::move(directory)),
+      _grants(std::move(grants)),
+      // An access token lives an hour at most, and a minute's skew after.
+      _revoked(std::make_shared<Expiring<bool>>(time, std::chrono::seconds(3600 + 120), 100000)) {}
+
+void TokenIssuer::revoke_access(const Bearer& bearer) {
+  if (const auto jti = bearer.claims.if_contains("jti"); jti && jti->is_string()) _revoked->put_as(std::string(jti->as_string()), true);
+}
 
 void TokenIssuer::person_claims(std::string user_id, std::vector<std::string> scopes, std::optional<apps::App> app, Deadline deadline, Executor executor,
                                 Done<Outcome<boost::json::object>> done) {
@@ -108,7 +118,7 @@ void TokenIssuer::person_claims(std::string user_id, std::vector<std::string> sc
   });
 }
 
-void TokenIssuer::for_person(apps::App app, CodeGrant grant, Deadline deadline, Executor executor, Done<Outcome<Issued>> done) {
+void TokenIssuer::for_person(apps::App app, CodeGrant grant, Deadline deadline, Executor executor, Done<Outcome<Issued>> done, bool id_token) {
   using Answer = Outcome<Issued>;
   auto answer = answering<Issued>(deadline, executor, std::move(done), "no tokens were made within the deadline");
   const auto signer = _keys->signer();
@@ -140,7 +150,7 @@ void TokenIssuer::for_person(apps::App app, CodeGrant grant, Deadline deadline, 
       issued.access_token = tokens::jws_sign(*signer->key, signer->kid, "at+jwt", access);
       issued.expires_in = app.access_seconds;
       issued.scopes = scopes;
-      if (has(scopes, "openid")) {
+      if (id_token && has(scopes, "openid")) {
         auto id = person.value;
         id["iss"] = self->_issuer;
         id["aud"] = app.client_id;
@@ -196,6 +206,7 @@ std::optional<Bearer> TokenIssuer::verify(std::string_view token, std::optional<
   const auto client = claims.if_contains("client_id");
   if (!iss || !iss->is_string() || iss->as_string() != _issuer) return std::nullopt;
   if (!sub || !sub->is_string() || !client || !client->is_string()) return std::nullopt;
+  if (const auto jti = claims.if_contains("jti"); !jti || !jti->is_string() || _revoked->peek(std::string(jti->as_string()))) return std::nullopt;
   const auto now = _now();
   const auto exp = seconds_claim(claims, "exp");
   const auto nbf = seconds_claim(claims, "nbf");

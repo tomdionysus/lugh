@@ -64,12 +64,12 @@ class OAuthFlowTest : public ::testing::Test {
   }
 
   // A web application allowed to staff; first party unless said otherwise.
-  std::pair<lugh::apps::App, std::string> register_web(bool first_party = true) {
+  std::pair<lugh::apps::App, std::string> register_web(bool first_party = true, std::uint8_t grants = lugh::apps::kAuthorizationCode) {
     lugh::apps::App draft;
     draft.name = "Client";
     draft.kind = lugh::apps::Kind::web;
     draft.auth = lugh::apps::ClientAuth::client_secret_basic;
-    draft.grants = lugh::apps::kAuthorizationCode;
+    draft.grants = grants;
     draft.redirect_uris = {kRedirect};
     draft.scopes = {"openid", "profile", "email", "groups", "lugh:directory.read"};
     draft.audiences = {"lugh"};
@@ -338,4 +338,124 @@ TEST_F(OAuthFlowTest, PushedAuthorizationRequests) {
   EXPECT_EQ(rig.get(target).status, 400u);
   // Refused without the client's credential.
   EXPECT_EQ(rig.request(verb::post, "/oauth2/par", {{"response_type", "code"}, {"client_id", app.client_id}}).status, 401u);
+}
+
+namespace {
+
+// The first tokens of a refreshing application, signed in as alice.
+struct Refreshing {
+  lugh::apps::App app;
+  std::string secret;
+  boost::json::value tokens;
+};
+
+}  // namespace
+
+class OAuthRefreshTest : public OAuthFlowTest {
+ protected:
+  Refreshing start() {
+    auto [app, secret] = register_web(true, lugh::apps::kAuthorizationCode | lugh::apps::kRefreshToken);
+    const auto back = sign_in_through(rig.get(authorize_target(app.client_id)).location());
+    const auto tokens = redeem(app.client_id, secret, query_value(back, "code"));
+    EXPECT_EQ(tokens.status, 200u) << tokens.body;
+    return {app, secret, boost::json::parse(tokens.body)};
+  }
+
+  SigninRig::Page refresh(const Refreshing& with, const std::string& token, const std::string& scope = "") {
+    std::map<std::string, std::string> form{{"grant_type", "refresh_token"}, {"refresh_token", token}};
+    if (!scope.empty()) form["scope"] = scope;
+    return rig.request(verb::post, "/oauth2/token", form, {{"Authorization", basic(with.app.client_id, with.secret)}});
+  }
+
+  SigninRig::Page client_post(const Refreshing& with, const std::string& path, const std::string& token) {
+    return rig.request(verb::post, path, {{"token", token}}, {{"Authorization", basic(with.app.client_id, with.secret)}});
+  }
+
+  static std::string text(const boost::json::value& value, const char* name) { return std::string(value.at(name).as_string()); }
+};
+
+// RFC 9700 section 4.14.2: rotated on every use; an old one used again revokes the family.
+TEST_F(OAuthRefreshTest, RotationAndReuse) {
+  const auto with = start();
+  const auto first = text(with.tokens, "refresh_token");
+  EXPECT_EQ(first.rfind("rt.", 0), 0u);
+
+  const auto second = refresh(with, first);
+  ASSERT_EQ(second.status, 200u) << second.body;
+  const auto renewed = boost::json::parse(second.body);
+  const auto next = text(renewed, "refresh_token");
+  EXPECT_NE(next, first);
+  EXPECT_FALSE(renewed.as_object().contains("id_token"));
+  EXPECT_EQ(claims_of(text(renewed, "access_token")).at("sub"), boost::json::value(alice.id));
+
+  // The first again: reuse. It fails, and so does the newest after it.
+  EXPECT_EQ(boost::json::parse(refresh(with, first).body).at("error"), "invalid_grant");
+  EXPECT_EQ(boost::json::parse(refresh(with, next).body).at("error"), "invalid_grant");
+  EXPECT_TRUE(rig.audited("refresh.revoke"));
+}
+
+TEST_F(OAuthRefreshTest, ARefreshMayNarrowNeverWiden) {
+  const auto with = start();
+  const auto narrower = refresh(with, text(with.tokens, "refresh_token"), "openid");
+  ASSERT_EQ(narrower.status, 200u) << narrower.body;
+  EXPECT_EQ(boost::json::parse(narrower.body).at("scope"), "openid");
+  const auto token = text(boost::json::parse(narrower.body), "refresh_token");
+  EXPECT_EQ(boost::json::parse(refresh(with, token, "openid email").body).at("error"), "invalid_scope");
+}
+
+// Bounded application sessions (docs/architecture.md): when the Lugh session ends, so does the
+// family, and the application's next refresh fails.
+TEST_F(OAuthRefreshTest, ItEndsWithTheSession) {
+  const auto with = start();
+  const auto done = rig.get("/signin/done");
+  ASSERT_EQ(rig.post("/signout", {{"csrf", done.csrf()}}).status, 200u);
+  EXPECT_EQ(boost::json::parse(refresh(with, text(with.tokens, "refresh_token")).body).at("error"), "invalid_grant");
+}
+
+TEST_F(OAuthRefreshTest, ItEndsAtItsLifetimes) {
+  const auto with = start();
+  // The application's idle lifetime is a day; the session's is a day too, so use the session
+  // within it and leave the family idle past its own.
+  rig.advance(std::chrono::hours(23));
+  EXPECT_EQ(rig.get("/signin/done").status, 200u);
+  rig.advance(std::chrono::hours(2));
+  EXPECT_EQ(boost::json::parse(refresh(with, text(with.tokens, "refresh_token")).body).at("error"), "invalid_grant");
+}
+
+// RFC 7009: the client's own tokens stopped; always 200.
+TEST_F(OAuthRefreshTest, Revocation) {
+  const auto with = start();
+  const auto access = text(with.tokens, "access_token");
+  const auto bearer = std::vector<std::pair<std::string, std::string>>{{"Authorization", "Bearer " + access}};
+  EXPECT_EQ(rig.request(verb::get, "/oauth2/userinfo", {}, bearer).status, 200u);
+
+  const auto [other, other_secret] = register_web();
+  EXPECT_EQ(rig.request(verb::post, "/oauth2/revoke", {{"token", access}}, {{"Authorization", basic(other.client_id, other_secret)}}).status, 200u);
+  EXPECT_EQ(rig.request(verb::get, "/oauth2/userinfo", {}, bearer).status, 200u);
+
+  EXPECT_EQ(client_post(with, "/oauth2/revoke", access).status, 200u);
+  EXPECT_EQ(rig.request(verb::get, "/oauth2/userinfo", {}, bearer).status, 401u);
+  EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, bearer).status, 401u);
+
+  EXPECT_EQ(client_post(with, "/oauth2/revoke", text(with.tokens, "refresh_token")).status, 200u);
+  EXPECT_EQ(boost::json::parse(refresh(with, text(with.tokens, "refresh_token")).body).at("error"), "invalid_grant");
+  EXPECT_EQ(client_post(with, "/oauth2/revoke", "not a token at all").status, 200u);
+}
+
+// RFC 7662: active, and its claims, for the client that holds it.
+TEST_F(OAuthRefreshTest, Introspection) {
+  const auto with = start();
+  const auto active = client_post(with, "/oauth2/introspect", text(with.tokens, "access_token"));
+  ASSERT_EQ(active.status, 200u) << active.body;
+  const auto body = boost::json::parse(active.body);
+  EXPECT_EQ(body.at("active"), true);
+  EXPECT_EQ(body.at("sub"), boost::json::value(alice.id));
+  EXPECT_EQ(boost::json::parse(client_post(with, "/oauth2/introspect", text(with.tokens, "refresh_token")).body).at("active"), true);
+  EXPECT_EQ(boost::json::parse(client_post(with, "/oauth2/introspect", "rubbish").body).at("active"), false);
+
+  // Another client learns nothing.
+  const auto [other, other_secret] = register_web();
+  const auto theirs =
+      rig.request(verb::post, "/oauth2/introspect", {{"token", text(with.tokens, "access_token")}}, {{"Authorization", basic(other.client_id, other_secret)}});
+  EXPECT_EQ(boost::json::parse(theirs.body).at("active"), false);
 }
