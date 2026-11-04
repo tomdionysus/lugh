@@ -22,8 +22,10 @@ struct Caller {
   enum class Kind {
     // Nothing presented, or nothing that resolved: 401.
     none,
-    // A signed-in person, or a client acting for one (P6).
+    // A signed-in person, or a client acting for one.
     user,
+    // A client acting for itself, with client credentials: its id is its client_id.
+    service,
   };
 
   Kind kind = Kind::none;

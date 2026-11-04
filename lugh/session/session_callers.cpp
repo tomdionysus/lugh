@@ -11,9 +11,16 @@
 
 namespace lugh::session {
 
-SessionCallers::SessionCallers(std::shared_ptr<Sessions> sessions) : _sessions(std::move(sessions)) {}
+SessionCallers::SessionCallers(std::shared_ptr<Sessions> sessions, BearerCheck bearer) : _sessions(std::move(sessions)), _bearer(std::move(bearer)) {}
 
 http::Caller SessionCallers::resolve(const http::HttpRequest& request) const {
+  // A bearer token is the caller when there is one: a request with Authorization is never also
+  // taken from a cookie, so presenting a bad token does not fall back to a session.
+  if (const auto authorization = request.find(http::field::authorization); authorization != request.end()) {
+    const std::string_view value(authorization->value());
+    if (!_bearer || value.rfind("Bearer ", 0) != 0) return {};
+    return _bearer(value.substr(7)).value_or(http::Caller{});
+  }
   const auto handle = http::cookie(request, Sessions::kCookie);
   if (!handle) return {};
   const auto session = _sessions->find(*handle);

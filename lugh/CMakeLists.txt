@@ -48,7 +48,12 @@ add_library(lugh STATIC
     scopes/scope.cpp
     scopes/topic_scope.cpp
     node/config.cpp
+    oauth/client_auth.cpp
+    oauth/consents.cpp
+    oauth/flow_routes.cpp
+    oauth/issuer.cpp
     oauth/metadata_routes.cpp
+    oauth/request.cpp
     store/log_format.cpp
     session/pre_sessions.cpp
     session/session_callers.cpp

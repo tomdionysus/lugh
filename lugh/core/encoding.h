@@ -135,4 +135,26 @@ inline std::optional<Bytes> base64url_decode(std::string_view text) {
   return out;
 }
 
+// RFC 4648 base64 with padding, the standard alphabet, as HTTP Basic credentials are written
+// (RFC 7617). Exact, as base64url_decode() is: nothing for any other spelling.
+inline std::optional<Bytes> base64_decode(std::string_view text) {
+  if (text.size() % 4 != 0) return std::nullopt;
+  std::string url(text);
+  std::size_t padding = 0;
+  while (!url.empty() && url.back() == '=' && padding < 2) {
+    url.pop_back();
+    ++padding;
+  }
+  for (auto& c : url) {
+    if (c == '+') {
+      c = '-';
+    } else if (c == '/') {
+      c = '_';
+    } else if (c == '-' || c == '_' || c == '=') {
+      return std::nullopt;
+    }
+  }
+  return base64url_decode(url);
+}
+
 }  // namespace lugh::encoding

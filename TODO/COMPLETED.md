@@ -2,6 +2,16 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O7, the authorisation code flow
+
+- `lugh/oauth/request.h`: the authorisation request checked as RFC 6749, RFC 7636 and OIDC Core have it, with Lugh's profile: response_type code only, the redirect URI exactly as registered (any port on a native app's loopback URI, RFC 8252), PKCE S256 required, state required, a nonce with openid, prompt none, login or consent, max_age and acr_values. A request whose client or redirect URI cannot be trusted is refused on a page of Lugh's; every other refusal goes back with state and iss (RFC 9207). The scope cut: what was asked, of what the subject holds, for the token's audiences.
+- `lugh/oauth/flow_routes.h`: `/oauth2/authorize`, the resume after sign-in, consent, PAR (RFC 9126), the token endpoint (authorization_code with PKCE, client_credentials) and userinfo. A request without a session good enough for it (none, too weak an acr, prompt=login, past max_age) goes through the sign-in pages, which now carry it and return to it. Only the application's groups' members get a code; a third party asks consent once (`consents`, a new component). Codes, PAR URIs and waiting requests are in memory on their node and used once (`lugh/oauth/expiring.h`).
+- `lugh/oauth/client_auth.h`: client_secret_basic, private_key_jwt (a key from the client's JWK Set, iss and sub its client_id, aud this server, a jti never seen, at most ten minutes) and none. tls_client_auth waits for O8's client certificates.
+- `lugh/oauth/issuer.h`: access tokens (RFC 9068, at+jwt) and ID tokens (OIDC Core, with at_hash, the claims profile, email and groups allow, and the application's roles); userinfo's claims; and verifying an access token from memory. A bearer token with `lugh` in its audiences is an API caller (`Caller::Kind::service` for a client's own).
+- Lugh's encoding gains a strict standard base64 decoder, for HTTP Basic.
+- Departures for the maintainer are in TODO/2026-11-04-oauth.md, O7.
+- Tests: 443 to 458 (the request's rules with RFC 7636's vector, the whole code flow from no session to userinfo and the API, a code bound to its client, redirect and verifier, refusals at the authorisation endpoint, access groups, consent, client credentials, private_key_jwt, PAR), green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: P6 step O6 (LDAP's L2), app passwords
 
 - `lugh/authn/app_passwords.h`: app passwords in the sealed `app_passwords` table, keyed `<user>/<instance>`. 160 random bits as 32 base32 characters, shown once in lower-case groups of four, typed any case with or without dashes; the first four characters select the record, so a guess costs one Argon2id hash, and a miss costs the same. Each carries a name, a scope set (`lugh:directory.read` unless its creator says otherwise, the maintainer), and optionally the networks it may be used from; it is revoked alone, stops working when its user is disabled, and goes with its user. At most 32 per user. Every change audited.

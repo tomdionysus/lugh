@@ -15,6 +15,10 @@
 #include "lugh/api/app_password_routes.h"
 #include "lugh/api/me_routes.h"
 #include "lugh/api/user_routes.h"
+#include "lugh/oauth/client_auth.h"
+#include "lugh/oauth/consents.h"
+#include "lugh/oauth/flow_routes.h"
+#include "lugh/oauth/issuer.h"
 #include "lugh/session/pre_sessions.h"
 #include "lugh/session/session_callers.h"
 #include "lugh/session/sessions.h"
@@ -22,8 +26,9 @@
 #include "lugh/test/fixtures/authn_rig.h"
 #include "lugh/test/fixtures/route_call.h"
 
-// The sign-in pages, /api/v1/me and /api/v1/users behind one router whose callers are
-// sessions, over AuthnRig, and a browser that keeps its cookies between requests.
+// The sign-in pages, the OAuth code flow, /api/v1/me and /api/v1/users behind one router whose
+// callers are sessions and Lugh's access tokens, over AuthnRig, with the issuer kIssuer, and a
+// browser that keeps its cookies between requests.
 class SigninRig : public AuthnRig {
  public:
   struct Page {
@@ -50,13 +55,20 @@ class SigninRig : public AuthnRig {
     bool says(const std::string& text) const { return body.find(text) != std::string::npos; }
   };
 
+  static constexpr const char* kIssuer = "https://id.example.com";
+
   SigninRig() {
+    keys = std::make_shared<lugh::tokens::SigningKeys>(store, wall, audit, lugh::tokens::SigningKeys::Settings{});
+    EXPECT_TRUE(wait_for<lugh::Status>([&](lugh::Executor executor, auto done) { keys->open(kTestDeadline, executor, done); }).ok);
+    issuer = std::make_shared<lugh::oauth::TokenIssuer>(keys, kIssuer, wall, directory, grants);
+    consents = std::make_shared<lugh::oauth::Consents>(store, audit);
     sessions = std::make_shared<lugh::session::Sessions>(store, wall, directory, grants, audit, lugh::session::Sessions::Settings{});
     EXPECT_TRUE(wait_for<lugh::Status>([&](lugh::Executor executor, auto done) { sessions->open(kTestDeadline, executor, done); }).ok);
     pre = std::make_shared<lugh::session::PreSessions>(time, std::chrono::minutes(15));
     router = std::make_shared<lugh::http::Router>(io.get_executor(),
                                                   std::make_shared<lugh::http::Throttle>(time, lugh::http::RateLimits{{1000, 1000}, {1000, 1000}}),
-                                                  std::make_shared<lugh::session::SessionCallers>(sessions));
+                                                  std::make_shared<lugh::session::SessionCallers>(
+                                                      sessions, [issuer = issuer](std::string_view token) { return lugh::oauth::api_caller(*issuer, token); }));
     pages = std::make_unique<lugh::signin::Pages>(authenticator, directory, sessions, pre);
     pages->register_routes(*router);
     me = std::make_unique<lugh::api::MeRoutes>(directory, sessions);
@@ -65,6 +77,9 @@ class SigninRig : public AuthnRig {
     users->register_routes(*router);
     own_app_passwords = std::make_unique<lugh::api::AppPasswordRoutes>(app_passwords);
     own_app_passwords->register_routes(*router);
+    clients = std::make_shared<lugh::oauth::ClientAuthenticator>(apps, test_pool(), wall, time, kIssuer);
+    flow = std::make_unique<lugh::oauth::FlowRoutes>(lugh::oauth::FlowRoutes::Parts{apps, directory, sessions, consents, issuer, clients, &time, &wall});
+    flow->register_routes(*router);
   }
 
   // One request as a browser makes it, with its cookies; Set-Cookie answers kept.
@@ -92,7 +107,10 @@ class SigninRig : public AuthnRig {
     for (const auto& [name, value] : jar) cookie_header += (cookie_header.empty() ? "" : "; ") + name + "=" + value;
     if (!cookie_header.empty()) headers.emplace_back("Cookie", cookie_header);
 
-    const char* prefix = target.rfind("/api", 0) == 0 ? "/api" : (target.rfind("/signout", 0) == 0 ? "/signout" : "/signin");
+    const char* prefix = target.rfind("/api", 0) == 0       ? "/api"
+                         : target.rfind("/oauth2", 0) == 0  ? "/oauth2"
+                         : target.rfind("/signout", 0) == 0 ? "/signout"
+                                                            : "/signin";
     const auto result = call(io, router->middleware(prefix), method, target, "192.0.2.80", body, headers);
     EXPECT_TRUE(result.answered) << target;
 
@@ -133,5 +151,10 @@ class SigninRig : public AuthnRig {
   std::unique_ptr<lugh::api::MeRoutes> me;
   std::unique_ptr<lugh::api::UserRoutes> users;
   std::unique_ptr<lugh::api::AppPasswordRoutes> own_app_passwords;
+  std::shared_ptr<lugh::tokens::SigningKeys> keys;
+  std::shared_ptr<lugh::oauth::TokenIssuer> issuer;
+  std::shared_ptr<lugh::oauth::Consents> consents;
+  std::shared_ptr<lugh::oauth::ClientAuthenticator> clients;
+  std::unique_ptr<lugh::oauth::FlowRoutes> flow;
   std::map<std::string, std::string> jar;
 };

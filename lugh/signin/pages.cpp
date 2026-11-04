@@ -50,8 +50,21 @@ std::string notice(const std::string& text, bool warning = false) {
   return std::string("<p class=\"notice") + (warning ? " warn" : "") + "\" role=\"alert\">" + escape(text) + "</p>\n";
 }
 
-std::string password_form(const std::string& csrf, const std::string& warning, const std::string& login) {
-  return notice(warning) + "<form method=\"post\" action=\"/signin\">\n" + csrf_field(csrf) +
+// An authorisation request's id, as the sign-in carries it: base64url, as Lugh makes them.
+std::string resume_of(const std::string& text) {
+  if (text.empty() || text.size() > 64) return {};
+  const bool ok = std::all_of(text.begin(), text.end(),
+                              [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_'; });
+  return ok ? text : std::string();
+}
+
+// Where a finished sign-in goes: back to the authorisation request waiting on it, or to the
+// signed-in page.
+std::string done_target(const std::string& resume) { return resume.empty() ? "/signin/done" : "/oauth2/authorize/resume?id=" + resume; }
+
+std::string password_form(const std::string& csrf, const std::string& warning, const std::string& login, const std::string& resume = "") {
+  const auto carried = resume.empty() ? std::string() : "<input type=\"hidden\" name=\"continue\" value=\"" + escape(resume) + "\">\n";
+  return notice(warning) + "<form method=\"post\" action=\"/signin\">\n" + csrf_field(csrf) + carried +
          "<label for=\"login\">Name or email</label>\n"
          "<input id=\"login\" name=\"login\" type=\"text\" autocomplete=\"username\" autocapitalize=\"none\" spellcheck=\"false\" required value=\"" +
          escape(login) +
@@ -117,13 +130,13 @@ std::string totp_form(const std::string& csrf, const PreSession& pre, const std:
          "</form>\n";
 }
 
-std::string recovery_page(const std::vector<Secret>& codes) {
+std::string recovery_page(const std::vector<Secret>& codes, const std::string& next) {
   std::string list;
   for (const auto& code : codes) list += "<li class=\"secret\">" + escape(secret_text(code)) + "</li>\n";
   return page("Your recovery codes",
               "<p>You are signed in. Keep these somewhere safe: each lets you in once if you lose your authenticator app. They are shown "
               "this once.</p>\n<ul class=\"codes\">\n" +
-                  list + "</ul>\n<p><a href=\"/signin/done\">I have kept them</a></p>\n");
+                  list + "</ul>\n<p><a href=\"" + escape(next) + "\">I have kept them</a></p>\n");
 }
 
 std::string message(const std::string& title, const std::string& text, const std::string& link = "/signin", const std::string& link_text = "Sign in") {
@@ -176,31 +189,31 @@ void waiting(const RouteContext& context, const Step& step) {
 }
 
 // The user is signed in: a session, its cookie, and the sign-in in progress gone.
-void complete(const std::shared_ptr<Pages::Shared>& shared, const RouteContext& context, const std::string& handle, Step step) {
+void complete(const std::shared_ptr<Pages::Shared>& shared, const RouteContext& context, const std::string& handle, Step step, const std::string& resume) {
   const auto& sign_in = step.sign_in;
   auto codes = std::make_shared<std::vector<Secret>>(std::move(step.recovery_codes));
   const auto left = step.recovery_left;
   shared->sessions->create(
       audit::Actor{sign_in.user_id, context.remote}, sign_in.user_id, sign_in.reached, sign_in.amr, kPageDeadline, context.executor,
-      [shared, context, handle, codes, left](Outcome<Sessions::Created> made) {
+      [shared, context, handle, codes, left, next = done_target(resume)](Outcome<Sessions::Created> made) {
         if (!made.ok()) return failed(context);
         shared->pre->end(handle);
         const auto lifetime = shared->sessions->settings().absolute.count();
         context.response->insert(http::field::set_cookie, http::host_cookie(Sessions::kCookie, secret_text(made.value.handle), static_cast<long>(lifetime)));
-        if (!codes->empty()) return answer_page(context, http::status::ok, recovery_page(*codes));
+        if (!codes->empty()) return answer_page(context, http::status::ok, recovery_page(*codes, next));
         if (left) {
           return answer_page(
               context, http::status::ok,
               message("Signed in",
-                      "That recovery code is used. You have " + std::to_string(*left) + " left: make new ones, or enrol a new authenticator app, soon.",
-                      "/signin/done", "Continue"));
+                      "That recovery code is used. You have " + std::to_string(*left) + " left: make new ones, or enrol a new authenticator app, soon.", next,
+                      "Continue"));
         }
-        answer_redirect(context, "/signin/done");
+        answer_redirect(context, next);
       });
 }
 
 // Where a step leads: the next page, the session, or the same form again with why.
-void advance(const std::shared_ptr<Pages::Shared>& shared, const RouteContext& context, const std::string& handle, Step step,
+void advance(const std::shared_ptr<Pages::Shared>& shared, const RouteContext& context, const std::string& handle, Step step, const std::string& resume,
              std::function<void(const std::string& warning)> again) {
   switch (step.kind) {
     case Step::Kind::refused:
@@ -213,19 +226,19 @@ void advance(const std::shared_ptr<Pages::Shared>& shared, const RouteContext& c
       shared->pre->end(handle);
       return answer_page(
           context, http::status::unauthorized,
-          page("Sign in", password_form(shared->pre->csrf_token(handle), "Start again: there were too many wrong codes, or it took too long.", "")));
+          page("Sign in", password_form(shared->pre->csrf_token(handle), "Start again: there were too many wrong codes, or it took too long.", "", resume)));
     case Step::Kind::next:
       break;
   }
   switch (step.sign_in.stage) {
     case SignIn::Stage::second_factor:
-      shared->pre->put(handle, PreSession{step.sign_in, {}, {}, {}});
+      shared->pre->put(handle, PreSession{step.sign_in, {}, {}, {}, resume});
       return answer_redirect(context, "/signin/factor");
     case SignIn::Stage::enrolment:
-      shared->pre->put(handle, PreSession{step.sign_in, {}, {}, {}});
+      shared->pre->put(handle, PreSession{step.sign_in, {}, {}, {}, resume});
       return answer_redirect(context, "/signin/enrol/totp");
     case SignIn::Stage::complete:
-      return complete(shared, context, handle, std::move(step));
+      return complete(shared, context, handle, std::move(step), resume);
     case SignIn::Stage::ended:
       break;
   }
@@ -251,11 +264,13 @@ void Pages::register_routes(http::Router& router) {
   });
 
   router.add_open(verb::get, "/signin", [shared](RouteContext context) {
-    if (const auto handle = http::cookie(*context.request, Sessions::kCookie); handle && shared->sessions->find(*handle)) {
+    const auto resume = resume_of(context.query.count("continue") ? context.query.at("continue") : "");
+    // Signed in already, and nothing waiting that asked for a new sign-in: nothing to do here.
+    if (const auto handle = http::cookie(*context.request, Sessions::kCookie); resume.empty() && handle && shared->sessions->find(*handle)) {
       return answer_redirect(context, "/signin/done");
     }
     const auto handle = visitor(context);
-    answer_page(context, http::status::ok, page("Sign in", password_form(shared->pre->csrf_token(handle), "", "")));
+    answer_page(context, http::status::ok, page("Sign in", password_form(shared->pre->csrf_token(handle), "", "", resume)));
   });
 
   router.add_open(verb::post, "/signin", [shared](RouteContext context) {
@@ -263,11 +278,12 @@ void Pages::register_routes(http::Router& router) {
     const auto form = posted(context, *shared->pre, handle);
     if (!form) return;
     const auto login = field(*form, "login");
+    const auto resume = resume_of(field(*form, "continue"));
     shared->authenticator->password(
-        login, text_secret(field(*form, "password")), context.remote, kPageDeadline, context.executor, [shared, context, handle, login](Step step) {
-          advance(shared, context, handle, std::move(step), [&](const std::string&) {
+        login, text_secret(field(*form, "password")), context.remote, kPageDeadline, context.executor, [shared, context, handle, login, resume](Step step) {
+          advance(shared, context, handle, std::move(step), resume, [&](const std::string&) {
             answer_page(context, http::status::unauthorized,
-                        page("Sign in", password_form(shared->pre->csrf_token(handle), "That name and password do not match.", login)));
+                        page("Sign in", password_form(shared->pre->csrf_token(handle), "That name and password do not match.", login, resume)));
           });
         });
   });
@@ -285,11 +301,11 @@ void Pages::register_routes(http::Router& router) {
     if (!form) return;
     const auto pre = shared->pre->find(handle);
     if (!pre || pre->sign_in.stage != SignIn::Stage::second_factor) return answer_redirect(context, "/signin");
-    const auto respond = [shared, context, handle](Step step) {
+    const auto respond = [shared, context, handle, resume = pre->resume](Step step) {
       // The step carries the sign-in's count of wrong codes, kept for the next try.
       const auto sign_in = step.sign_in;
-      advance(shared, context, handle, std::move(step), [&](const std::string&) {
-        shared->pre->put(handle, PreSession{sign_in, {}, {}, {}});
+      advance(shared, context, handle, std::move(step), resume, [&](const std::string&) {
+        shared->pre->put(handle, PreSession{sign_in, {}, {}, {}, resume});
         answer_page(context, http::status::unauthorized, page("Your second factor", factor_form(shared->pre->csrf_token(handle), "That code is not right.")));
       });
     };
@@ -305,10 +321,11 @@ void Pages::register_routes(http::Router& router) {
     const auto pre = shared->pre->find(handle);
     if (!pre || pre->sign_in.stage != SignIn::Stage::enrolment) return answer_redirect(context, "/signin");
     shared->authenticator->enrol_begin(
-        pre->sign_in, context.remote, kPageDeadline, context.executor, [shared, context, handle, sign_in = pre->sign_in](Outcome<authn::TotpSetup> setup) {
+        pre->sign_in, context.remote, kPageDeadline, context.executor,
+        [shared, context, handle, sign_in = pre->sign_in, resume = pre->resume](Outcome<authn::TotpSetup> setup) {
           if (!setup.ok()) return failed(context);
           PreSession next{sign_in, setup.value.factor_id, SecureBuffer(setup.value.secret.reveal().begin(), setup.value.secret.reveal().end()),
-                          SecureBuffer(setup.value.uri.reveal().begin(), setup.value.uri.reveal().end())};
+                          SecureBuffer(setup.value.uri.reveal().begin(), setup.value.uri.reveal().end()), resume};
           shared->pre->put(handle, next);
           answer_page(context, http::status::ok, page("Add your authenticator", totp_form(shared->pre->csrf_token(handle), next, "")));
         });
@@ -325,7 +342,7 @@ void Pages::register_routes(http::Router& router) {
           // The step carries the count of wrong codes, kept for the next try.
           auto next = held;
           next.sign_in = step.sign_in;
-          advance(shared, context, handle, std::move(step), [&](const std::string&) {
+          advance(shared, context, handle, std::move(step), held.resume, [&](const std::string&) {
             shared->pre->put(handle, next);
             answer_page(context, http::status::unauthorized,
                         page("Add your authenticator", totp_form(shared->pre->csrf_token(handle), next, "That code is not right.")));
@@ -350,7 +367,7 @@ void Pages::register_routes(http::Router& router) {
     if (password != field(*form, "password_again")) return again("The two passwords are not the same.");
     shared->authenticator->redeem(text_secret(token), text_secret(password), context.remote, kPageDeadline, context.executor,
                                   [shared, context, handle, again](Step step) {
-                                    advance(shared, context, handle, std::move(step), [&](const std::string&) {
+                                    advance(shared, context, handle, std::move(step), "", [&](const std::string&) {
                                       again(
                                           "That did not work. The link may have been used or have expired, or the password is too short, too common, or "
                                           "your own name or address.");

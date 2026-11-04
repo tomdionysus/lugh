@@ -34,6 +34,8 @@ struct PreSession {
   std::string factor_id;
   SecureBuffer totp_secret;
   SecureBuffer totp_uri;
+  // An authorisation request waiting on this sign-in, to go back to when it is done.
+  std::string resume;
 };
 
 // The sign-ins in progress, and the cookie that names one. The cookie is set by the first page

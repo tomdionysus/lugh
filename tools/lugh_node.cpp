@@ -48,6 +48,10 @@
 #include "lugh/keys/keyring_manager.h"
 #include "lugh/node/cli.h"
 #include "lugh/node/config.h"
+#include "lugh/oauth/client_auth.h"
+#include "lugh/oauth/consents.h"
+#include "lugh/oauth/flow_routes.h"
+#include "lugh/oauth/issuer.h"
 #include "lugh/oauth/metadata_routes.h"
 #include "lugh/scopes/grants.h"
 #include "lugh/session/pre_sessions.h"
@@ -147,6 +151,7 @@ struct Services {
   std::shared_ptr<tokens::SigningKeys> keys;
   std::shared_ptr<session::Sessions> sessions;
   std::shared_ptr<authn::AppPasswords> app_passwords;
+  std::shared_ptr<oauth::Consents> consents;
 };
 
 // The cluster's birth, once its first keyring is saved: the store under it, then root,
@@ -264,6 +269,7 @@ Task<Result<Services>> start(Ports ports, Config config) {
   services.directory->dependent_add(services.factors);
   services.app_passwords = std::make_shared<authn::AppPasswords>(store, ports.wall, services.directory, services.audit, ports.hashing);
   services.directory->dependent_add(services.app_passwords);
+  services.consents = std::make_shared<oauth::Consents>(store, services.audit);
   services.policies = std::make_shared<authn::Policies>(store, services.directory, services.audit);
   services.links = std::make_shared<authn::EnrolmentLinks>(store, ports.wall, services.directory, services.audit);
   apps::Apps::Settings app_settings;
@@ -357,7 +363,14 @@ int run(const cli::Options& options) {
   // A caller is a signed-in session; OAuth tokens join it with the token endpoint (P6, O7).
   // There is no other way in: the one credential Lugh is born with is root's password, made
   // at genesis, and it opens a session only through the sign-in pages.
-  std::shared_ptr<http::CallerResolver> resolver = std::make_shared<session::SessionCallers>(services.sessions);
+  // With an issuer, Lugh's own access tokens are callers too.
+  std::shared_ptr<oauth::TokenIssuer> token_issuer;
+  if (!config.issuer.empty()) {
+    token_issuer = std::make_shared<oauth::TokenIssuer>(services.keys, config.issuer, wall, services.directory, services.grants);
+  }
+  session::SessionCallers::BearerCheck bearer;
+  if (token_issuer) bearer = [token_issuer](std::string_view token) { return oauth::api_caller(*token_issuer, token); };
+  std::shared_ptr<http::CallerResolver> resolver = std::make_shared<session::SessionCallers>(services.sessions, bearer);
 
   // Route handlers run on the io_context's own threads: they are coroutines, and suspend
   // on the pools rather than block.
@@ -390,7 +403,14 @@ int run(const cli::Options& options) {
   pages.register_routes(*router);
   oauth::MetadataRoutes metadata_routes(services.keys, {config.issuer, config.allow_client_secrets});
   metadata_routes.register_routes(*router);
-  if (config.issuer.empty()) logger.warn("No oauth.issuer: the OAuth metadata is not served");
+  if (config.issuer.empty()) logger.warn("No oauth.issuer: the OAuth metadata, the code flow and the token endpoint are not served");
+  std::unique_ptr<oauth::FlowRoutes> flow_routes;
+  if (token_issuer) {
+    auto clients = std::make_shared<oauth::ClientAuthenticator>(services.apps, ports.hashing, wall, time, config.issuer);
+    flow_routes = std::make_unique<oauth::FlowRoutes>(
+        oauth::FlowRoutes::Parts{services.apps, services.directory, services.sessions, services.consents, token_issuer, clients, &time, &wall});
+    flow_routes->register_routes(*router);
+  }
 
   auto server = std::make_shared<http::HttpServer>(log, io_context, tls.value, client_address);
 
