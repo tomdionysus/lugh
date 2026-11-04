@@ -10,12 +10,12 @@
 #include <memory>
 #include <string>
 
+#include "dannan/status/log.h"
 #include "lugh/core/secure_bytes.h"
 #include "lugh/core/status.h"
 #include "lugh/core/task.h"
 #include "lugh/crypto/argon2.h"
 #include "lugh/keys/keyring.h"
-#include "lugh/loggers/logger.h"
 #include "lugh/system/console.h"
 #include "lugh/system/environment.h"
 #include "lugh/system/files.h"
@@ -36,7 +36,7 @@ class KeyringManager {
   static constexpr const char* kFileName = "keyring";
 
   // `hashing` runs Argon2id over a passphrase, which takes its whole 64 MiB and a while.
-  KeyringManager(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files, std::shared_ptr<system::Console> console,
+  KeyringManager(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<system::Files> files, std::shared_ptr<system::Console> console,
                  std::shared_ptr<system::Environment> environment, std::string state_directory, Executor hashing);
 
   std::string path() const;
@@ -70,7 +70,7 @@ class KeyringManager {
   Task<Result<SecureBuffer>> _from_credential() const;
   Task<Result<SecureBuffer>> _from_passphrase(KeyringHeader header);
 
-  std::shared_ptr<loggers::Logger> _logger;
+  dannan::status::ScopedLogger _logger;
   std::shared_ptr<system::Files> _files;
   std::shared_ptr<system::Console> _console;
   std::shared_ptr<system::Environment> _environment;

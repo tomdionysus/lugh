@@ -39,7 +39,7 @@ PATTERNS = {
     # The process's own memory: locking, mapping and limits.
     "process memory": r"\bCRYPTO_secure_malloc_init\b|\bmlock(?:all)?\b|\bmmap\b|\bsetrlimit\b",
     # The concrete adapters, by name: everything else takes the port.
-    "concrete adapter": r"\bSystem(?:Environment|Random|Files|Console)\b|\bLoggerStdIO\b",
+    "concrete adapter": r"\bSystem(?:Environment|Files|Console)\b|\b(?:ConsoleSink|JsonSink|console_sink)\b",
     # Dannan's clocks are the process's: only the composition root reaches for them.
     "Dannan clock": r"\b(?:SteadyTimeSource|SystemWallClock|steady_time_source|system_wall_clock)\b",
 }
@@ -51,8 +51,6 @@ ADAPTERS = {
     "tools/lugh_node.cpp",
     "lugh/system/system_environment.h",
     "lugh/system/system_environment.cpp",
-    "lugh/loggers/logger_stdio.h",  # LoggerStdIO: stamps each line with the time
-    "lugh/loggers/logger_stdio.cpp",
     "lugh/system/system_files.h",  # SystemFiles: the keyring on disk
     "lugh/system/system_files.cpp",
     "lugh/system/system_console.h",  # SystemConsole: a passphrase typed without echo

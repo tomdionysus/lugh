@@ -16,13 +16,13 @@
 
 #include "dannan/contract/time_source.h"
 #include "dannan/identity/crypto.h"
+#include "dannan/status/log.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/password_hash.h"
 #include "lugh/core/outcome.h"
 #include "lugh/core/secret.h"
 #include "lugh/core/task.h"
 #include "lugh/directory/directory.h"
-#include "lugh/loggers/logger.h"
 #include "lugh/store/store.h"
 #include "lugh/system/files.h"
 
@@ -68,7 +68,7 @@ class Passwords : public directory::Dependent {
  public:
   static constexpr const char* kTable = "credentials";
 
-  Passwords(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+  Passwords(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
             std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs params, PasswordRules rules, BreachedPasswords breached);
 
   // Whether the password may be used by this user, and if not, why, without saying what it
@@ -91,7 +91,7 @@ class Passwords : public directory::Dependent {
   Task<Status> forget(audit::Actor actor, std::string user_id) override;
 
  private:
-  std::shared_ptr<loggers::Logger> _logger;
+  dannan::status::ScopedLogger _logger;
   std::shared_ptr<store::Store> _store;
   const dannan::contract::WallClock& _wall;
   std::shared_ptr<audit::AuditLog> _audit;

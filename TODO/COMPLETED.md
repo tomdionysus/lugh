@@ -56,6 +56,16 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   source fail and saw a user, a factor, root's password or a keyring refused; with Dannan
   drawing the bytes, a test cannot make it fail. The tests that relied on two rigs drawing
   different bytes now draw from the real generator.
+- Logging is Dannan's (`dannan/status/log.h`): the node has one `LogSink`, made in
+  `tools/lugh_node.cpp` by `console_sink(format, level)` (text, or JSON lines through
+  Dannan's `JsonSink`, added at Lugh's request), and each component takes the sink and
+  scopes its own `ScopedLogger` ("store", "audit", "authn" and so on), as a Dannan component
+  takes `Context::logger(scope)`. `log.level` and `log.format` are read with Dannan's
+  `parse_log_level` and `parse_log_format`, so `all` is now a level. The tests record
+  through `RecordingSink`. Lugh's `loggers/` (from blackraven-admin) is deleted, and the IoC
+  check refuses a concrete sink outside the composition root. Dannan is pinned to ca8a565.
+- Finding: the unit count went from 347 to 338: the tests of `LoggerScoped` and
+  `LoggerStdIO`, whose behaviour is now Dannan's and tested there.
 
 ## 2026-10-18: P5, the management API (not committed)
 

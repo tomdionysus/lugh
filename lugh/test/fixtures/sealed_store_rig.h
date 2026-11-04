@@ -14,10 +14,10 @@
 #include "dannan/identity/crypto.h"
 #include "lugh/keys/keyring_manager.h"
 #include "lugh/store/sealed_store.h"
-#include "lugh/test/fixtures/logger_mock.h"
 #include "lugh/test/fixtures/map_environment.h"
 #include "lugh/test/fixtures/memory_files.h"
 #include "lugh/test/fixtures/pools.h"
+#include "lugh/test/fixtures/recording_sink.h"
 #include "lugh/test/fixtures/run.h"
 #include "lugh/test/fixtures/scripted_console.h"
 
@@ -49,7 +49,7 @@ class SealedStoreRig {
   void file_set(const std::string& table, lugh::Bytes bytes) { files->put("/state/store/" + table + ".log", std::move(bytes)); }
 
   std::vector<lugh::store::TableSpec> tables;
-  std::shared_ptr<MockLogger> logger = std::make_shared<MockLogger>();
+  std::shared_ptr<RecordingSink> logger = std::make_shared<RecordingSink>();
   std::shared_ptr<MemoryFiles> files = std::make_shared<MemoryFiles>();
   std::shared_ptr<lugh::keys::KeyringManager> keyrings = std::make_shared<lugh::keys::KeyringManager>(
       logger, files, std::make_shared<ScriptedConsole>(), std::make_shared<MapEnvironment>(), "/state", test_pool());

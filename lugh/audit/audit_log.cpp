@@ -13,7 +13,6 @@
 
 #include "dannan/identity/crypto.h"
 #include "lugh/core/codec.h"
-#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::audit {
 
@@ -50,24 +49,24 @@ Hash hash_of(std::span<const unsigned char> body) {
 
 }  // namespace
 
-AuditLog::AuditLog(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall)
-    : _logger(std::make_shared<loggers::LoggerScoped>("audit", std::move(logger))), _store(std::move(store)), _wall(wall) {}
+AuditLog::AuditLog(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall)
+    : _logger(std::move(log), "audit"), _store(std::move(store)), _wall(wall) {}
 
-Task<Result<std::shared_ptr<AuditLog>>> AuditLog::open(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store,
+Task<Result<std::shared_ptr<AuditLog>>> AuditLog::open(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store,
                                                        const dannan::contract::WallClock& wall) {
   using Answer = Result<std::shared_ptr<AuditLog>>;
-  std::shared_ptr<AuditLog> log(new AuditLog(std::move(logger), std::move(store), wall));
+  std::shared_ptr<AuditLog> opened(new AuditLog(std::move(log), std::move(store), wall));
 
   // Keys are zero-padded, so the last in key order is the newest.
-  const auto all = co_await log->_store->list(kTable);
+  const auto all = co_await opened->_store->list(kTable);
   if (!all.empty()) {
     const auto& last = all.back();
     const auto entry = decode(last.value);
     if (!entry || key(entry->sequence) != last.key) co_return Answer::failure("audit: entry " + last.key + " cannot be read");
-    log->_next = entry->sequence + 1;
-    log->_last = entry->hash;
+    opened->_next = entry->sequence + 1;
+    opened->_last = entry->hash;
   }
-  co_return Answer::success(std::move(log));
+  co_return Answer::success(std::move(opened));
 }
 
 Task<Status> AuditLog::record(Event event) {
@@ -90,7 +89,7 @@ Task<Status> AuditLog::record(Event event) {
   const auto encoded = encode(entry);
   const auto written = co_await _store->put(kTable, key(entry.sequence), SecureBuffer(encoded.begin(), encoded.end()), 0);
   if (!written.ok()) {
-    _logger->error("cannot record " + entry.event.action + " for " + entry.event.subject + ": " + written.message);
+    _logger.error("cannot record " + entry.event.action + " for " + entry.event.subject + ": " + written.message);
     co_return Status::failure("the audit log cannot be written: " + written.message);
   }
 

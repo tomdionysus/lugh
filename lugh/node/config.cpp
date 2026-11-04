@@ -48,18 +48,21 @@ std::optional<unsigned long> parse_number(const std::string& text, unsigned long
   return value;
 }
 
-std::optional<loggers::LogLevel> parse_level(const std::string& text) {
-  if (text == "debug") return loggers::DEBUG;
-  if (text == "info") return loggers::INFO;
-  if (text == "warn") return loggers::WARN;
-  if (text == "error") return loggers::ERROR;
-  return std::nullopt;
+// Dannan's spellings, so every node in the stack takes the same ones.
+std::optional<dannan::status::LogLevel> parse_level(const std::string& text) {
+  try {
+    return dannan::status::parse_log_level(text);
+  } catch (const std::invalid_argument&) {
+    return std::nullopt;
+  }
 }
 
-std::optional<loggers::LogFormat> parse_format(const std::string& text) {
-  if (text == "text") return loggers::LogFormat::Text;
-  if (text == "json") return loggers::LogFormat::Json;
-  return std::nullopt;
+std::optional<dannan::status::LogFormat> parse_format(const std::string& text) {
+  try {
+    return dannan::status::parse_log_format(text);
+  } catch (const std::invalid_argument&) {
+    return std::nullopt;
+  }
 }
 
 Result<std::vector<network::Cidr>> parse_networks(const std::vector<std::string>& texts, const std::string& source) {
@@ -200,7 +203,7 @@ Status ConfigLoader::_apply(Config& config, const std::string& key, const std::s
 
   if (key == "log.level") {
     const auto level = parse_level(value);
-    if (!level) return refuse("debug, info, warn or error");
+    if (!level) return refuse("all, debug, info, warn or error");
     config.log_level = *level;
   } else if (key == "log.format") {
     const auto format = parse_format(value);

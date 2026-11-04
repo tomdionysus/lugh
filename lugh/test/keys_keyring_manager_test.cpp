@@ -9,10 +9,10 @@
 
 #include "lugh/keys/keyring_manager.h"
 #include "lugh/test/fixtures/hex.h"
-#include "lugh/test/fixtures/logger_mock.h"
 #include "lugh/test/fixtures/map_environment.h"
 #include "lugh/test/fixtures/memory_files.h"
 #include "lugh/test/fixtures/pools.h"
+#include "lugh/test/fixtures/recording_sink.h"
 #include "lugh/test/fixtures/run.h"
 #include "lugh/test/fixtures/scripted_console.h"
 
@@ -38,7 +38,7 @@ class KeyringManagerTest : public ::testing::Test {
     return created.value.master_key;
   }
 
-  std::shared_ptr<MockLogger> logger = std::make_shared<MockLogger>();
+  std::shared_ptr<RecordingSink> logger = std::make_shared<RecordingSink>();
   std::shared_ptr<MemoryFiles> files = std::make_shared<MemoryFiles>();
   std::shared_ptr<ScriptedConsole> console = std::make_shared<ScriptedConsole>();
   std::shared_ptr<MapEnvironment> environment = std::make_shared<MapEnvironment>();

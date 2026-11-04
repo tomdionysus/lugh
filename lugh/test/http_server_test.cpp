@@ -16,7 +16,7 @@
 
 #include "lugh/http/api_json.h"
 #include "lugh/http/tls_context.h"
-#include "lugh/test/fixtures/logger_mock.h"
+#include "lugh/test/fixtures/recording_sink.h"
 #include "lugh/test/fixtures/temp_directory.h"
 #include "lugh/test/fixtures/test_certificate.h"
 
@@ -39,7 +39,7 @@ namespace {
 struct Running {
   TempDirectory dir;
   net::io_context io_context;
-  std::shared_ptr<MockLogger> logger = std::make_shared<MockLogger>();
+  std::shared_ptr<RecordingSink> logger = std::make_shared<RecordingSink>();
   std::shared_ptr<HttpServer> server;
   std::thread thread;
 
@@ -218,7 +218,7 @@ TEST(HttpServer, ListeningOnNonsenseFails) {
   net::io_context io_context;
   auto tls = std::make_shared<ssl::context>(ssl::context::tls_server);
   auto server =
-      std::make_shared<HttpServer>(std::make_shared<MockLogger>(), io_context, tls, std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}));
+      std::make_shared<HttpServer>(std::make_shared<RecordingSink>(), io_context, tls, std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}));
 
   const auto status = server->listen("not-an-address", 0);
   EXPECT_FALSE(status.ok);
@@ -231,7 +231,7 @@ TEST(HttpServer, APortInUseFails) {
   net::io_context io_context;
   auto tls = std::make_shared<ssl::context>(ssl::context::tls_server);
   auto second =
-      std::make_shared<HttpServer>(std::make_shared<MockLogger>(), io_context, tls, std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}));
+      std::make_shared<HttpServer>(std::make_shared<RecordingSink>(), io_context, tls, std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}));
 
   EXPECT_FALSE(second->listen("127.0.0.1", running.server->port()).ok);
 }

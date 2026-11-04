@@ -12,7 +12,6 @@
 #include <utility>
 
 #include "lugh/http/api_json.h"
-#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::http {
 
@@ -52,7 +51,7 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
       if (ec) {
         // Scanners, plaintext clients and old TLS all end here; at debug, so they cannot
         // fill the journal.
-        self->_pipeline->logger->debug("TLS handshake from " + self->_peer.to_string() + " failed: " + ec.message());
+        self->_pipeline->logger.debug("TLS handshake from " + self->_peer.to_string() + " failed: " + ec.message());
         return self->_close();
       }
       self->_read();
@@ -105,7 +104,7 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
     try {
       middlewares[index](_request, _remote, response, std::move(next));
     } catch (const std::exception& e) {
-      _pipeline->logger->error(std::string(to_string(_request.method())) + " " + std::string(_request.target()) + " threw: " + e.what());
+      _pipeline->logger.error(std::string(to_string(_request.method())) + " " + std::string(_request.target()) + " threw: " + e.what());
       write_error(response, status::internal_server_error, "internal", "the server failed to answer");
       _respond(response);
     }
@@ -123,8 +122,8 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
     response->set("Referrer-Policy", "no-referrer");
     response->keep_alive(_request.keep_alive());
 
-    _pipeline->logger->debug(_remote + " " + std::string(to_string(_request.method())) + " " + std::string(_request.target()) + " " +
-                             std::to_string(response->result_int()));
+    _pipeline->logger.debug(_remote + " " + std::string(to_string(_request.method())) + " " + std::string(_request.target()) + " " +
+                            std::to_string(response->result_int()));
 
     _write(std::move(response));
   }
@@ -151,9 +150,9 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
 
 }  // namespace
 
-HttpServer::HttpServer(std::shared_ptr<loggers::Logger> logger, net::io_context& io_context, std::shared_ptr<ssl::context> tls,
+HttpServer::HttpServer(std::shared_ptr<dannan::status::LogSink> log, net::io_context& io_context, std::shared_ptr<ssl::context> tls,
                        std::shared_ptr<ClientAddress> client_address, HttpPipeline::Limits limits)
-    : _logger(std::make_shared<loggers::LoggerScoped>("http", std::move(logger))),
+    : _logger(std::move(log), "http"),
       _io_context(io_context),
       _acceptor(net::make_strand(io_context)),
       _tls(std::move(tls)),
@@ -191,8 +190,8 @@ void HttpServer::start() {
 
   boost::system::error_code ec;
   const auto endpoint = _acceptor.local_endpoint(ec);
-  _logger->info("Listening on " + (ec ? std::string("an unknown address") : endpoint.address().to_string() + ":" + std::to_string(endpoint.port())) +
-                ", TLS 1.3 only");
+  _logger.info("Listening on " + (ec ? std::string("an unknown address") : endpoint.address().to_string() + ":" + std::to_string(endpoint.port())) +
+               ", TLS 1.3 only");
 
   net::dispatch(_acceptor.get_executor(), [self = shared_from_this()] { self->_accept(); });
 }
@@ -215,7 +214,7 @@ void HttpServer::_accept() {
     if (ec == net::error::operation_aborted || !self->_acceptor.is_open()) return;
 
     if (ec) {
-      self->_logger->warn("Accept failed: " + ec.message());
+      self->_logger.warn("Accept failed: " + ec.message());
     } else {
       std::make_shared<HttpSession>(std::move(socket), *self->_tls, self->_pipeline)->start();
     }

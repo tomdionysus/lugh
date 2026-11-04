@@ -309,7 +309,7 @@ TEST(SealedStore, RefusesBadTableSpecs) {
 TEST(SealedStore, OnDiskATornTailIsCut) {
   TempDirectory dir;
   auto files = std::make_shared<lugh::system::SystemFiles>(test_pool());
-  auto logger = std::make_shared<MockLogger>();
+  auto logger = std::make_shared<RecordingSink>();
   auto keyrings = std::make_shared<lugh::keys::KeyringManager>(logger, files, std::make_shared<ScriptedConsole>(), std::make_shared<MapEnvironment>(),
                                                                dir.path().string(), test_pool());
   lugh::keys::KeyringHeader header;

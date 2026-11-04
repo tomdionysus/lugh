@@ -10,8 +10,6 @@
 #include <set>
 #include <utility>
 
-#include "lugh/loggers/logger_scoped.h"
-
 namespace lugh::store {
 
 namespace {
@@ -31,20 +29,20 @@ std::map<std::string, std::vector<std::string>> index_values(const TableSpec& sp
 
 }  // namespace
 
-SealedStore::SealedStore(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files, std::shared_ptr<keys::KeyringManager> keyrings,
+SealedStore::SealedStore(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<system::Files> files, std::shared_ptr<keys::KeyringManager> keyrings,
                          keys::Keyring keyring, std::string directory)
-    : _logger(std::make_shared<loggers::LoggerScoped>("store", std::move(logger))),
+    : _logger(std::move(log), "store"),
       _files(std::move(files)),
       _keyrings(std::move(keyrings)),
       _directory(std::move(directory)),
       _keyring(std::move(keyring)) {}
 
-Task<Result<std::shared_ptr<SealedStore>>> SealedStore::open(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files,
+Task<Result<std::shared_ptr<SealedStore>>> SealedStore::open(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<system::Files> files,
                                                              std::shared_ptr<keys::KeyringManager> keyrings, keys::Keyring keyring, std::string directory,
                                                              std::vector<TableSpec> tables) {
   using Answer = Result<std::shared_ptr<SealedStore>>;
 
-  std::shared_ptr<SealedStore> store(new SealedStore(std::move(logger), std::move(files), std::move(keyrings), std::move(keyring), std::move(directory)));
+  std::shared_ptr<SealedStore> store(new SealedStore(std::move(log), std::move(files), std::move(keyrings), std::move(keyring), std::move(directory)));
 
   if (const auto made = co_await store->_files->make_directory(store->_directory); !made.ok) co_return Answer::failure(made.error);
 
@@ -54,7 +52,7 @@ Task<Result<std::shared_ptr<SealedStore>>> SealedStore::open(std::shared_ptr<log
     if (const auto opened = co_await store->_open_table(std::move(spec)); !opened.ok) co_return Answer::failure(opened.error);
   }
 
-  store->_logger->info("Opened " + std::to_string(store->_tables.size()) + " tables in " + store->_directory);
+  store->_logger.info("Opened " + std::to_string(store->_tables.size()) + " tables in " + store->_directory);
   co_return Answer::success(std::move(store));
 }
 
@@ -65,7 +63,7 @@ Task<Status> SealedStore::_load_keys(Table& table) {
   if (_keyring.current(name) == nullptr) {
     if (const auto made = _keyring.rotate(name); !made.ok) co_return Status::failure(made.error);
     if (const auto saved = co_await _keyrings->save(_keyring); !saved.ok) co_return saved;
-    _logger->info("Made the first data key for table " + name);
+    _logger.info("Made the first data key for table " + name);
   }
 
   const auto* current = _keyring.current(name);
@@ -113,8 +111,8 @@ Task<Status> SealedStore::_open_table(TableSpec spec) {
   table->length = scan.value.valid_length;
 
   if (scan.value.end == Scan::End::torn) {
-    _logger->warn(path + ": cut a torn tail at byte " + std::to_string(scan.value.problem_offset) + " (" + scan.value.problem + ", " +
-                  std::to_string(file.value.size() - scan.value.valid_length) + " bytes); nothing there had been acknowledged");
+    _logger.warn(path + ": cut a torn tail at byte " + std::to_string(scan.value.problem_offset) + " (" + scan.value.problem + ", " +
+                 std::to_string(file.value.size() - scan.value.valid_length) + " bytes); nothing there had been acknowledged");
     if (const auto cut = co_await _files->truncate(path, scan.value.valid_length); !cut.ok) co_return cut;
   }
 
@@ -169,7 +167,7 @@ std::optional<Record> SealedStore::_open_entry(const Table& table, const std::st
 
   auto change = open_frame(entry.frame, table.spec.name, data_key->second);
   if (!change || change->key != key || change->version != entry.version) {
-    _logger->error(table.path + ": record " + key + " does not open in memory");
+    _logger.error(table.path + ": record " + key + " does not open in memory");
     return std::nullopt;
   }
   return Record{key, entry.version, std::move(change->value)};
@@ -294,7 +292,7 @@ Task<Write> SealedStore::_write(Table& table, Operation operation, std::string k
     if (const auto cut = co_await _files->truncate(table.path, length); !cut.ok) {
       std::lock_guard<std::mutex> lock(table.mutex);
       table.broken = true;
-      _logger->error(table.path + ": a write failed part way and could not be cut back (" + cut.error + "); the table refuses writes until restart");
+      _logger.error(table.path + ": a write failed part way and could not be cut back (" + cut.error + "); the table refuses writes until restart");
     }
     co_return Write::failure(StoreError::failed, appended.error);
   }
@@ -326,7 +324,7 @@ Task<Write> SealedStore::_write(Table& table, Operation operation, std::string k
   }
 
   if (compact) {
-    if (const auto compacted = co_await _compact(table); !compacted.ok) _logger->warn(table.path + ": compaction failed: " + compacted.error);
+    if (const auto compacted = co_await _compact(table); !compacted.ok) _logger.warn(table.path + ": compaction failed: " + compacted.error);
   }
   co_return Write::success(version);
 }
@@ -385,7 +383,7 @@ Task<Status> SealedStore::_compact(Table& table) {
     table.length = size;
     table.superseded = 0;
   }
-  _logger->info(table.path + ": compacted from " + std::to_string(was) + " bytes to " + std::to_string(size) + " under epoch " + std::to_string(epoch));
+  _logger.info(table.path + ": compacted from " + std::to_string(was) + " bytes to " + std::to_string(size) + " under epoch " + std::to_string(epoch));
   co_return Status::success();
 }
 
@@ -407,7 +405,7 @@ Task<Status> SealedStore::rotate(std::string name) {
     table->keys[rotated.value] = _keyring.find(table->spec.name, rotated.value)->key;
     table->epoch = epoch = rotated.value;
   }
-  _logger->info("Table " + table->spec.name + " is under data key epoch " + std::to_string(epoch));
+  _logger.info("Table " + table->spec.name + " is under data key epoch " + std::to_string(epoch));
   co_return co_await _compact(*table);
 }
 

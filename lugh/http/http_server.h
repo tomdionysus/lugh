@@ -13,10 +13,10 @@
 #include <string>
 #include <vector>
 
+#include "dannan/status/log.h"
 #include "lugh/core/status.h"
 #include "lugh/http/client_address.h"
 #include "lugh/http/http_types.h"
-#include "lugh/loggers/logger.h"
 
 namespace lugh::http {
 
@@ -36,7 +36,7 @@ struct HttpPipeline {
     std::chrono::seconds handshake{10};
   };
 
-  std::shared_ptr<loggers::Logger> logger;
+  dannan::status::ScopedLogger logger;
   std::shared_ptr<ClientAddress> client_address;
   std::vector<HttpMiddleware> middlewares;
   Limits limits;
@@ -47,7 +47,7 @@ struct HttpPipeline {
 // security headers, whatever the middleware set.
 class HttpServer : public std::enable_shared_from_this<HttpServer> {
  public:
-  HttpServer(std::shared_ptr<loggers::Logger> logger, net::io_context& io_context, std::shared_ptr<ssl::context> tls,
+  HttpServer(std::shared_ptr<dannan::status::LogSink> log, net::io_context& io_context, std::shared_ptr<ssl::context> tls,
              std::shared_ptr<ClientAddress> client_address, HttpPipeline::Limits limits = {});
 
   // In the order they run. Before start().
@@ -67,7 +67,7 @@ class HttpServer : public std::enable_shared_from_this<HttpServer> {
  private:
   void _accept();
 
-  std::shared_ptr<loggers::Logger> _logger;
+  dannan::status::ScopedLogger _logger;
   net::io_context& _io_context;
   net::ip::tcp::acceptor _acceptor;
   std::shared_ptr<ssl::context> _tls;

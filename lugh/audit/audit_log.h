@@ -18,10 +18,10 @@
 
 #include "dannan/contract/time_source.h"
 #include "dannan/identity/crypto.h"
+#include "dannan/status/log.h"
 #include "lugh/core/async_mutex.h"
 #include "lugh/core/status.h"
 #include "lugh/core/task.h"
-#include "lugh/loggers/logger.h"
 #include "lugh/store/store.h"
 
 namespace lugh::audit {
@@ -77,7 +77,7 @@ class AuditLog {
   static constexpr std::size_t kMostDetailBytes = 1024;
 
   // Reads the tail of the chain, to carry on from it.
-  static Task<Result<std::shared_ptr<AuditLog>>> open(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store,
+  static Task<Result<std::shared_ptr<AuditLog>>> open(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store,
                                                       const dannan::contract::WallClock& wall);
 
   // Appends one entry. A failure is logged here as well as answered: the caller has
@@ -101,9 +101,9 @@ class AuditLog {
   static std::string key(std::uint64_t sequence);
 
  private:
-  AuditLog(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall);
+  AuditLog(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall);
 
-  std::shared_ptr<loggers::Logger> _logger;
+  dannan::status::ScopedLogger _logger;
   std::shared_ptr<store::Store> _store;
   const dannan::contract::WallClock& _wall;
 

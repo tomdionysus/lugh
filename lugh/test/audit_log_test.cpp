@@ -10,8 +10,8 @@
 #include <gtest/gtest.h>
 
 #include "dannan/test/fixtures/stepped_time.h"
-#include "lugh/test/fixtures/logger_mock.h"
 #include "lugh/test/fixtures/memory_store.h"
+#include "lugh/test/fixtures/recording_sink.h"
 #include "lugh/test/fixtures/run.h"
 
 using lugh::audit::AuditLog;
@@ -27,7 +27,7 @@ class AuditLogTest : public ::testing::Test {
     return opened.value;
   }
 
-  std::shared_ptr<MockLogger> logger = std::make_shared<MockLogger>();
+  std::shared_ptr<RecordingSink> logger = std::make_shared<RecordingSink>();
   std::shared_ptr<MemoryStore> store = std::make_shared<MemoryStore>(std::vector<lugh::store::TableSpec>{{"audit", {}}});
   dannan::test::SteppedWall wall{1792281600000ull};  // 2026-10-18T00:00:00Z
 };

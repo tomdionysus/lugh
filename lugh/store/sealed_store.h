@@ -14,12 +14,12 @@
 #include <string>
 #include <vector>
 
+#include "dannan/status/log.h"
 #include "lugh/core/async_mutex.h"
 #include "lugh/core/status.h"
 #include "lugh/core/task.h"
 #include "lugh/keys/keyring.h"
 #include "lugh/keys/keyring_manager.h"
-#include "lugh/loggers/logger.h"
 #include "lugh/store/log_format.h"
 #include "lugh/store/store.h"
 #include "lugh/system/files.h"
@@ -52,7 +52,7 @@ class SealedStore : public Store {
   // Compaction runs once a log is past this and more than half superseded.
   static constexpr std::size_t kCompactAfterBytes = 1024 * 1024;
 
-  static Task<Result<std::shared_ptr<SealedStore>>> open(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files,
+  static Task<Result<std::shared_ptr<SealedStore>>> open(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<system::Files> files,
                                                          std::shared_ptr<keys::KeyringManager> keyrings, keys::Keyring keyring, std::string directory,
                                                          std::vector<TableSpec> tables);
 
@@ -106,7 +106,7 @@ class SealedStore : public Store {
     bool broken = false;
   };
 
-  SealedStore(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files, std::shared_ptr<keys::KeyringManager> keyrings,
+  SealedStore(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<system::Files> files, std::shared_ptr<keys::KeyringManager> keyrings,
               keys::Keyring keyring, std::string directory);
 
   Task<Status> _open_table(TableSpec spec);
@@ -118,7 +118,7 @@ class SealedStore : public Store {
   std::optional<Record> _open_entry(const Table& table, const std::string& key, const Entry& entry) const;
   Table* _table(std::string_view name) const;
 
-  std::shared_ptr<loggers::Logger> _logger;
+  dannan::status::ScopedLogger _logger;
   std::shared_ptr<system::Files> _files;
   std::shared_ptr<keys::KeyringManager> _keyrings;
   std::string _directory;

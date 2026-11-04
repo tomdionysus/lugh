@@ -11,7 +11,6 @@
 
 #include "dannan/identity/crypto.h"
 #include "lugh/core/encoding.h"
-#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::directory {
 
@@ -63,9 +62,9 @@ Fault fault_of(store::StoreError error) {
   return Fault::failed;
 }
 
-Directory::Directory(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+Directory::Directory(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
                      std::shared_ptr<audit::AuditLog> audit)
-    : _logger(std::make_shared<loggers::LoggerScoped>("directory", std::move(logger))), _store(std::move(store)), _wall(wall), _audit_log(std::move(audit)) {}
+    : _logger(std::move(log), "directory"), _store(std::move(store)), _wall(wall), _audit_log(std::move(audit)) {}
 
 void Directory::dependent_add(std::shared_ptr<Dependent> dependent) { _dependents.push_back(std::move(dependent)); }
 
@@ -216,7 +215,7 @@ Task<Outcome<>> Directory::remove_user(audit::Actor actor, std::string id, std::
   }
   for (const auto& dependent : _dependents) {
     if (const auto forgotten = co_await dependent->forget(actor, found->id); !forgotten.ok)
-      _logger->error("removing user " + found->id + ": " + forgotten.error);
+      _logger.error("removing user " + found->id + ": " + forgotten.error);
   }
   co_return Answer::success();
 }

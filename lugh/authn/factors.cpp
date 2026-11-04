@@ -13,7 +13,6 @@
 #include "lugh/authn/totp.h"
 #include "lugh/core/codec.h"
 #include "lugh/core/encoding.h"
-#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::authn {
 
@@ -134,9 +133,9 @@ std::optional<Secret> normal_recovery_code(std::string_view code) {
   return Secret(std::move(out));
 }
 
-Factors::Factors(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+Factors::Factors(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
                  std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs recovery_params)
-    : _logger(std::make_shared<loggers::LoggerScoped>("factors", std::move(logger))),
+    : _logger(std::move(log), "factors"),
       _store(std::move(store)),
       _wall(wall),
       _audit_log(std::move(audit)),

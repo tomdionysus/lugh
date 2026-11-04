@@ -14,11 +14,11 @@
 #include <vector>
 
 #include "dannan/contract/time_source.h"
+#include "dannan/status/log.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/core/outcome.h"
 #include "lugh/core/task.h"
 #include "lugh/directory/records.h"
-#include "lugh/loggers/logger.h"
 #include "lugh/store/store.h"
 
 namespace lugh::directory {
@@ -59,7 +59,7 @@ struct GroupChange {
 // while either works. Arguments are owned.
 class Directory {
  public:
-  Directory(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+  Directory(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
             std::shared_ptr<audit::AuditLog> audit);
 
   // Told, in the order added, when a user is removed. Set up before anything is served.
@@ -106,7 +106,7 @@ class Directory {
   Task<Outcome<Group>> _put_group(audit::Actor actor, Group group, std::uint64_t expected, std::string action);
   Task<void> _audit(const audit::Actor& actor, std::string action, std::string subject, std::string detail = {});
 
-  std::shared_ptr<loggers::Logger> _logger;
+  dannan::status::ScopedLogger _logger;
   std::shared_ptr<store::Store> _store;
   const dannan::contract::WallClock& _wall;
   std::shared_ptr<audit::AuditLog> _audit_log;

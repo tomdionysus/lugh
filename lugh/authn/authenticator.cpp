@@ -7,8 +7,6 @@
 
 #include "lugh/authn/authenticator.h"
 
-#include "lugh/loggers/logger_scoped.h"
-
 namespace lugh::authn {
 
 namespace {
@@ -24,10 +22,11 @@ Step waiting(std::chrono::seconds wait, SignIn sign_in = {}) {
 
 }  // namespace
 
-Authenticator::Authenticator(std::shared_ptr<loggers::Logger> logger, const dannan::contract::TimeSource& time, std::shared_ptr<directory::Directory> directory,
-                             std::shared_ptr<Passwords> passwords, std::shared_ptr<Factors> factors, std::shared_ptr<Policies> policies,
-                             std::shared_ptr<EnrolmentLinks> links, std::shared_ptr<audit::AuditLog> audit, Settings settings)
-    : _logger(std::make_shared<loggers::LoggerScoped>("authn", std::move(logger))),
+Authenticator::Authenticator(std::shared_ptr<dannan::status::LogSink> log, const dannan::contract::TimeSource& time,
+                             std::shared_ptr<directory::Directory> directory, std::shared_ptr<Passwords> passwords, std::shared_ptr<Factors> factors,
+                             std::shared_ptr<Policies> policies, std::shared_ptr<EnrolmentLinks> links, std::shared_ptr<audit::AuditLog> audit,
+                             Settings settings)
+    : _logger(std::move(log), "authn"),
       _time(time),
       _directory(std::move(directory)),
       _passwords(std::move(passwords)),
@@ -160,7 +159,7 @@ Task<Step> Authenticator::redeem(Secret token, Secret password, std::string sour
   if (!spent.ok()) co_return Step::of(spent.fault == Fault::failed ? Step::Kind::failed : Step::Kind::refused);
 
   if (const auto set = co_await _passwords->set(actor, *user, std::move(password)); !set.ok()) {
-    _logger->error("enrolment of " + user->id + ": the link is spent and the password was not set: " + set.message);
+    _logger.error("enrolment of " + user->id + ": the link is spent and the password was not set: " + set.message);
     co_return Step::of(Step::Kind::failed);
   }
 

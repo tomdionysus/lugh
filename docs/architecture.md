@@ -67,7 +67,7 @@ One C++20 binary, built from a static library `lugh_core` and a `main.cpp` compo
 | `src/keys/` | The key hierarchy: unsealing the master key at start, KEKs, DEKs, rotation |
 | `src/cluster/` | Node identity, membership, the inter-node transport, replication, merge. Lifted from Macha |
 | `src/system/` | Ports (`Clock`, `Random`, `Environment`, `WorkPool`) and their real adapters |
-| `src/loggers/` | The logger from blackraven-admin |
+| (Dannan) `dannan/status/log.h` | Logging: the node's one `LogSink`, chosen in `tools/lugh_node.cpp`, and a `ScopedLogger` per component |
 
 ### Concurrency
 

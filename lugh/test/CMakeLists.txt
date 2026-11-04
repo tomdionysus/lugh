@@ -39,8 +39,6 @@ add_executable(lugh_tests
     keys_keyring_format_test.cpp
     keys_keyring_manager_test.cpp
     keys_keyring_test.cpp
-    loggers_logger_scoped_test.cpp
-    loggers_logger_stdio_test.cpp
     network_cidr_test.cpp
     node_cli_test.cpp
     node_config_test.cpp

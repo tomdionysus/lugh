@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
+#include "dannan/status/log.h"
 #include "lugh/core/status.h"
-#include "lugh/loggers/logger.h"
 #include "lugh/network/cidr.h"
 #include "lugh/node/cli.h"
 #include "lugh/system/environment.h"
@@ -27,8 +27,8 @@ struct Config {
   // The file read, empty when the defaults alone were used.
   std::string path;
 
-  loggers::LogLevel log_level = loggers::INFO;
-  loggers::LogFormat log_format = loggers::LogFormat::Text;
+  dannan::status::LogLevel log_level = dannan::status::LogLevel::info;
+  dannan::status::LogFormat log_format = dannan::status::LogFormat::text;
 
   std::string address = "0.0.0.0";
   std::uint16_t port = 8443;

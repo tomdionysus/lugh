@@ -9,7 +9,6 @@
 
 #include "dannan/identity/crypto.h"
 #include "lugh/core/codec.h"
-#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::authn {
 
@@ -90,9 +89,9 @@ std::array<unsigned char, 32> BreachedPasswords::_fold_and_hash(std::span<const 
   return dannan::identity::sha256(folded).bytes;
 }
 
-Passwords::Passwords(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+Passwords::Passwords(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
                      std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs params, PasswordRules rules, BreachedPasswords breached)
-    : _logger(std::make_shared<loggers::LoggerScoped>("passwords", std::move(logger))),
+    : _logger(std::move(log), "passwords"),
       _store(std::move(store)),
       _wall(wall),
       _audit(std::move(audit)),
@@ -158,7 +157,7 @@ Task<bool> Passwords::verify(std::string user_id, Secret password) {
     // Against the version just read: if the password changed in the meantime, the newer
     // one stands.
     const auto written = co_await _store->put(kTable, user_id, encode(Credential{std::move(*checked.again), credential->changed}), record->version);
-    if (written.ok()) _logger->info("password hash for " + user_id + " moved to the current costs");
+    if (written.ok()) _logger.info("password hash for " + user_id + " moved to the current costs");
   }
   co_return true;
 }

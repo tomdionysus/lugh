@@ -18,9 +18,9 @@
 #include "lugh/core/encoding.h"
 #include "lugh/directory/directory.h"
 #include "lugh/store/tables.h"
-#include "lugh/test/fixtures/logger_mock.h"
 #include "lugh/test/fixtures/memory_store.h"
 #include "lugh/test/fixtures/pools.h"
+#include "lugh/test/fixtures/recording_sink.h"
 #include "lugh/test/fixtures/run.h"
 
 // A secret is move-only, and the calls that take one keep it. A test that offers the same
@@ -109,7 +109,7 @@ class AuthnRig {
   }
 
   lugh::audit::Actor admin{"admin", "192.0.2.10"};
-  std::shared_ptr<MockLogger> logger = std::make_shared<MockLogger>();
+  std::shared_ptr<RecordingSink> logger = std::make_shared<RecordingSink>();
   std::shared_ptr<MemoryStore> store = std::make_shared<MemoryStore>(all_tables());
   // Steady and wall time, moved together; the wall starts at 2026-10-18T00:00:00Z.
   void advance(std::chrono::milliseconds by) {

@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "dannan/contract/time_source.h"
+#include "dannan/status/log.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/password_hash.h"
 #include "lugh/core/outcome.h"
@@ -22,7 +23,6 @@
 #include "lugh/core/task.h"
 #include "lugh/crypto/argon2.h"
 #include "lugh/directory/directory.h"
-#include "lugh/loggers/logger.h"
 #include "lugh/store/store.h"
 
 namespace lugh::authn {
@@ -69,7 +69,7 @@ class Factors : public directory::Dependent {
   static constexpr crypto::Argon2Costs kRecoveryParams{19 * 1024, 2, 1};
 
   // `hashing` runs the recovery codes' Argon2id, as Passwords' does.
-  Factors(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+  Factors(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
           std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs recovery_params = kRecoveryParams);
 
   Task<std::vector<FactorInfo>> list(std::string user_id) const;
@@ -110,7 +110,7 @@ class Factors : public directory::Dependent {
   std::optional<std::string> _new_key(std::string_view user_id, FactorKind kind);
   Task<void> _audit(const audit::Actor& actor, std::string action, std::string user_id, std::string detail);
 
-  std::shared_ptr<loggers::Logger> _logger;
+  dannan::status::ScopedLogger _logger;
   std::shared_ptr<store::Store> _store;
   const dannan::contract::WallClock& _wall;
   std::shared_ptr<audit::AuditLog> _audit_log;

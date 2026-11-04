@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "dannan/identity/crypto.h"
-#include "lugh/loggers/logger_scoped.h"
 
 namespace lugh::keys {
 
@@ -21,9 +20,9 @@ constexpr std::size_t kMostCredentialBytes = 4096;
 
 }  // namespace
 
-KeyringManager::KeyringManager(std::shared_ptr<loggers::Logger> logger, std::shared_ptr<system::Files> files, std::shared_ptr<system::Console> console,
+KeyringManager::KeyringManager(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<system::Files> files, std::shared_ptr<system::Console> console,
                                std::shared_ptr<system::Environment> environment, std::string state_directory, Executor hashing)
-    : _logger(std::make_shared<loggers::LoggerScoped>("keys", std::move(logger))),
+    : _logger(std::move(log), "keys"),
       _files(std::move(files)),
       _console(std::move(console)),
       _environment(std::move(environment)),
@@ -93,7 +92,7 @@ Task<Status> KeyringManager::save_new(const Keyring& keyring) {
   if (!sealed.ok) co_return Status::failure(sealed.error);
   if (const auto written = co_await _files->write(path(), std::move(sealed.value), false); !written.ok) co_return written;
 
-  _logger->info("Made keyring " + keyring.id_hex() + " at " + path());
+  _logger.info("Made keyring " + keyring.id_hex() + " at " + path());
   co_return Status::success();
 }
 
@@ -120,7 +119,7 @@ Task<Result<Keyring>> KeyringManager::open() {
   auto keyring = Keyring::open(file.value, master_key.value);
   if (!keyring.ok) co_return Answer::failure(path() + ": " + keyring.error);
 
-  _logger->info("Opened keyring " + keyring.value.id_hex() + " at " + path() + ", holding " + std::to_string(keyring.value.size()) + " data keys");
+  _logger.info("Opened keyring " + keyring.value.id_hex() + " at " + path() + ", holding " + std::to_string(keyring.value.size()) + " data keys");
   co_return keyring;
 }
 

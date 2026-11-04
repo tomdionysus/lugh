@@ -14,7 +14,6 @@
 using lugh::Config;
 using lugh::ConfigLoader;
 using lugh::cli::Options;
-namespace loggers = lugh::loggers;
 
 namespace {
 
@@ -57,8 +56,8 @@ TEST(Config, DefaultsWithNoFileAnywhere) {
   EXPECT_EQ(config.address, "0.0.0.0");
   EXPECT_EQ(config.port, 8443);
   EXPECT_EQ(config.threads, 2u);
-  EXPECT_EQ(config.log_level, loggers::INFO);
-  EXPECT_EQ(config.log_format, loggers::LogFormat::Text);
+  EXPECT_EQ(config.log_level, dannan::status::LogLevel::info);
+  EXPECT_EQ(config.log_format, dannan::status::LogFormat::text);
   EXPECT_TRUE(config.trusted_proxies.empty());
 }
 
@@ -89,8 +88,8 @@ TEST(Config, ReadsEverySettingFromTheFile) {
 
   const auto& config = result.value;
   EXPECT_EQ(config.path, path.string());
-  EXPECT_EQ(config.log_level, loggers::DEBUG);
-  EXPECT_EQ(config.log_format, loggers::LogFormat::Json);
+  EXPECT_EQ(config.log_level, dannan::status::LogLevel::debug);
+  EXPECT_EQ(config.log_format, dannan::status::LogFormat::json);
   EXPECT_EQ(config.address, "127.0.0.1");
   EXPECT_EQ(config.port, 8099);
   EXPECT_EQ(config.threads, 4u);
@@ -118,7 +117,7 @@ TEST(Config, TheEnvironmentWinsOverTheFiles) {
   auto load = loader({{"LUGH_PORT", "8101"}, {"LUGH_LOG_LEVEL", "error"}, {"LUGH_TLS_KEY", "/env/key.pem"}});
   const auto config = load.load(options).value;
   EXPECT_EQ(config.port, 8101);
-  EXPECT_EQ(config.log_level, loggers::ERROR);
+  EXPECT_EQ(config.log_level, dannan::status::LogLevel::error);
   EXPECT_EQ(config.tls_key, "/env/key.pem");
   EXPECT_EQ(config.tls_certificate, "/c.pem");
 }

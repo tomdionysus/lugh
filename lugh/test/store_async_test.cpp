@@ -20,10 +20,10 @@
 
 #include "dannan/identity/crypto.h"
 #include "lugh/store/sealed_store.h"
-#include "lugh/test/fixtures/logger_mock.h"
 #include "lugh/test/fixtures/map_environment.h"
 #include "lugh/test/fixtures/memory_files.h"
 #include "lugh/test/fixtures/pools.h"
+#include "lugh/test/fixtures/recording_sink.h"
 #include "lugh/test/fixtures/run.h"
 #include "lugh/test/fixtures/scripted_console.h"
 #include "lugh/test/fixtures/sealed_store_rig.h"
@@ -60,7 +60,7 @@ class HeldFiles : public MemoryFiles {
 TEST(AsyncStore, AWriteWaitingOnTheDiskHoldsNothingElseUp) {
   boost::asio::io_context io;
   auto files = std::make_shared<HeldFiles>(io.get_executor());
-  auto logger = std::make_shared<MockLogger>();
+  auto logger = std::make_shared<RecordingSink>();
   auto keyrings = std::make_shared<lugh::keys::KeyringManager>(logger, files, std::make_shared<ScriptedConsole>(), std::make_shared<MapEnvironment>(), "/state",
                                                                test_pool());
   lugh::keys::KeyringHeader header;

@@ -35,8 +35,6 @@ add_library(lugh STATIC
     keys/keyring.cpp
     keys/keyring_format.cpp
     keys/keyring_manager.cpp
-    loggers/logger_scoped.cpp
-    loggers/logger_stdio.cpp
     network/cidr.cpp
     node/config.cpp
     store/log_format.cpp
