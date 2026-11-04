@@ -35,7 +35,6 @@ include(CheckPIESupported)
 # are compiled once, in lugh/http/boost_json.cpp.
 find_package(Boost 1.87 REQUIRED CONFIG)
 find_package(Threads REQUIRED)
-find_package(yaml-cpp REQUIRED)
 
 # TLS, AEAD, Argon2id, signatures and randomness all come from OpenSSL 3, the same one
 # Dannan links: one process, one OpenSSL. On the laptop that is MacPorts', as everything is
@@ -45,11 +44,10 @@ find_package(OpenSSL 3.0 REQUIRED)
 # Dannan, the network layer Lugh hosts on, at a release tag, or at a commit while Lugh needs
 # something not yet tagged: from the sibling checkout, cloned into the build tree, so
 # building Lugh never touches ../dannan. Linked as dannan::dannan, the name an installed
-# Dannan exports too (find_package(dannan 0.3 CONFIG)). Now: 0.3.0 and the shared
-# percent-encoding (32f163b), until the next tag carries it.
+# Dannan exports too (find_package(dannan 0.4 CONFIG)). Now: 0.4.0.
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_REF "32f163b0727b58628c260f5706a67b9868448315")
+set(LUGH_DANNAN_REF "0.4.0")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)

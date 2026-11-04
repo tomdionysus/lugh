@@ -88,9 +88,6 @@ class Router : public std::enable_shared_from_this<Router> {
   // rest along, so the dashboard and the API share a port.
   HttpMiddleware middleware(std::string prefix);
 
-  // Path parameters arrive percent-encoded.
-  static std::string percent_decode(const std::string& value);
-
  private:
   struct Route {
     verb method;
@@ -108,6 +105,9 @@ class Router : public std::enable_shared_from_this<Router> {
   static std::vector<std::string> _split(const std::string& path);
   static bool _matches(const std::vector<std::string>& pattern, const std::vector<std::string>& segments, std::unordered_map<std::string, std::string>& out);
   static std::unordered_map<std::string, std::string> _parse_query(const std::string& query);
+  // The route's path parameters (strictly) and the query (as a form) percent-decoded into
+  // the context, with Dannan's decoder; false, having written the 400, for a malformed escape.
+  static bool _decode(RouteContext& context, const std::string& query);
 
   std::shared_ptr<Throttle> _throttle;
   void _dispatch(const Handler& handler, RouteContext context);

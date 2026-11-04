@@ -124,11 +124,29 @@ TEST(Router, UnknownPathsAreLimitedTooAgainstScanning) {
   EXPECT_EQ(call(f.io, middleware, http::verb::get, "/api/b").response->result(), http::status::too_many_requests);
 }
 
-TEST(Router, PercentDecode) {
-  EXPECT_EQ(Router::percent_decode("a%40b.c"), "a@b.c");
-  EXPECT_EQ(Router::percent_decode("a+b"), "a b");
-  EXPECT_EQ(Router::percent_decode("100%"), "100%");
-  EXPECT_EQ(Router::percent_decode("%zz"), "%zz");
+// A path parameter is RFC 3986's ('+' literal); a query is a form ('+' a space); a malformed
+// escape in either is a 400, never passed through. The decoding is Dannan's.
+TEST(Router, PercentDecodingIsStrictForPathsAndFormForQueries) {
+  Fixture f;
+  std::unordered_map<std::string, std::string> parameters;
+  std::unordered_map<std::string, std::string> query;
+  f.router->add_open(http::verb::get, "/api/v1/things/{id}", [&](http::RouteContext context) {
+    parameters = context.parameters;
+    query = context.query;
+    context.done();
+  });
+  const auto middleware = f.router->middleware("/api/");
+
+  ASSERT_EQ(call(f.io, middleware, http::verb::get, "/api/v1/things/a%40b+c?name=a+b%40c&flag").response->result(), http::status::ok);
+  EXPECT_EQ(parameters.at("id"), "a@b+c");
+  EXPECT_EQ(query.at("name"), "a b@c");
+  EXPECT_EQ(query.at("flag"), "");
+
+  for (const auto* target : {"/api/v1/things/100%", "/api/v1/things/%zz", "/api/v1/things/ok?name=%4", "/api/v1/things/ok?100%=x"}) {
+    const auto refused = call(f.io, middleware, http::verb::get, target);
+    EXPECT_EQ(refused.response->result(), http::status::bad_request) << target;
+    EXPECT_NE(refused.response->body().find("percent-escape"), std::string::npos) << target;
+  }
 }
 
 namespace {

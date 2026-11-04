@@ -8,9 +8,10 @@
 #include "lugh/http/router.h"
 
 #include <boost/asio/post.hpp>
-#include <cctype>
+#include <stdexcept>
 #include <utility>
 
+#include "dannan/encoding/percent.h"
 #include "lugh/http/api_json.h"
 
 namespace lugh::http {
@@ -60,7 +61,7 @@ void Router::_handle(const std::string& prefix, const HttpRequest& request, cons
 
     RouteContext context;
     context.parameters = std::move(parameters);
-    context.query = _parse_query(question == std::string::npos ? std::string() : target.substr(question + 1));
+    const auto query = question == std::string::npos ? std::string() : target.substr(question + 1);
     context.request = std::make_shared<const HttpRequest>(request);
     context.remote = remote;
     context.response = response;
@@ -95,6 +96,7 @@ void Router::_handle(const std::string& prefix, const HttpRequest& request, cons
         return next(false);
       }
 
+      if (!_decode(context, query)) return next(false);
       return _dispatch(route.handler, std::move(context));
     }
 
@@ -102,6 +104,7 @@ void Router::_handle(const std::string& prefix, const HttpRequest& request, cons
       write_too_many(response, *wait);
       return next(false);
     }
+    if (!_decode(context, query)) return next(false);
     return _dispatch(route.handler, std::move(context));
   }
 
@@ -174,7 +177,8 @@ bool Router::_matches(const std::vector<std::string>& pattern, const std::vector
     const auto& expected = pattern[i];
 
     if (expected.size() > 2 && expected.front() == '{' && expected.back() == '}') {
-      out[expected.substr(1, expected.size() - 2)] = percent_decode(segments[i]);
+      // Still encoded: decoded by _decode() once the route is chosen.
+      out[expected.substr(1, expected.size() - 2)] = segments[i];
       continue;
     }
 
@@ -195,10 +199,14 @@ std::unordered_map<std::string, std::string> Router::_parse_query(const std::str
     const auto part = query.substr(start, amp - start);
     const auto equals = part.find('=');
 
+    // A form query: '+' is a space (dannan::encoding::Decoding::form). A malformed escape
+    // throws, and _decode() answers 400.
+    using dannan::encoding::Decoding;
     if (equals == std::string::npos) {
-      if (!part.empty()) parsed[percent_decode(part)] = std::string();
+      if (!part.empty()) parsed[dannan::encoding::percent_decode(part, Decoding::form)] = std::string();
     } else {
-      parsed[percent_decode(part.substr(0, equals))] = percent_decode(part.substr(equals + 1));
+      parsed[dannan::encoding::percent_decode(part.substr(0, equals), Decoding::form)] =
+          dannan::encoding::percent_decode(part.substr(equals + 1), Decoding::form);
     }
 
     start = amp + 1;
@@ -207,27 +215,16 @@ std::unordered_map<std::string, std::string> Router::_parse_query(const std::str
   return parsed;
 }
 
-std::string Router::percent_decode(const std::string& value) {
-  std::string out;
-  out.reserve(value.size());
-
-  for (std::size_t i = 0; i < value.size(); ++i) {
-    if (value[i] == '+') {
-      out.push_back(' ');
-      continue;
-    }
-
-    if (value[i] != '%' || i + 2 >= value.size() || !std::isxdigit(static_cast<unsigned char>(value[i + 1])) ||
-        !std::isxdigit(static_cast<unsigned char>(value[i + 2]))) {
-      out.push_back(value[i]);
-      continue;
-    }
-
-    out.push_back(static_cast<char>(std::stoi(value.substr(i + 1, 2), nullptr, 16)));
-    i += 2;
+bool Router::_decode(RouteContext& context, const std::string& query) {
+  try {
+    // A path is RFC 3986's: '+' is a literal '+', and only %XX is decoded.
+    for (auto& [name, value] : context.parameters) value = dannan::encoding::percent_decode(value, dannan::encoding::Decoding::strict);
+    context.query = _parse_query(query);
+  } catch (const std::invalid_argument&) {
+    write_error(context.response, status::bad_request, "invalid", "the request target has a malformed percent-escape");
+    return false;
   }
-
-  return out;
+  return true;
 }
 
 }  // namespace lugh::http
