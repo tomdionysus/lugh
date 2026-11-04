@@ -160,6 +160,11 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   a false "no" when the store fails or the deadline passes. The directory's `Dependent`
   takes the callback shape; factors, not yet converted, answers it by running its
   coroutine through `spawned`. 353, in the debug, ASan and TSan builds.
+- Callback style, the enrolment links: all seven operations. A token is a `Secret`, held in
+  a `shared_ptr` between steps and moved out at the end. "No such link" stays an ordinary
+  refusal (the callers act on it), so `peek`, `link` and `spend` keep their `Outcome` through
+  the bridge; only a store failure or a passed deadline is `failed`. 353, in the debug, ASan
+  and TSan builds.
 
 ## 2026-10-18: P5, the management API (not committed)
 

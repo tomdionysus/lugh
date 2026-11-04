@@ -47,7 +47,9 @@ class AuthenticatorTest : public ::testing::Test {
 
 TEST_F(AuthenticatorTest, EnrolmentFromALink) {
   const auto alice = rig.person("alice");
-  const auto token = run(rig.links->issue(rig.admin, alice.id)).value;
+  const auto token = wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+                       rig.links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+                     }).value;
 
   ASSERT_EQ(redeem(token, kPassword).kind, Kind::next);
   EXPECT_EQ(sign_in.stage, Stage::enrolment);
@@ -73,16 +75,22 @@ TEST_F(AuthenticatorTest, EnrolmentFromALink) {
 
 TEST_F(AuthenticatorTest, ARefusedPasswordKeepsTheLink) {
   const auto alice = rig.person("alice");
-  const auto token = run(rig.links->issue(rig.admin, alice.id)).value;
+  const auto token = wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+                       rig.links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+                     }).value;
   EXPECT_EQ(redeem(token, "short").kind, Kind::refused);
-  EXPECT_TRUE(run(rig.links->peek(copy_of(token))).ok());
+  EXPECT_TRUE(
+      wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) { rig.links->peek(copy_of(token), kTestDeadline, executor, done); }).ok());
   EXPECT_EQ(redeem(token, kPassword).kind, Kind::next);
   EXPECT_EQ(redeem(token, kPassword).kind, Kind::refused);
 }
 
 TEST_F(AuthenticatorTest, AWrongEnrolmentCodeCountsAgainstTheSignIn) {
   const auto alice = rig.person("alice");
-  redeem(run(rig.links->issue(rig.admin, alice.id)).value, kPassword);
+  redeem(wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+           rig.links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+         }).value,
+         kPassword);
   const auto setup = enrol_begin().value;
   for (int i = 0; i < 4; ++i) EXPECT_EQ(enrol_confirm(setup.factor_id, "000000").kind, Kind::refused);
   EXPECT_EQ(enrol_confirm(setup.factor_id, "000000").kind, Kind::ended);
@@ -187,7 +195,10 @@ TEST_F(AuthenticatorTest, ARefusalIsAuditedAsAnonymous) {
 TEST_F(AuthenticatorTest, AStolenPasswordCannotEnrol) {
   // A person who set a password through a link and stopped there.
   const auto alice = rig.person("alice");
-  run(auth.redeem(run(rig.links->issue(rig.admin, alice.id)).value, text_secret(kPassword), kSource));
+  run(auth.redeem(wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+                    rig.links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+                  }).value,
+                  text_secret(kPassword), kSource));
   EXPECT_EQ(password("alice", kPassword).kind, Kind::refused);
   EXPECT_EQ(enrol_begin().fault, Fault::refused);
 }
@@ -261,7 +272,9 @@ TEST_F(AuthenticatorTest, AResetMeansEnrollingAgain) {
   EXPECT_EQ(password("alice", kPassword).kind, Kind::refused);
 
   // Back through a new link, with a new password.
-  const auto token = run(rig.links->issue(rig.admin, alice.id)).value;
+  const auto token = wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+                       rig.links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+                     }).value;
   ASSERT_EQ(redeem(token, "a different passphrase").kind, Kind::next);
   const auto setup = enrol_begin().value;
   ASSERT_EQ(enrol_confirm(setup.factor_id, rig.code_for(setup.secret)).kind, Kind::next);

@@ -96,7 +96,8 @@ class AuthnRig {
   // `secret` holding the factor's secret and `recovery` the codes.
   lugh::directory::User enrolled(const std::string& name, const std::string& password = "correct horse battery") {
     const auto user = person(name);
-    const auto token = run(links->issue(admin, user.id));
+    const auto token =
+        wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) { links->issue(admin, user.id, kTestDeadline, executor, done); });
     EXPECT_TRUE(token.ok()) << token.message;
     const auto redeemed = run(authenticator->redeem(copy_of(token.value), lugh::text_secret(password), "192.0.2.1"));
     EXPECT_EQ(redeemed.kind, lugh::authn::Step::Kind::next);

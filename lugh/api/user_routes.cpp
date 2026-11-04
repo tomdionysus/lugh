@@ -251,13 +251,17 @@ Task<void> UserRoutes::_enrolment(http::RouteContext context) {
     context.done();
     co_return;
   }
-  const auto issued = co_await _links->issue(actor_of(context), context.parameter("id"));
+  const auto issued = co_await awaited<Outcome<Secret>>([&](Executor executor, Done<Outcome<Secret>> done) {
+    _links->issue(actor_of(context), context.parameter("id"), kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!issued.ok()) {
     write_fault(context.response, issued);
     context.done();
     co_return;
   }
-  const auto link = co_await _links->link(Secret(issued.value.reveal()));
+  const auto link = co_await awaited<Outcome<authn::EnrolmentLinks::Link>>([&](Executor executor, Done<Outcome<authn::EnrolmentLinks::Link>> done) {
+    _links->link(Secret(issued.value.reveal()), kTransitionDeadline, std::move(executor), std::move(done));
+  });
 
   // The token leaves here once, to the administrator who asked, under Cache-Control:
   // no-store. Only its hash is kept.

@@ -89,7 +89,9 @@ Task<Step> Authenticator::password(std::string login, Secret password, std::stri
   sign_in.started = _time.now();
   sign_in.amr = {"pwd"};
 
-  if (!user->enrolled && co_await _links->first_sign_in_allowed(user->id)) {
+  if (!user->enrolled && co_await awaited_value<bool>([&](Executor executor, Done<Outcome<bool>> done) {
+        _links->first_sign_in_allowed(user->id, kTransitionDeadline, std::move(executor), std::move(done));
+      })) {
     // Root's first sign-in, with the password genesis made.
     sign_in.stage = SignIn::Stage::enrolment;
     co_await _audit("signin.password.accepted", user->id, user->id, source, "first sign-in");
@@ -152,7 +154,9 @@ Task<Step> Authenticator::redeem(Secret token, Secret password, std::string sour
   const auto address = address_key(source);
   if (const auto wait = _addresses.wait(address, _time.now())) co_return waiting(*wait);
 
-  const auto peeked = co_await _links->peek(Secret(token.reveal()));
+  const auto peeked = co_await awaited<Outcome<std::string>>([&](Executor executor, Done<Outcome<std::string>> done) {
+    _links->peek(Secret(token.reveal()), kTransitionDeadline, std::move(executor), std::move(done));
+  });
   const auto user = peeked.ok()
                         ? co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
                             _directory->user(peeked.value, kTransitionDeadline, std::move(executor), std::move(done));
@@ -168,7 +172,9 @@ Task<Step> Authenticator::redeem(Secret token, Secret password, std::string sour
   if (const auto acceptable = _passwords->acceptable(password, *user); !acceptable.ok()) co_return Step::of(Step::Kind::refused);
 
   const audit::Actor actor{user->id, source};
-  const auto spent = co_await _links->spend(std::move(token), actor);
+  const auto spent = co_await awaited<Outcome<std::string>>([&](Executor executor, Done<Outcome<std::string>> done) {
+    _links->spend(std::move(token), actor, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!spent.ok()) co_return Step::of(spent.fault == Fault::failed ? Step::Kind::failed : Step::Kind::refused);
 
   if (const auto set = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
@@ -215,7 +221,9 @@ Task<Step> Authenticator::enrol_confirm(SignIn sign_in, std::string factor_id, s
       !enrolled.ok()) {
     co_return Step::of(Step::Kind::failed, std::move(sign_in));
   }
-  co_await _links->first_sign_in_spend(sign_in.user_id);
+  co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+    _links->first_sign_in_spend(sign_in.user_id, kTransitionDeadline, std::move(executor), std::move(done));
+  });
 
   sign_in.amr.push_back("otp");
   auto step = co_await _complete(std::move(sign_in), std::move(source));

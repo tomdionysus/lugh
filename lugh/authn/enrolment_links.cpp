@@ -8,9 +8,9 @@
 #include "lugh/authn/enrolment_links.h"
 
 #include "dannan/identity/crypto.h"
-#include "lugh/core/awaited.h"
 #include "lugh/core/codec.h"
 #include "lugh/core/encoding.h"
+#include "lugh/core/steps.h"
 
 namespace lugh::authn {
 
@@ -24,104 +24,139 @@ const std::string kFirstSignIn = "first-sign-in/";
 
 EnrolmentLinks::EnrolmentLinks(std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall, std::shared_ptr<directory::Directory> directory,
                                std::shared_ptr<audit::AuditLog> audit, std::chrono::seconds lifetime)
-    : _store(std::move(store)), _wall(wall), _directory(std::move(directory)), _audit(std::move(audit)), _lifetime(lifetime) {}
+    : _calls(std::move(store)), _wall(wall), _directory(std::move(directory)), _audit(std::move(audit)), _lifetime(lifetime) {}
 
-Task<Outcome<Secret>> EnrolmentLinks::issue(audit::Actor actor, std::string user_id) {
+namespace {
+
+constexpr const char* kChangeLate = "the enrolment links did not answer within the deadline; the change may yet be made";
+constexpr const char* kReadLate = "the enrolment links were not read within the deadline";
+constexpr Deadline kStepDeadline = std::chrono::seconds(30);
+
+}  // namespace
+
+void EnrolmentLinks::issue(audit::Actor actor, std::string user_id, Deadline deadline, Executor executor, Done<Outcome<Secret>> done) {
   using Answer = Outcome<Secret>;
-  const auto user = co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
-    _directory->user(user_id, kTransitionDeadline, std::move(executor), std::move(done));
+  auto answer = answering<Secret>(deadline, executor, std::move(done), kChangeLate);
+  auto self = shared_from_this();
+  _directory->user(user_id, kStepDeadline, executor, [=](Outcome<std::optional<directory::User>> read) {
+    if (!read.ok()) return answer->finish(Answer::from(read));
+    const auto& user = read.value;
+    if (!user) return answer->finish(Answer::failure(Fault::not_found, "no such user"));
+    if (user->kind != directory::Kind::person) return answer->finish(Answer::failure(Fault::refused, "a service does not enrol"));
+    if (user->disabled) return answer->finish(Answer::failure(Fault::refused, "the user is disabled"));
+    if (user->enrolled) return answer->finish(Answer::failure(Fault::refused, "the user is enrolled; reset their factors first"));
+
+    self->_calls.list_settled(kTable, executor, [=](Outcome<std::vector<store::Record>> records) {
+      if (!records.ok()) return answer->finish(Answer::from(records));
+      // The user's earlier links, ended first.
+      auto earlier = std::make_shared<std::vector<store::Record>>();
+      for (auto& record : records.value) {
+        if (record.key.rfind(kPrefix, 0) != 0) continue;
+        const auto link = decode(record.value);
+        if (link && link->user_id == user_id) earlier->push_back(std::move(record));
+      }
+      in_turn<store::Record>(
+          earlier, 0,
+          [=](const store::Record& record, std::function<void()> next) {
+            self->_calls.remove_settled(kTable, record.key, record.version, executor, [next](store::Write) { next(); });
+          },
+          [=] {
+            const auto raw = secure_random(kTokenBytes);
+            // Held where every step can reach it: a Secret is not copied.
+            auto token = std::make_shared<Secret>(text_secret(encoding::base64url(raw)));
+            Link link;
+            link.user_id = user_id;
+            link.issued = (self->_wall.unix_ms() / 1000);
+            link.expires = link.issued + static_cast<std::uint64_t>(self->_lifetime.count());
+            self->_calls.put_settled(kTable, *_key(*token), encode(link), 0, executor, [=](store::Write written) {
+              if (!written.ok()) return answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
+              self->_record(audit::Event{"enrolment.issue", actor.id, link.user_id, actor.source, "expires " + std::to_string(link.expires)}, executor,
+                            [answer, token] { answer->finish(Answer::success(std::move(*token))); });
+            });
+          });
+    });
   });
-  if (!user) co_return Answer::failure(Fault::not_found, "no such user");
-  if (user->kind != directory::Kind::person) co_return Answer::failure(Fault::refused, "a service does not enrol");
-  if (user->disabled) co_return Answer::failure(Fault::refused, "the user is disabled");
-  if (user->enrolled) co_return Answer::failure(Fault::refused, "the user is enrolled; reset their factors first");
-
-  for (const auto& record : co_await _store->list(kTable)) {
-    if (record.key.rfind(kPrefix, 0) != 0) continue;
-    const auto link = decode(record.value);
-    if (link && link->user_id == user_id) co_await _store->remove(kTable, record.key, record.version);
-  }
-
-  const auto raw = secure_random(kTokenBytes);
-  auto token = text_secret(encoding::base64url(raw));
-
-  Link link;
-  link.user_id = user_id;
-  link.issued = (_wall.unix_ms() / 1000);
-  link.expires = link.issued + static_cast<std::uint64_t>(_lifetime.count());
-
-  const auto written = co_await _store->put(kTable, *_key(token), encode(link), 0);
-  if (!written.ok()) co_return Answer::failure(directory::fault_of(written.error), written.message);
-  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
-    _audit->record(audit::Event{"enrolment.issue", actor.id, link.user_id, actor.source, "expires " + std::to_string(link.expires)}, kTransitionDeadline,
-                   std::move(executor), std::move(done));
-  });
-  co_return Answer::success(std::move(token));
 }
 
-Task<Outcome<std::string>> EnrolmentLinks::peek(Secret token) const {
+void EnrolmentLinks::peek(Secret token, Deadline deadline, Executor executor, Done<Outcome<std::string>> done) const {
   using Answer = Outcome<std::string>;
+  auto answer = answering<std::string>(deadline, executor, std::move(done), kReadLate);
   const auto key = _key(token);
-  if (!key) co_return Answer::failure(Fault::not_found, "no such link");
-  const auto live = co_await _live(*key);
-  if (!live.ok()) co_return Answer::from(live);
-  co_return Answer::success(live.value.first.user_id);
+  if (!key) return answer->finish(Answer::failure(Fault::not_found, "no such link"));
+  _live(*key, executor, [answer](Outcome<std::pair<Link, std::uint64_t>> live) {
+    if (!live.ok()) return answer->finish(Answer::from(live));
+    answer->finish(Answer::success(live.value.first.user_id));
+  });
 }
 
-Task<Outcome<EnrolmentLinks::Link>> EnrolmentLinks::link(Secret token) const {
+void EnrolmentLinks::link(Secret token, Deadline deadline, Executor executor, Done<Outcome<Link>> done) const {
   using Answer = Outcome<Link>;
+  auto answer = answering<Link>(deadline, executor, std::move(done), kReadLate);
   const auto key = _key(token);
-  if (!key) co_return Answer::failure(Fault::not_found, "no such link");
-  const auto live = co_await _live(*key);
-  if (!live.ok()) co_return Answer::from(live);
-  co_return Answer::success(live.value.first);
-}
-
-Task<Outcome<std::string>> EnrolmentLinks::spend(Secret token, audit::Actor actor) {
-  using Answer = Outcome<std::string>;
-  const auto key = _key(token);
-  if (!key) co_return Answer::failure(Fault::not_found, "no such link");
-  const auto live = co_await _live(*key);
-  if (!live.ok()) co_return Answer::from(live);
-  const auto& [link, version] = live.value;
-
-  const auto removed = co_await _store->remove(kTable, *key, version);
-  if (!removed.ok()) {
-    if (removed.error == store::StoreError::conflict || removed.error == store::StoreError::removed) {
-      co_return Answer::failure(Fault::not_found, "no such link");
-    }
-    co_return Answer::failure(directory::fault_of(removed.error), removed.message);
-  }
-  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
-    _audit->record(audit::Event{"enrolment.redeem", actor.id, link.user_id, actor.source, {}}, kTransitionDeadline, std::move(executor), std::move(done));
+  if (!key) return answer->finish(Answer::failure(Fault::not_found, "no such link"));
+  _live(*key, executor, [answer](Outcome<std::pair<Link, std::uint64_t>> live) {
+    if (!live.ok()) return answer->finish(Answer::from(live));
+    answer->finish(Answer::success(live.value.first));
   });
-  co_return Answer::success(link.user_id);
 }
 
-Task<Outcome<>> EnrolmentLinks::first_sign_in_allow(audit::Actor actor, std::string user_id) {
+void EnrolmentLinks::spend(Secret token, audit::Actor actor, Deadline deadline, Executor executor, Done<Outcome<std::string>> done) {
+  using Answer = Outcome<std::string>;
+  auto answer = answering<std::string>(deadline, executor, std::move(done), kChangeLate);
+  const auto key = _key(token);
+  if (!key) return answer->finish(Answer::failure(Fault::not_found, "no such link"));
+  auto self = shared_from_this();
+  _live(*key, executor, [=](Outcome<std::pair<Link, std::uint64_t>> live) {
+    if (!live.ok()) return answer->finish(Answer::from(live));
+    const auto link = live.value.first;
+    self->_calls.remove_settled(kTable, *key, live.value.second, executor, [=](store::Write removed) {
+      if (!removed.ok()) {
+        if (removed.error == store::StoreError::conflict || removed.error == store::StoreError::removed) {
+          return answer->finish(Answer::failure(Fault::not_found, "no such link"));
+        }
+        return answer->finish(Answer::failure(directory::fault_of(removed.error), removed.message));
+      }
+      self->_record(audit::Event{"enrolment.redeem", actor.id, link.user_id, actor.source, {}}, executor,
+                    [answer, link] { answer->finish(Answer::success(link.user_id)); });
+    });
+  });
+}
+
+void EnrolmentLinks::first_sign_in_allow(audit::Actor actor, std::string user_id, Deadline deadline, Executor executor, Done<Outcome<>> done) {
+  using Answer = Outcome<>;
+  auto answer = answering<Nothing>(deadline, executor, std::move(done), kChangeLate);
   Link link;
   link.user_id = std::move(user_id);
   link.issued = (_wall.unix_ms() / 1000);
   // Until it is spent.
   link.expires = UINT64_MAX;
-  const auto written = co_await _store->put(kTable, kFirstSignIn + link.user_id, encode(link), 0);
-  if (!written.ok()) co_return Outcome<>::failure(directory::fault_of(written.error), written.message);
-  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
-    _audit->record(audit::Event{"enrolment.first_sign_in", actor.id, link.user_id, actor.source, {}}, kTransitionDeadline, std::move(executor),
-                   std::move(done));
+  _calls.put_settled(kTable, kFirstSignIn + link.user_id, encode(link), 0, executor,
+                     [self = shared_from_this(), answer, actor, link, executor](store::Write written) {
+                       if (!written.ok()) return answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
+                       self->_record(audit::Event{"enrolment.first_sign_in", actor.id, link.user_id, actor.source, {}}, executor,
+                                     [answer] { answer->finish(Answer::success()); });
+                     });
+}
+
+void EnrolmentLinks::first_sign_in_allowed(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<bool>> done) const {
+  using Answer = Outcome<bool>;
+  auto answer = answering<bool>(deadline, executor, std::move(done), kReadLate);
+  _calls.get_settled(kTable, kFirstSignIn + user_id, executor, [answer, user_id](Outcome<std::optional<store::Record>> record) {
+    if (!record.ok()) return answer->finish(Answer::from(record));
+    const auto link = record.value ? decode(record.value->value) : std::nullopt;
+    answer->finish(Answer::success(link && link->user_id == user_id));
   });
-  co_return Outcome<>::success();
 }
 
-Task<bool> EnrolmentLinks::first_sign_in_allowed(std::string user_id) const {
-  const auto record = co_await _store->get(kTable, kFirstSignIn + user_id);
-  const auto link = record ? decode(record->value) : std::nullopt;
-  co_return link && link->user_id == user_id;
-}
-
-Task<void> EnrolmentLinks::first_sign_in_spend(std::string user_id) {
+void EnrolmentLinks::first_sign_in_spend(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<>> done) {
+  using Answer = Outcome<>;
+  auto answer = answering<Nothing>(deadline, executor, std::move(done), kChangeLate);
   const auto key = kFirstSignIn + user_id;
-  if (co_await _store->get(kTable, key)) co_await _store->remove(kTable, key);
+  _calls.get_settled(kTable, key, executor, [self = shared_from_this(), answer, key, executor](Outcome<std::optional<store::Record>> record) {
+    if (!record.ok()) return answer->finish(Answer::from(record));
+    if (!record.value) return answer->finish(Answer::success());
+    self->_calls.remove_settled(kTable, key, std::nullopt, executor, [answer](store::Write) { answer->finish(Answer::success()); });
+  });
 }
 
 SecureBuffer EnrolmentLinks::encode(const Link& link) {
@@ -155,13 +190,21 @@ std::optional<std::string> EnrolmentLinks::_key(const Secret& token) {
   return std::string(kPrefix) + dannan::identity::hex(dannan::identity::sha256(byte_span(text)).bytes);
 }
 
-Task<Outcome<std::pair<EnrolmentLinks::Link, std::uint64_t>>> EnrolmentLinks::_live(std::string key) const {
+void EnrolmentLinks::_live(std::string key, Executor executor, Done<Outcome<std::pair<Link, std::uint64_t>>> done) const {
   using Answer = Outcome<std::pair<Link, std::uint64_t>>;
-  const auto record = co_await _store->get(kTable, std::move(key));
-  auto link = record ? decode(record->value) : std::nullopt;
-  // An expired link is no different, to its holder, from one that never was.
-  if (!link || (_wall.unix_ms() / 1000) >= link->expires) co_return Answer::failure(Fault::not_found, "no such link");
-  co_return Answer::success(std::make_pair(std::move(*link), record->version));
+  _calls.get_settled(kTable, std::move(key), std::move(executor),
+                     [self = shared_from_this(), done = std::move(done)](Outcome<std::optional<store::Record>> record) {
+                       if (!record.ok()) return done(Answer::from(record));
+                       auto link = record.value ? decode(record.value->value) : std::nullopt;
+                       // An expired link is no different, to its holder, from one that never was.
+                       if (!link || (self->_wall.unix_ms() / 1000) >= link->expires) return done(Answer::failure(Fault::not_found, "no such link"));
+                       done(Answer::success(std::make_pair(std::move(*link), record.value->version)));
+                     });
+}
+
+void EnrolmentLinks::_record(audit::Event event, Executor executor, std::function<void()> then) const {
+  // A failure is logged by the audit log itself; the change has been made.
+  _audit->record(std::move(event), kStepDeadline, std::move(executor), [then = std::move(then)](Status) { then(); });
 }
 
 }  // namespace lugh::authn

@@ -50,7 +50,11 @@ Task<Outcome<Secret>> Genesis::run() {
       });
       !set.ok())
     co_return Answer::from(set);
-  if (const auto allowed = co_await _links->first_sign_in_allow(actor, root.value.id); !allowed.ok()) co_return Answer::from(allowed);
+  if (const auto allowed = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+        _links->first_sign_in_allow(actor, root.value.id, kTransitionDeadline, std::move(executor), std::move(done));
+      });
+      !allowed.ok())
+    co_return Answer::from(allowed);
 
   co_await awaited<Status>([&](Executor executor, Done<Status> done) {
     _audit->record(audit::Event{"genesis", actor.id, root.value.id, {}, "root, in administrators"}, kTransitionDeadline, std::move(executor), std::move(done));

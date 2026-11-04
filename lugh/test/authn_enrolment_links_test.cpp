@@ -22,30 +22,43 @@ class EnrolmentLinksTest : public ::testing::Test {
   void SetUp() override { alice = rig.person("alice"); }
 
   AuthnRig rig;
-  EnrolmentLinks& links = *rig.links;
+  std::shared_ptr<EnrolmentLinks>& links = rig.links;
   lugh::directory::User alice;
 };
 
 }  // namespace
 
 TEST_F(EnrolmentLinksTest, ALinkWorksOnce) {
-  const auto token = run(links.issue(rig.admin, alice.id));
+  const auto token =
+      wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) { links->issue(rig.admin, alice.id, kTestDeadline, executor, done); });
   ASSERT_TRUE(token.ok()) << token.message;
   EXPECT_EQ(token.value.size(), 43u);
 
-  EXPECT_EQ(run(links.peek(copy_of(token.value))).value, alice.id);
-  EXPECT_EQ(run(links.peek(copy_of(token.value))).value, alice.id);
-  const auto spent = run(links.spend(copy_of(token.value), {"anonymous", "192.0.2.1"}));
+  EXPECT_EQ(
+      wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) { links->peek(copy_of(token.value), kTestDeadline, executor, done); }).value,
+      alice.id);
+  EXPECT_EQ(
+      wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) { links->peek(copy_of(token.value), kTestDeadline, executor, done); }).value,
+      alice.id);
+  const auto spent = wait_for<lugh::Outcome<std::string>>(
+      [&](lugh::Executor executor, auto done) { links->spend(copy_of(token.value), {"anonymous", "192.0.2.1"}, kTestDeadline, executor, done); });
   ASSERT_TRUE(spent.ok());
   EXPECT_EQ(spent.value, alice.id);
-  EXPECT_EQ(run(links.spend(copy_of(token.value), {"anonymous", "192.0.2.1"})).fault, Fault::not_found);
-  EXPECT_EQ(run(links.peek(copy_of(token.value))).fault, Fault::not_found);
+  EXPECT_EQ(wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) {
+              links->spend(copy_of(token.value), {"anonymous", "192.0.2.1"}, kTestDeadline, executor, done);
+            }).fault,
+            Fault::not_found);
+  EXPECT_EQ(
+      wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) { links->peek(copy_of(token.value), kTestDeadline, executor, done); }).fault,
+      Fault::not_found);
   EXPECT_TRUE(rig.audited("enrolment.issue"));
   EXPECT_TRUE(rig.audited("enrolment.redeem"));
 }
 
 TEST_F(EnrolmentLinksTest, TheTableHoldsNoToken) {
-  const auto token = run(links.issue(rig.admin, alice.id)).value;
+  const auto token = wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+                       links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+                     }).value;
   for (const auto& record : rig.store->list_now(EnrolmentLinks::kTable)) {
     EXPECT_EQ(record.key.find(lugh::secret_text(token)), std::string::npos);
     const std::string value(record.value.begin(), record.value.end());
@@ -54,43 +67,76 @@ TEST_F(EnrolmentLinksTest, TheTableHoldsNoToken) {
 }
 
 TEST_F(EnrolmentLinksTest, ALinkExpires) {
-  const auto token = run(links.issue(rig.admin, alice.id)).value;
+  const auto token = wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+                       links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+                     }).value;
   rig.advance(std::chrono::hours(72) - std::chrono::seconds(1));
-  EXPECT_TRUE(run(links.peek(copy_of(token))).ok());
+  EXPECT_TRUE(
+      wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) { links->peek(copy_of(token), kTestDeadline, executor, done); }).ok());
   rig.advance(std::chrono::seconds(1));
-  EXPECT_EQ(run(links.peek(copy_of(token))).fault, Fault::not_found);
-  EXPECT_EQ(run(links.spend(copy_of(token), {"anonymous", ""})).fault, Fault::not_found);
+  EXPECT_EQ(wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) { links->peek(copy_of(token), kTestDeadline, executor, done); }).fault,
+            Fault::not_found);
+  EXPECT_EQ(wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) {
+              links->spend(copy_of(token), {"anonymous", ""}, kTestDeadline, executor, done);
+            }).fault,
+            Fault::not_found);
 }
 
 TEST_F(EnrolmentLinksTest, ANewLinkEndsTheOld) {
-  const auto first = run(links.issue(rig.admin, alice.id)).value;
-  const auto second = run(links.issue(rig.admin, alice.id)).value;
-  EXPECT_EQ(run(links.peek(copy_of(first))).fault, Fault::not_found);
-  EXPECT_TRUE(run(links.peek(copy_of(second))).ok());
+  const auto first = wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+                       links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+                     }).value;
+  const auto second = wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+                        links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+                      }).value;
+  EXPECT_EQ(wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) { links->peek(copy_of(first), kTestDeadline, executor, done); }).fault,
+            Fault::not_found);
+  EXPECT_TRUE(
+      wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) { links->peek(copy_of(second), kTestDeadline, executor, done); }).ok());
 }
 
 TEST_F(EnrolmentLinksTest, OnlyForAPersonWhoIsNotEnrolled) {
   const auto service = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
                          rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", ""}, kTestDeadline, executor, done);
                        }).value;
-  EXPECT_EQ(run(links.issue(rig.admin, service.id)).fault, Fault::refused);
-  EXPECT_EQ(run(links.issue(rig.admin, "nobody")).fault, Fault::not_found);
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+              links->issue(rig.admin, service.id, kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+              links->issue(rig.admin, "nobody", kTestDeadline, executor, done);
+            }).fault,
+            Fault::not_found);
 
   wait_for<lugh::Outcome<lugh::directory::User>>(
       [&](lugh::Executor executor, auto done) { rig.directory->enrolled_set(rig.admin, alice.id, true, kTestDeadline, executor, done); });
-  EXPECT_EQ(run(links.issue(rig.admin, alice.id)).fault, Fault::refused);
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+              links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
   wait_for<lugh::Outcome<lugh::directory::User>>(
       [&](lugh::Executor executor, auto done) { rig.directory->enrolled_set(rig.admin, alice.id, false, kTestDeadline, executor, done); });
   wait_for<lugh::Outcome<lugh::directory::User>>(
       [&](lugh::Executor executor, auto done) { rig.directory->disable_user(rig.admin, alice.id, true, std::nullopt, kTestDeadline, executor, done); });
-  EXPECT_EQ(run(links.issue(rig.admin, alice.id)).fault, Fault::refused);
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+              links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
 }
 
 TEST_F(EnrolmentLinksTest, AnythingElseIsNoLink) {
-  run(links.issue(rig.admin, alice.id));
-  EXPECT_EQ(run(links.peek(text_secret(""))).fault, Fault::not_found);
-  EXPECT_EQ(run(links.peek(text_secret(std::string(43, 'A')))).fault, Fault::not_found);
-  EXPECT_EQ(run(links.peek(text_secret(std::string(42, 'A') + "!"))).fault, Fault::not_found);
+  wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) { links->issue(rig.admin, alice.id, kTestDeadline, executor, done); });
+  EXPECT_EQ(
+      wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) { links->peek(text_secret(""), kTestDeadline, executor, done); }).fault,
+      Fault::not_found);
+  EXPECT_EQ(wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) {
+              links->peek(text_secret(std::string(43, 'A')), kTestDeadline, executor, done);
+            }).fault,
+            Fault::not_found);
+  EXPECT_EQ(wait_for<lugh::Outcome<std::string>>([&](lugh::Executor executor, auto done) {
+              links->peek(text_secret(std::string(42, 'A') + "!"), kTestDeadline, executor, done);
+            }).fault,
+            Fault::not_found);
 }
 
 TEST_F(EnrolmentLinksTest, RecordsRoundTrip) {
