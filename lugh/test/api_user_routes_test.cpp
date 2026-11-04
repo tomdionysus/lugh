@@ -35,7 +35,8 @@ TEST_F(UserRoutesTest, AReaderCannotWrite) {
   const auto refused = rig.request(verb::post, "/api/v1/users", R"({"name":"alice"})", {}, "Bearer reader");
   EXPECT_EQ(refused.status, 403u);
   EXPECT_EQ(refused.error(), "forbidden");
-  EXPECT_TRUE(run(rig.directory->users()).empty());
+  EXPECT_TRUE(
+      read_value<std::vector<lugh::directory::User>>([&](lugh::Executor executor, auto done) { rig.directory->users(kTestDeadline, executor, done); }).empty());
 }
 
 TEST_F(UserRoutesTest, CreateThenRead) {
@@ -81,7 +82,8 @@ TEST_F(UserRoutesTest, BadBodiesAreRefusedWithReasons) {
   EXPECT_EQ(rig.post("/api/v1/users", R"({"name":5,"email":"a@example.com"})").body.at("error").at("message"), "name must be a string");
   EXPECT_EQ(rig.post("/api/v1/users", R"({"name":"alice","email":"a@example.com","kind":"robot"})").status, 400u);
   EXPECT_EQ(rig.post("/api/v1/users", R"({"name":"al ice","email":"a@example.com"})").status, 400u);
-  EXPECT_TRUE(run(rig.directory->users()).empty());
+  EXPECT_TRUE(
+      read_value<std::vector<lugh::directory::User>>([&](lugh::Executor executor, auto done) { rig.directory->users(kTestDeadline, executor, done); }).empty());
 }
 
 TEST_F(UserRoutesTest, ADuplicateIsAConflict) {
@@ -181,8 +183,11 @@ TEST_F(UserRoutesTest, RemovingFactorsAndResetting) {
 
 TEST_F(UserRoutesTest, AUsersGroups) {
   const auto id = rig.made_user("alice");
-  const auto group = run(rig.directory->create_group(rig.admin, "staff", "")).value;
-  run(rig.directory->add_member(rig.admin, group.id, id));
+  const auto group = wait_for<lugh::Outcome<lugh::directory::Group>>([&](lugh::Executor executor, auto done) {
+                       rig.directory->create_group(rig.admin, "staff", "", kTestDeadline, executor, done);
+                     }).value;
+  wait_for<lugh::Outcome<lugh::Nothing>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->add_member(rig.admin, group.id, id, kTestDeadline, executor, done); });
   const auto groups = rig.get("/api/v1/users/" + id + "/groups").body.at("groups").as_array();
   ASSERT_EQ(groups.size(), 1u);
   EXPECT_EQ(groups[0].at("name"), "staff");

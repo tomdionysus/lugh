@@ -41,7 +41,9 @@ Authenticator::Authenticator(std::shared_ptr<dannan::status::LogSink> log, const
       _addresses(_settings.address) {}
 
 Task<Step> Authenticator::password(std::string login, Secret password, std::string source) {
-  const auto user = co_await _directory->user_by_login(login);
+  const auto user = co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
+    _directory->user_by_login(login, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   // An unknown name backs off under its own key, as a real one would, so the answers to
   // guesses at names and at passwords look the same.
   const auto account = account_key(user ? user->id : "?" + login);
@@ -146,7 +148,11 @@ Task<Step> Authenticator::redeem(Secret token, Secret password, std::string sour
   if (const auto wait = _addresses.wait(address, _time.now())) co_return waiting(*wait);
 
   const auto peeked = co_await _links->peek(Secret(token.reveal()));
-  const auto user = peeked.ok() ? co_await _directory->user(peeked.value) : std::nullopt;
+  const auto user = peeked.ok()
+                        ? co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
+                            _directory->user(peeked.value, kTransitionDeadline, std::move(executor), std::move(done));
+                          })
+                        : std::nullopt;
   if (!user || user->disabled || user->enrolled || user->kind != directory::Kind::person) {
     _addresses.failed(address, _time.now());
     co_await _audit("enrolment.refused", "anonymous", user ? user->id : "", source, peeked.ok() ? "the user cannot enrol" : "no such link");
@@ -177,7 +183,9 @@ Task<Step> Authenticator::redeem(Secret token, Secret password, std::string sour
 Task<Outcome<TotpSetup>> Authenticator::enrol_begin(SignIn sign_in, std::string source) {
   using Answer = Outcome<TotpSetup>;
   if (!_live(sign_in, SignIn::Stage::enrolment)) co_return Answer::failure(Fault::refused, "the sign-in is over");
-  const auto user = co_await _directory->user(sign_in.user_id);
+  const auto user = co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
+    _directory->user(sign_in.user_id, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!user) co_return Answer::failure(Fault::not_found, "no such user");
   co_return co_await _factors->totp_begin(audit::Actor{user->id, std::move(source)}, user->id, _settings.issuer, user->name);
 }
@@ -192,7 +200,10 @@ Task<Step> Authenticator::enrol_confirm(SignIn sign_in, std::string factor_id, s
 
   auto codes = co_await _factors->recovery_generate(actor, sign_in.user_id);
   if (!codes.ok()) co_return Step::of(Step::Kind::failed, std::move(sign_in));
-  if (const auto enrolled = co_await _directory->enrolled_set(actor, sign_in.user_id, true); !enrolled.ok()) {
+  if (const auto enrolled = co_await awaited<Outcome<directory::User>>([&](Executor executor, Done<Outcome<directory::User>> done) {
+        _directory->enrolled_set(actor, sign_in.user_id, true, kTransitionDeadline, std::move(executor), std::move(done));
+      });
+      !enrolled.ok()) {
     co_return Step::of(Step::Kind::failed, std::move(sign_in));
   }
   co_await _links->first_sign_in_spend(sign_in.user_id);
@@ -223,12 +234,16 @@ Task<Outcome<>> Authenticator::remove_factor(audit::Actor actor, std::string use
 
 Task<Outcome<>> Authenticator::reset_factors(audit::Actor actor, std::string user_id) {
   using Answer = Outcome<>;
-  const auto user = co_await _directory->user(user_id);
+  const auto user = co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
+    _directory->user(user_id, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!user) co_return Answer::failure(Fault::not_found, "no such user");
 
   // Not enrolled first: if removing the factors then fails, the user is already held at
   // enrolment and cannot sign in on what is left.
-  const auto unenrolled = co_await _directory->enrolled_set(actor, user->id, false);
+  const auto unenrolled = co_await awaited<Outcome<directory::User>>([&](Executor executor, Done<Outcome<directory::User>> done) {
+    _directory->enrolled_set(actor, user->id, false, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!unenrolled.ok()) co_return Answer::from(unenrolled);
   if (const auto forgotten = co_await _factors->forget(actor, user->id); !forgotten.ok) co_return Answer::failure(Fault::failed, forgotten.error);
   co_return Answer::success();

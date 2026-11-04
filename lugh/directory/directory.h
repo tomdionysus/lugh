@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -16,10 +17,13 @@
 #include "dannan/contract/time_source.h"
 #include "dannan/status/log.h"
 #include "lugh/audit/audit_log.h"
+#include "lugh/core/completion.h"
 #include "lugh/core/outcome.h"
+#include "lugh/core/status.h"
 #include "lugh/core/task.h"
 #include "lugh/directory/records.h"
 #include "lugh/store/store.h"
+#include "lugh/store/store_calls.h"
 
 namespace lugh::directory {
 
@@ -55,9 +59,12 @@ struct GroupChange {
 // takes the version the caller last saw, for the API's ETags; without one it is made
 // against the version just read, so two writers never silently overwrite each other.
 //
-// Every operation is a coroutine over the store and the audit log, and holds no thread
-// while either works. Arguments are owned.
-class Directory {
+// Every operation takes Dannan's shape: its arguments, a deadline, the caller's executor
+// and `done`, posted there once. A read answers what it found, nothing for what is absent,
+// or `failed` when the store fails or the deadline passes, never nothing in its place. A
+// change past its deadline is answered `failed`, saying it may yet be made. Safe from any
+// number of threads; made with std::make_shared.
+class Directory : public std::enable_shared_from_this<Directory> {
  public:
   Directory(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
             std::shared_ptr<audit::AuditLog> audit);
@@ -67,47 +74,62 @@ class Directory {
 
   // A person starts not enrolled: they set a password and a second factor through an
   // enrolment link before anything else. A service is enrolled at once, having neither.
-  Task<Outcome<User>> create_user(audit::Actor actor, NewUser user);
+  void create_user(audit::Actor actor, NewUser user, Deadline deadline, Executor executor, Done<Outcome<User>> done);
 
-  Task<std::optional<User>> user(std::string id) const;
-  Task<std::optional<User>> user_by_name(std::string name) const;
-  Task<std::optional<User>> user_by_email(std::string email) const;
+  void user(std::string id, Deadline deadline, Executor executor, Done<Outcome<std::optional<User>>> done) const;
+  void user_by_name(std::string name, Deadline deadline, Executor executor, Done<Outcome<std::optional<User>>> done) const;
+  void user_by_email(std::string email, Deadline deadline, Executor executor, Done<Outcome<std::optional<User>>> done) const;
   // A name, or an address if it has an '@'.
-  Task<std::optional<User>> user_by_login(std::string login) const;
-  Task<std::vector<User>> users() const;
+  void user_by_login(std::string login, Deadline deadline, Executor executor, Done<Outcome<std::optional<User>>> done) const;
+  void users(Deadline deadline, Executor executor, Done<Outcome<std::vector<User>>> done) const;
 
-  Task<Outcome<User>> update_user(audit::Actor actor, std::string id, UserChange change, std::optional<std::uint64_t> expected = std::nullopt);
-  Task<Outcome<User>> disable_user(audit::Actor actor, std::string id, bool disabled, std::optional<std::uint64_t> expected = std::nullopt);
+  void update_user(audit::Actor actor, std::string id, UserChange change, std::optional<std::uint64_t> expected, Deadline deadline, Executor executor,
+                   Done<Outcome<User>> done);
+  void disable_user(audit::Actor actor, std::string id, bool disabled, std::optional<std::uint64_t> expected, Deadline deadline, Executor executor,
+                    Done<Outcome<User>> done);
   // For authn: set once enrolment finishes, cleared when an administrator resets factors.
-  Task<Outcome<User>> enrolled_set(audit::Actor actor, std::string id, bool enrolled);
+  void enrolled_set(audit::Actor actor, std::string id, bool enrolled, Deadline deadline, Executor executor, Done<Outcome<User>> done);
 
   // The user, their memberships, and what each dependent keeps. Final: the ID is never
   // used again, though the name and address are free for someone new.
-  Task<Outcome<>> remove_user(audit::Actor actor, std::string id, std::optional<std::uint64_t> expected = std::nullopt);
+  void remove_user(audit::Actor actor, std::string id, std::optional<std::uint64_t> expected, Deadline deadline, Executor executor, Done<Outcome<>> done);
 
-  Task<Outcome<Group>> create_group(audit::Actor actor, std::string name, std::string description);
-  Task<std::optional<Group>> group(std::string id) const;
-  Task<std::optional<Group>> group_by_name(std::string name) const;
-  Task<std::vector<Group>> groups() const;
-  Task<Outcome<Group>> update_group(audit::Actor actor, std::string id, GroupChange change, std::optional<std::uint64_t> expected = std::nullopt);
-  Task<Outcome<>> remove_group(audit::Actor actor, std::string id, std::optional<std::uint64_t> expected = std::nullopt);
+  void create_group(audit::Actor actor, std::string name, std::string description, Deadline deadline, Executor executor, Done<Outcome<Group>> done);
+  void group(std::string id, Deadline deadline, Executor executor, Done<Outcome<std::optional<Group>>> done) const;
+  void group_by_name(std::string name, Deadline deadline, Executor executor, Done<Outcome<std::optional<Group>>> done) const;
+  void groups(Deadline deadline, Executor executor, Done<Outcome<std::vector<Group>>> done) const;
+  void update_group(audit::Actor actor, std::string id, GroupChange change, std::optional<std::uint64_t> expected, Deadline deadline, Executor executor,
+                    Done<Outcome<Group>> done);
+  void remove_group(audit::Actor actor, std::string id, std::optional<std::uint64_t> expected, Deadline deadline, Executor executor, Done<Outcome<>> done);
 
   // Adding someone already in the group is a success that changes nothing.
-  Task<Outcome<>> add_member(audit::Actor actor, std::string group_id, std::string user_id);
-  Task<Outcome<>> remove_member(audit::Actor actor, std::string group_id, std::string user_id);
+  void add_member(audit::Actor actor, std::string group_id, std::string user_id, Deadline deadline, Executor executor, Done<Outcome<>> done);
+  void remove_member(audit::Actor actor, std::string group_id, std::string user_id, Deadline deadline, Executor executor, Done<Outcome<>> done);
   // User IDs, and group IDs, in order, each once.
-  Task<std::vector<std::string>> members(std::string group_id) const;
-  Task<std::vector<std::string>> groups_of(std::string user_id) const;
+  void members(std::string group_id, Deadline deadline, Executor executor, Done<Outcome<std::vector<std::string>>> done) const;
+  void groups_of(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<std::vector<std::string>>> done) const;
 
  private:
+  using Then = std::function<void()>;
+
   std::optional<std::string> _new_id();
-  Task<std::vector<Membership>> _memberships() const;
-  Task<Outcome<User>> _put_user(audit::Actor actor, User user, std::uint64_t expected, std::string action, std::string detail);
-  Task<Outcome<Group>> _put_group(audit::Actor actor, Group group, std::uint64_t expected, std::string action);
-  Task<void> _audit(const audit::Actor& actor, std::string action, std::string subject, std::string detail = {});
+  // The steps every operation is made of, each with the store's real answer, no deadline of
+  // their own: the operation's Completion keeps that.
+  void _user(std::string id, Executor executor, Done<Outcome<std::optional<User>>> done) const;
+  void _group(std::string id, Executor executor, Done<Outcome<std::optional<Group>>> done) const;
+  void _memberships(Executor executor, Done<Outcome<std::vector<Membership>>> done) const;
+  // `then` if no live record has `value` in `index`; otherwise `refused` with the message,
+  // or the store's failure. An empty value is free.
+  void _free(std::string table, std::string index, std::string value, std::string taken, Executor executor, Done<Outcome<Nothing>> refused, Then then) const;
+  void _put_user(audit::Actor actor, User user, std::uint64_t expected, std::string action, std::string detail, Executor executor, Done<Outcome<User>> done);
+  void _put_group(audit::Actor actor, Group group, std::uint64_t expected, std::string action, Executor executor, Done<Outcome<Group>> done);
+  // The memberships matching `matches` removed, one after another; their failures are
+  // tidying a retry finishes, and do not stop the rest.
+  void _remove_memberships(std::function<bool(const Membership&)> matches, Executor executor, Then then);
+  void _audit(const audit::Actor& actor, std::string action, std::string subject, std::string detail, Executor executor, Then then);
 
   dannan::status::ScopedLogger _logger;
-  std::shared_ptr<store::Store> _store;
+  store::StoreCalls _calls;
   const dannan::contract::WallClock& _wall;
   std::shared_ptr<audit::AuditLog> _audit_log;
   std::vector<std::shared_ptr<Dependent>> _dependents;

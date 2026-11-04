@@ -65,7 +65,9 @@ TEST_F(AuthenticatorTest, EnrolmentFromALink) {
   EXPECT_EQ(sign_in.reached, Assurance::mfa);
   EXPECT_EQ(sign_in.amr, (std::vector<std::string>{"pwd", "otp"}));
   EXPECT_EQ(done.recovery_codes.size(), Factors::kRecoveryCodes);
-  EXPECT_TRUE(run(rig.directory->user(alice.id))->enrolled);
+  EXPECT_TRUE(read_value<std::optional<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+                rig.directory->user(alice.id, kTestDeadline, executor, done);
+              })->enrolled);
   EXPECT_TRUE(rig.audited("signin.complete"));
 }
 
@@ -85,7 +87,9 @@ TEST_F(AuthenticatorTest, AWrongEnrolmentCodeCountsAgainstTheSignIn) {
   for (int i = 0; i < 4; ++i) EXPECT_EQ(enrol_confirm(setup.factor_id, "000000").kind, Kind::refused);
   EXPECT_EQ(enrol_confirm(setup.factor_id, "000000").kind, Kind::ended);
   EXPECT_EQ(enrol_confirm(setup.factor_id, rig.code_for(setup.secret)).kind, Kind::ended);
-  EXPECT_FALSE(run(rig.directory->user(alice.id))->enrolled);
+  EXPECT_FALSE(read_value<std::optional<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+                 rig.directory->user(alice.id, kTestDeadline, executor, done);
+               })->enrolled);
 }
 
 TEST_F(AuthenticatorTest, PasswordThenTotp) {
@@ -144,9 +148,12 @@ TEST_F(AuthenticatorTest, ARecoveryCode) {
 TEST_F(AuthenticatorTest, RefusalsAllLookTheSame) {
   rig.enrolled("alice");
   const auto bob = rig.enrolled("bob");
-  run(rig.directory->disable_user(rig.admin, bob.id, true));
+  wait_for<lugh::Outcome<lugh::directory::User>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->disable_user(rig.admin, bob.id, true, std::nullopt, kTestDeadline, executor, done); });
   rig.person("carol");
-  run(rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", ""}));
+  wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+    rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", ""}, kTestDeadline, executor, done);
+  });
 
   for (const auto& [login, pass] : std::vector<std::pair<std::string, std::string>>{
            {"alice", "wrong password here"}, {"nobody", kPassword}, {"bob", kPassword}, {"carol", kPassword}, {"backup", kPassword}}) {
@@ -217,7 +224,8 @@ TEST_F(AuthenticatorTest, APasswordAloneWhenPolicySaysSo) {
   run(rig.policies->global_set(rig.admin, Assurance::pwd));
   const auto alice = rig.person("alice");
   run(rig.passwords->set(rig.admin, alice, text_secret(kPassword)));
-  run(rig.directory->enrolled_set(rig.admin, alice.id, true));
+  wait_for<lugh::Outcome<lugh::directory::User>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->enrolled_set(rig.admin, alice.id, true, kTestDeadline, executor, done); });
 
   ASSERT_EQ(password("alice", kPassword).kind, Kind::next);
   EXPECT_EQ(sign_in.stage, Stage::complete);
@@ -243,7 +251,9 @@ TEST_F(AuthenticatorTest, TheLastFactorStaysWhilePolicyNeedsIt) {
 TEST_F(AuthenticatorTest, AResetMeansEnrollingAgain) {
   const auto alice = rig.enrolled("alice");
   ASSERT_TRUE(run(auth.reset_factors(rig.admin, alice.id)).ok());
-  EXPECT_FALSE(run(rig.directory->user(alice.id))->enrolled);
+  EXPECT_FALSE(read_value<std::optional<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+                 rig.directory->user(alice.id, kTestDeadline, executor, done);
+               })->enrolled);
   EXPECT_TRUE(run(rig.factors->list(alice.id)).empty());
   EXPECT_EQ(password("alice", kPassword).kind, Kind::refused);
 
@@ -252,7 +262,9 @@ TEST_F(AuthenticatorTest, AResetMeansEnrollingAgain) {
   ASSERT_EQ(redeem(token, "a different passphrase").kind, Kind::next);
   const auto setup = enrol_begin().value;
   ASSERT_EQ(enrol_confirm(setup.factor_id, rig.code_for(setup.secret)).kind, Kind::next);
-  EXPECT_TRUE(run(rig.directory->user(alice.id))->enrolled);
+  EXPECT_TRUE(read_value<std::optional<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+                rig.directory->user(alice.id, kTestDeadline, executor, done);
+              })->enrolled);
 }
 
 TEST_F(AuthenticatorTest, EveryStepIsAudited) {

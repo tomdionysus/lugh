@@ -31,11 +31,18 @@ TEST(Policy, TheStrictestWins) {
   AuthnRig rig;
   const auto alice = rig.person("alice");
   const auto bob = rig.person("bob");
-  const auto admins = run(rig.directory->create_group(rig.admin, "admins", "")).value;
-  const auto relaxed = run(rig.directory->create_group(rig.admin, "relaxed", "")).value;
-  run(rig.directory->add_member(rig.admin, admins.id, alice.id));
-  run(rig.directory->add_member(rig.admin, relaxed.id, alice.id));
-  run(rig.directory->add_member(rig.admin, relaxed.id, bob.id));
+  const auto admins = wait_for<lugh::Outcome<lugh::directory::Group>>([&](lugh::Executor executor, auto done) {
+                        rig.directory->create_group(rig.admin, "admins", "", kTestDeadline, executor, done);
+                      }).value;
+  const auto relaxed = wait_for<lugh::Outcome<lugh::directory::Group>>([&](lugh::Executor executor, auto done) {
+                         rig.directory->create_group(rig.admin, "relaxed", "", kTestDeadline, executor, done);
+                       }).value;
+  wait_for<lugh::Outcome<lugh::Nothing>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->add_member(rig.admin, admins.id, alice.id, kTestDeadline, executor, done); });
+  wait_for<lugh::Outcome<lugh::Nothing>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->add_member(rig.admin, relaxed.id, alice.id, kTestDeadline, executor, done); });
+  wait_for<lugh::Outcome<lugh::Nothing>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->add_member(rig.admin, relaxed.id, bob.id, kTestDeadline, executor, done); });
 
   ASSERT_TRUE(run(rig.policies->group_set(rig.admin, admins.id, Assurance::phr)).ok());
   ASSERT_TRUE(run(rig.policies->group_set(rig.admin, relaxed.id, Assurance::pwd)).ok());

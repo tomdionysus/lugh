@@ -142,6 +142,17 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   temporary bridge `lugh/core/awaited.h`; the tests through `wait_for` and
   `lugh/test/fixtures/audit_calls.h`. A new test has 100 callers on four threads record at
   once: one intact chain of 100, no TSan report in five runs. 351 to 352.
+- Callback style, the directory: all twenty operations take Dannan's shape, each one
+  `Completion` over steps that each start the next (names checked free, the record put,
+  the change audited, memberships tidied in turn). A read answers `Outcome`, `failed` and
+  never "absent" when the store fails or the deadline passes; a coroutine caller in
+  transition gets the value through `awaited_value`, which throws for a read that could
+  not happen (the router answers 500), and the dependents' `forget` (still coroutines) is
+  run through `spawned`. The 77 calls from the routes, authn, the node and the tests were
+  rewritten by rule, not by hand: the operation's answer type from a table, a deadline
+  added, and `std::nullopt` where `expected` had been left to its default. A new test reads
+  and writes through a store slower than the deadline: the read is `failed`, the write says
+  it may yet be made. 352 to 353, in the debug, ASan and TSan builds.
 
 ## 2026-10-18: P5, the management API (not committed)
 

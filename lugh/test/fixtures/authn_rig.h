@@ -64,7 +64,9 @@ class AuthnRig {
   }
 
   lugh::directory::User person(const std::string& name) {
-    auto made = run(directory->create_user(admin, {lugh::directory::Kind::person, name, name + "@example.com", name}));
+    auto made = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+      directory->create_user(admin, {lugh::directory::Kind::person, name, name + "@example.com", name}, kTestDeadline, executor, done);
+    });
     EXPECT_TRUE(made.ok()) << made.message;
     return made.value;
   }
@@ -106,7 +108,8 @@ class AuthnRig {
     recovery = std::move(done.recovery_codes);
     // Past the step the confirming code used, so the next code is a new one.
     advance(std::chrono::seconds(30));
-    return *run(directory->user(user.id));
+    return *read_value<std::optional<lugh::directory::User>>(
+        [&](lugh::Executor executor, auto done) { directory->user(user.id, kTestDeadline, executor, done); });
   }
 
   lugh::audit::Actor admin{"admin", "192.0.2.10"};

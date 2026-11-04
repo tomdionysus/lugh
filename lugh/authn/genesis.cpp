@@ -18,16 +18,29 @@ Genesis::Genesis(std::shared_ptr<directory::Directory> directory, std::shared_pt
 
 Task<Outcome<Secret>> Genesis::run() {
   using Answer = Outcome<Secret>;
-  if (!(co_await _directory->users()).empty() || !(co_await _directory->groups()).empty()) {
+  if (!(co_await awaited_value<std::vector<directory::User>>([&](Executor executor, Done<Outcome<std::vector<directory::User>>> done) {
+         _directory->users(kTransitionDeadline, std::move(executor), std::move(done));
+       })).empty() ||
+      !(co_await awaited_value<std::vector<directory::Group>>([&](Executor executor, Done<Outcome<std::vector<directory::Group>>> done) {
+         _directory->groups(kTransitionDeadline, std::move(executor), std::move(done));
+       })).empty()) {
     co_return Answer::failure(Fault::refused, "this cluster has had its genesis");
   }
 
   const audit::Actor actor{"genesis", ""};
-  const auto root = co_await _directory->create_user(actor, {directory::Kind::person, kRoot, "", "Root"});
+  const auto root = co_await awaited<Outcome<directory::User>>([&](Executor executor, Done<Outcome<directory::User>> done) {
+    _directory->create_user(actor, {directory::Kind::person, kRoot, "", "Root"}, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!root.ok()) co_return Answer::from(root);
-  const auto administrators = co_await _directory->create_group(actor, kAdministrators, "Administer Lugh itself");
+  const auto administrators = co_await awaited<Outcome<directory::Group>>([&](Executor executor, Done<Outcome<directory::Group>> done) {
+    _directory->create_group(actor, kAdministrators, "Administer Lugh itself", kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!administrators.ok()) co_return Answer::from(administrators);
-  if (const auto added = co_await _directory->add_member(actor, administrators.value.id, root.value.id); !added.ok()) co_return Answer::from(added);
+  if (const auto added = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+        _directory->add_member(actor, administrators.value.id, root.value.id, kTransitionDeadline, std::move(executor), std::move(done));
+      });
+      !added.ok())
+    co_return Answer::from(added);
 
   const auto raw = secure_random(kPasswordBytes);
   auto password = text_secret(encoding::base64url(raw));

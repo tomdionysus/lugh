@@ -9,6 +9,7 @@
 
 #include "lugh/api/api_support.h"
 #include "lugh/api/scopes.h"
+#include "lugh/core/awaited.h"
 
 namespace lugh::api {
 
@@ -48,7 +49,9 @@ Task<void> PolicyRoutes::_get(http::RouteContext context) const {
   boost::json::object body;
   body["global"] = std::string(authn::acr(co_await _policies->global()));
   boost::json::array groups;
-  for (const auto& group : co_await _directory->groups()) {
+  for (const auto& group : co_await awaited_value<std::vector<directory::Group>>([&](Executor executor, Done<Outcome<std::vector<directory::Group>>> done) {
+         _directory->groups(kTransitionDeadline, std::move(executor), std::move(done));
+       })) {
     const auto level = co_await _policies->group(group.id);
     if (!level) continue;
     boost::json::object one;

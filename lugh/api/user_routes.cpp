@@ -10,6 +10,7 @@
 #include "lugh/api/api_support.h"
 #include "lugh/api/representations.h"
 #include "lugh/api/scopes.h"
+#include "lugh/core/awaited.h"
 
 namespace lugh::api {
 
@@ -48,10 +49,19 @@ Task<void> UserRoutes::_list(http::RouteContext context) const {
   const auto email = context.query.find("email");
   if (name != context.query.end() || email != context.query.end()) {
     // An exact lookup: none or one.
-    const auto found = name != context.query.end() ? co_await _directory->user_by_name(name->second) : co_await _directory->user_by_email(email->second);
+    const auto found = name != context.query.end()
+                           ? co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
+                               _directory->user_by_name(name->second, kTransitionDeadline, std::move(executor), std::move(done));
+                             })
+                           : co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
+                               _directory->user_by_email(email->second, kTransitionDeadline, std::move(executor), std::move(done));
+                             });
     if (found) users.push_back(user_json(*found));
   } else {
-    for (const auto& user : co_await _directory->users()) users.push_back(user_json(user));
+    for (const auto& user : co_await awaited_value<std::vector<directory::User>>([&](Executor executor, Done<Outcome<std::vector<directory::User>>> done) {
+           _directory->users(kTransitionDeadline, std::move(executor), std::move(done));
+         }))
+      users.push_back(user_json(user));
   }
   boost::json::object body;
   body["users"] = std::move(users);
@@ -83,7 +93,9 @@ Task<void> UserRoutes::_create(http::RouteContext context) {
   fresh.name = *name;
   fresh.email = email.value_or("");
   fresh.display_name = display.value_or("");
-  const auto made = co_await _directory->create_user(actor_of(context), std::move(fresh));
+  const auto made = co_await awaited<Outcome<directory::User>>([&](Executor executor, Done<Outcome<directory::User>> done) {
+    _directory->create_user(actor_of(context), std::move(fresh), kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!made.ok()) {
     write_fault(context.response, made);
     context.done();
@@ -95,7 +107,9 @@ Task<void> UserRoutes::_create(http::RouteContext context) {
 }
 
 Task<void> UserRoutes::_get(http::RouteContext context) const {
-  const auto user = co_await _directory->user(context.parameter("id"));
+  const auto user = co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
+    _directory->user(context.parameter("id"), kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!user) {
     http::write_error(context.response, http::status::not_found, "not_found", "no such user");
     context.done();
@@ -122,8 +136,13 @@ Task<void> UserRoutes::_update(http::RouteContext context) {
 
   const auto id = context.parameter("id");
   const auto actor = actor_of(context);
-  auto updated = co_await _directory->update_user(actor, id, std::move(change), precondition.expected);
-  if (updated.ok() && disabled) updated = co_await _directory->disable_user(actor, id, *disabled, updated.value.version);
+  auto updated = co_await awaited<Outcome<directory::User>>([&](Executor executor, Done<Outcome<directory::User>> done) {
+    _directory->update_user(actor, id, std::move(change), precondition.expected, kTransitionDeadline, std::move(executor), std::move(done));
+  });
+  if (updated.ok() && disabled)
+    updated = co_await awaited<Outcome<directory::User>>([&](Executor executor, Done<Outcome<directory::User>> done) {
+      _directory->disable_user(actor, id, *disabled, updated.value.version, kTransitionDeadline, std::move(executor), std::move(done));
+    });
   if (!updated.ok()) {
     write_fault(context.response, updated);
     context.done();
@@ -139,7 +158,9 @@ Task<void> UserRoutes::_remove(http::RouteContext context) {
     context.done();
     co_return;
   }
-  const auto removed = co_await _directory->remove_user(actor_of(context), context.parameter("id"), precondition.expected);
+  const auto removed = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+    _directory->remove_user(actor_of(context), context.parameter("id"), precondition.expected, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!removed.ok()) {
     write_fault(context.response, removed);
     context.done();
@@ -151,14 +172,21 @@ Task<void> UserRoutes::_remove(http::RouteContext context) {
 
 Task<void> UserRoutes::_groups(http::RouteContext context) const {
   const auto id = context.parameter("id");
-  if (!co_await _directory->user(id)) {
+  if (!co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
+        _directory->user(id, kTransitionDeadline, std::move(executor), std::move(done));
+      })) {
     http::write_error(context.response, http::status::not_found, "not_found", "no such user");
     context.done();
     co_return;
   }
   boost::json::array groups;
-  for (const auto& group_id : co_await _directory->groups_of(id)) {
-    if (const auto group = co_await _directory->group(group_id)) groups.push_back(group_json(*group));
+  for (const auto& group_id : co_await awaited_value<std::vector<std::string>>([&](Executor executor, Done<Outcome<std::vector<std::string>>> done) {
+         _directory->groups_of(id, kTransitionDeadline, std::move(executor), std::move(done));
+       })) {
+    if (const auto group = co_await awaited_value<std::optional<directory::Group>>([&](Executor executor, Done<Outcome<std::optional<directory::Group>>> done) {
+          _directory->group(group_id, kTransitionDeadline, std::move(executor), std::move(done));
+        }))
+      groups.push_back(group_json(*group));
   }
   boost::json::object body;
   body["groups"] = std::move(groups);
@@ -168,7 +196,9 @@ Task<void> UserRoutes::_groups(http::RouteContext context) const {
 
 Task<void> UserRoutes::_factors(http::RouteContext context) const {
   const auto id = context.parameter("id");
-  if (!co_await _directory->user(id)) {
+  if (!co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
+        _directory->user(id, kTransitionDeadline, std::move(executor), std::move(done));
+      })) {
     http::write_error(context.response, http::status::not_found, "not_found", "no such user");
     context.done();
     co_return;
@@ -184,7 +214,9 @@ Task<void> UserRoutes::_factors(http::RouteContext context) const {
 Task<void> UserRoutes::_remove_factor(http::RouteContext context) {
   const auto id = context.parameter("id");
   const auto key = factor_key(id, context.parameter("factor"));
-  if (key.empty() || !co_await _directory->user(id)) {
+  if (key.empty() || !co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
+        _directory->user(id, kTransitionDeadline, std::move(executor), std::move(done));
+      })) {
     http::write_error(context.response, http::status::not_found, "not_found", "no such factor");
     context.done();
     co_return;

@@ -26,6 +26,10 @@ Not yet tried on Linux: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DON
 
 - The open questions in `docs/architecture.md`, "Still open": question 2 (single-use grants) is needed by P6 and P8, question 14 (Lugh's hostname) by P13.
 
+## For P8, from Dannan
+
+Dannan's identity step (step 10, Dannan 09a525f, design in `../dannan/TODO/2026-11-04-identity.md`) gives what Lugh fills when it hosts on Dannan: the scope seam, `dannan/contract/scope.h` (`contract::Principal`, `contract::ScopeDecision`, and `ScopeSource::may_write(principal, prefix)`, answered from memory and never waiting), installed with `context.identity().install_scope_source(...)`; without a source the cluster's own nodes may write and nobody else. Single-node revocation is CA-signed, kept by every node and gossiped, closing the revoked node's sessions at once. Node keys live in Dannan's key custody, like Lugh's master key. Not tagged; whether to cut 0.3.0 is the maintainer's.
+
 ## Decided (the maintainer, 2026-11-04)
 
 From this session and the stack document's "Decided" section (`../dagda/TODO/2026-11-03-stack.md`):

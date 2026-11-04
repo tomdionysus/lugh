@@ -10,6 +10,7 @@
 #include "lugh/api/api_support.h"
 #include "lugh/api/representations.h"
 #include "lugh/api/scopes.h"
+#include "lugh/core/awaited.h"
 
 namespace lugh::api {
 
@@ -41,9 +42,15 @@ void GroupRoutes::register_routes(http::Router& router) {
 Task<void> GroupRoutes::_list(http::RouteContext context) const {
   boost::json::array groups;
   if (const auto name = context.query.find("name"); name != context.query.end()) {
-    if (const auto found = co_await _directory->group_by_name(name->second)) groups.push_back(group_json(*found));
+    if (const auto found = co_await awaited_value<std::optional<directory::Group>>([&](Executor executor, Done<Outcome<std::optional<directory::Group>>> done) {
+          _directory->group_by_name(name->second, kTransitionDeadline, std::move(executor), std::move(done));
+        }))
+      groups.push_back(group_json(*found));
   } else {
-    for (const auto& group : co_await _directory->groups()) groups.push_back(group_json(group));
+    for (const auto& group : co_await awaited_value<std::vector<directory::Group>>([&](Executor executor, Done<Outcome<std::vector<directory::Group>>> done) {
+           _directory->groups(kTransitionDeadline, std::move(executor), std::move(done));
+         }))
+      groups.push_back(group_json(group));
   }
   boost::json::object body;
   body["groups"] = std::move(groups);
@@ -64,7 +71,9 @@ Task<void> GroupRoutes::_create(http::RouteContext context) {
     co_return;
   }
 
-  const auto made = co_await _directory->create_group(actor_of(context), *name, description.value_or(""));
+  const auto made = co_await awaited<Outcome<directory::Group>>([&](Executor executor, Done<Outcome<directory::Group>> done) {
+    _directory->create_group(actor_of(context), *name, description.value_or(""), kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!made.ok()) {
     write_fault(context.response, made);
     context.done();
@@ -76,7 +85,9 @@ Task<void> GroupRoutes::_create(http::RouteContext context) {
 }
 
 Task<void> GroupRoutes::_get(http::RouteContext context) const {
-  const auto group = co_await _directory->group(context.parameter("id"));
+  const auto group = co_await awaited_value<std::optional<directory::Group>>([&](Executor executor, Done<Outcome<std::optional<directory::Group>>> done) {
+    _directory->group(context.parameter("id"), kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!group) {
     http::write_error(context.response, http::status::not_found, "not_found", "no such group");
     context.done();
@@ -99,7 +110,10 @@ Task<void> GroupRoutes::_update(http::RouteContext context) {
     co_return;
   }
 
-  const auto updated = co_await _directory->update_group(actor_of(context), context.parameter("id"), std::move(change), precondition.expected);
+  const auto updated = co_await awaited<Outcome<directory::Group>>([&](Executor executor, Done<Outcome<directory::Group>> done) {
+    _directory->update_group(actor_of(context), context.parameter("id"), std::move(change), precondition.expected, kTransitionDeadline, std::move(executor),
+                             std::move(done));
+  });
   if (!updated.ok()) {
     write_fault(context.response, updated);
     context.done();
@@ -115,7 +129,9 @@ Task<void> GroupRoutes::_remove(http::RouteContext context) {
     context.done();
     co_return;
   }
-  const auto removed = co_await _directory->remove_group(actor_of(context), context.parameter("id"), precondition.expected);
+  const auto removed = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+    _directory->remove_group(actor_of(context), context.parameter("id"), precondition.expected, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!removed.ok()) {
     write_fault(context.response, removed);
     context.done();
@@ -127,14 +143,21 @@ Task<void> GroupRoutes::_remove(http::RouteContext context) {
 
 Task<void> GroupRoutes::_members(http::RouteContext context) const {
   const auto id = context.parameter("id");
-  if (!co_await _directory->group(id)) {
+  if (!co_await awaited_value<std::optional<directory::Group>>([&](Executor executor, Done<Outcome<std::optional<directory::Group>>> done) {
+        _directory->group(id, kTransitionDeadline, std::move(executor), std::move(done));
+      })) {
     http::write_error(context.response, http::status::not_found, "not_found", "no such group");
     context.done();
     co_return;
   }
   boost::json::array members;
-  for (const auto& user_id : co_await _directory->members(id)) {
-    if (const auto user = co_await _directory->user(user_id)) members.push_back(user_json(*user));
+  for (const auto& user_id : co_await awaited_value<std::vector<std::string>>([&](Executor executor, Done<Outcome<std::vector<std::string>>> done) {
+         _directory->members(id, kTransitionDeadline, std::move(executor), std::move(done));
+       })) {
+    if (const auto user = co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
+          _directory->user(user_id, kTransitionDeadline, std::move(executor), std::move(done));
+        }))
+      members.push_back(user_json(*user));
   }
   boost::json::object body;
   body["members"] = std::move(members);
@@ -149,7 +172,9 @@ Task<void> GroupRoutes::_add_member(http::RouteContext context) {
     context.done();
     co_return;
   }
-  const auto added = co_await _directory->add_member(actor_of(context), context.parameter("id"), context.parameter("user"));
+  const auto added = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+    _directory->add_member(actor_of(context), context.parameter("id"), context.parameter("user"), kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!added.ok()) {
     write_fault(context.response, added);
     context.done();
@@ -160,7 +185,9 @@ Task<void> GroupRoutes::_add_member(http::RouteContext context) {
 }
 
 Task<void> GroupRoutes::_remove_member(http::RouteContext context) {
-  const auto removed = co_await _directory->remove_member(actor_of(context), context.parameter("id"), context.parameter("user"));
+  const auto removed = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+    _directory->remove_member(actor_of(context), context.parameter("id"), context.parameter("user"), kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!removed.ok()) {
     write_fault(context.response, removed);
     context.done();

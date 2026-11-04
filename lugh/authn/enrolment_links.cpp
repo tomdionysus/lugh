@@ -28,7 +28,9 @@ EnrolmentLinks::EnrolmentLinks(std::shared_ptr<store::Store> store, const dannan
 
 Task<Outcome<Secret>> EnrolmentLinks::issue(audit::Actor actor, std::string user_id) {
   using Answer = Outcome<Secret>;
-  const auto user = co_await _directory->user(user_id);
+  const auto user = co_await awaited_value<std::optional<directory::User>>([&](Executor executor, Done<Outcome<std::optional<directory::User>>> done) {
+    _directory->user(user_id, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!user) co_return Answer::failure(Fault::not_found, "no such user");
   if (user->kind != directory::Kind::person) co_return Answer::failure(Fault::refused, "a service does not enrol");
   if (user->disabled) co_return Answer::failure(Fault::refused, "the user is disabled");

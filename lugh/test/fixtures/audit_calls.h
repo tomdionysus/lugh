@@ -18,8 +18,6 @@
 #include "lugh/test/fixtures/run.h"
 
 // The audit log's operations, waited for, as the tests call them.
-inline constexpr lugh::Deadline kTestDeadline = std::chrono::seconds(30);
-
 inline lugh::Result<std::shared_ptr<lugh::audit::AuditLog>> audit_open(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<lugh::store::Store> store,
                                                                        const dannan::contract::WallClock& wall) {
   return wait_for<lugh::Result<std::shared_ptr<lugh::audit::AuditLog>>>(

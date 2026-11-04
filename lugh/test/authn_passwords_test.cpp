@@ -92,7 +92,9 @@ TEST_F(PasswordsTest, TheStoredRecordIsAHash) {
 }
 
 TEST_F(PasswordsTest, AServiceHasNoPassword) {
-  const auto service = run(rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", ""})).value;
+  const auto service = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+                         rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", ""}, kTestDeadline, executor, done);
+                       }).value;
   EXPECT_EQ(run(passwords.set(rig.admin, service, text_secret("correct horse battery"))).fault, Fault::refused);
 }
 
@@ -114,7 +116,9 @@ TEST_F(PasswordsTest, AnOldHashMovesToTheCurrentCosts) {
 TEST_F(PasswordsTest, ForgottenWithTheUser) {
   const auto alice = rig.person("alice");
   run(passwords.set(rig.admin, alice, text_secret("correct horse battery")));
-  ASSERT_TRUE(run(rig.directory->remove_user(rig.admin, alice.id)).ok());
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                rig.directory->remove_user(rig.admin, alice.id, std::nullopt, kTestDeadline, executor, done);
+              }).ok());
   EXPECT_FALSE(run(passwords.has_password(alice.id)));
   EXPECT_TRUE(rig.audited("password.remove"));
 }

@@ -50,13 +50,18 @@ Task<Outcome<>> Policies::global_set(audit::Actor actor, Assurance level) { co_r
 Task<std::optional<Assurance>> Policies::group(std::string group_id) const { co_return co_await _read("group/" + group_id); }
 
 Task<Outcome<>> Policies::group_set(audit::Actor actor, std::string group_id, std::optional<Assurance> level) {
-  if (!co_await _directory->group(group_id)) co_return Outcome<>::failure(Fault::not_found, "no such group");
+  if (!co_await awaited_value<std::optional<directory::Group>>([&](Executor executor, Done<Outcome<std::optional<directory::Group>>> done) {
+        _directory->group(group_id, kTransitionDeadline, std::move(executor), std::move(done));
+      }))
+    co_return Outcome<>::failure(Fault::not_found, "no such group");
   co_return co_await _write(std::move(actor), "group/" + group_id, level, group_id);
 }
 
 Task<Assurance> Policies::required(std::string user_id) const {
   auto level = co_await global();
-  for (const auto& group_id : co_await _directory->groups_of(std::move(user_id))) {
+  for (const auto& group_id : co_await awaited_value<std::vector<std::string>>([&](Executor executor, Done<Outcome<std::vector<std::string>>> done) {
+         _directory->groups_of(std::move(user_id), kTransitionDeadline, std::move(executor), std::move(done));
+       })) {
     if (const auto own = co_await group(group_id)) level = std::max(level, *own);
   }
   co_return level;

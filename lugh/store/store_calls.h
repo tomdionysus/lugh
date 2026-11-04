@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "lugh/core/awaited.h"
 #include "lugh/core/completion.h"
 #include "lugh/core/outcome.h"
 #include "lugh/core/task.h"
@@ -53,16 +54,7 @@ using Failed = std::function<T(const std::string& why)>;
 // Runs `task` and hands `answer` how it ended: its value, or, if it threw, `failed`.
 template <typename T>
 void settle(Executor executor, Task<T> task, std::function<void(T)> answer, Failed<T> failed) {
-  boost::asio::co_spawn(executor, std::move(task), [answer = std::move(answer), failed = std::move(failed)](std::exception_ptr error, T value) {
-    if (!error) return answer(std::move(value));
-    try {
-      std::rethrow_exception(error);
-    } catch (const std::exception& e) {
-      answer(failed(e.what()));
-    } catch (...) {
-      answer(failed("an unknown failure"));
-    }
-  });
+  spawned<T>(std::move(executor), std::move(task), std::move(answer), std::move(failed));
 }
 
 // `task`'s answer to `done`, or `failed(late)` if the deadline passes first.
@@ -135,6 +127,15 @@ class StoreCalls {
   void list_settled(std::string table, Executor executor, Done<Outcome<std::vector<Record>>> done) const {
     detail::settle<Outcome<std::vector<Record>>>(executor, detail::list_of(_store, std::move(table)), std::move(done),
                                                  detail::read_failed<std::vector<Record>>());
+  }
+
+  void find_settled(std::string table, std::string index, std::string value, Executor executor, Done<Outcome<std::optional<Record>>> done) const {
+    detail::settle<Outcome<std::optional<Record>>>(executor, detail::find_of(_store, std::move(table), std::move(index), std::move(value)), std::move(done),
+                                                   detail::read_failed<std::optional<Record>>());
+  }
+
+  void remove_settled(std::string table, std::string key, std::optional<std::uint64_t> expected, Executor executor, Done<Write> done) {
+    detail::settle<Write>(executor, detail::remove_of(_store, std::move(table), std::move(key), expected), std::move(done), detail::write_failed());
   }
 
   // The write's own answer, however long the disk takes, for a caller that must know how one

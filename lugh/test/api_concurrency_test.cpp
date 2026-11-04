@@ -93,7 +93,9 @@ TEST_F(Concurrency, ManyWritersAtOnce) {
   ASSERT_EQ(statuses.size(), 64u);
   for (const auto status : statuses) EXPECT_EQ(status, 201u);
   EXPECT_TRUE(responses.answered_elsewhere());
-  EXPECT_EQ(run(rig.directory->users()).size(), 64u);
+  EXPECT_EQ(
+      read_value<std::vector<lugh::directory::User>>([&](lugh::Executor executor, auto done) { rig.directory->users(kTestDeadline, executor, done); }).size(),
+      64u);
 
   const auto verified = audit_verify(rig.audit);
   ASSERT_TRUE(verified.ok) << verified.error;
@@ -110,16 +112,22 @@ TEST_F(Concurrency, OneNameOneWinner) {
   ASSERT_EQ(statuses.size(), 32u);
   EXPECT_EQ(std::count(statuses.begin(), statuses.end(), 201u), 1);
   EXPECT_EQ(std::count(statuses.begin(), statuses.end(), 409u), 31);
-  EXPECT_EQ(run(rig.directory->users()).size(), 1u);
+  EXPECT_EQ(
+      read_value<std::vector<lugh::directory::User>>([&](lugh::Executor executor, auto done) { rig.directory->users(kTestDeadline, executor, done); }).size(),
+      1u);
 }
 
 TEST_F(Concurrency, RacingAddsAreOneMembership) {
   const auto alice = rig.made_user("alice");
-  const auto group = run(rig.directory->create_group(rig.admin, "staff", "")).value;
+  const auto group = wait_for<lugh::Outcome<lugh::directory::Group>>([&](lugh::Executor executor, auto done) {
+                       rig.directory->create_group(rig.admin, "staff", "", kTestDeadline, executor, done);
+                     }).value;
   Responses responses;
   const auto middleware = router->middleware("/api");
   for (int i = 0; i < 16; ++i) responses.send(middleware, verb::put, "/api/v1/groups/" + group.id + "/members/" + alice, "");
   for (const auto status : responses.wait()) EXPECT_EQ(status, 204u);
-  EXPECT_EQ(run(rig.directory->members(group.id)), std::vector<std::string>{alice});
-  EXPECT_EQ(run(rig.directory->groups_of(alice)), std::vector<std::string>{group.id});
+  EXPECT_EQ(read_value<std::vector<std::string>>([&](lugh::Executor executor, auto done) { rig.directory->members(group.id, kTestDeadline, executor, done); }),
+            std::vector<std::string>{alice});
+  EXPECT_EQ(read_value<std::vector<std::string>>([&](lugh::Executor executor, auto done) { rig.directory->groups_of(alice, kTestDeadline, executor, done); }),
+            std::vector<std::string>{group.id});
 }

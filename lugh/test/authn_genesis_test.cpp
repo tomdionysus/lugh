@@ -35,14 +35,18 @@ TEST_F(GenesisTest, RootInAdministratorsWithARandomPassword) {
   ASSERT_TRUE(password.ok()) << password.message;
   EXPECT_EQ(password.value.size(), 24u);
 
-  const auto root = run(rig.directory->user_by_name("root"));
+  const auto root = read_value<std::optional<lugh::directory::User>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->user_by_name("root", kTestDeadline, executor, done); });
   ASSERT_TRUE(root);
   EXPECT_EQ(root->kind, lugh::directory::Kind::person);
   EXPECT_FALSE(root->enrolled);
   EXPECT_TRUE(root->email.empty());
-  const auto administrators = run(rig.directory->group_by_name("administrators"));
+  const auto administrators = read_value<std::optional<lugh::directory::Group>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->group_by_name("administrators", kTestDeadline, executor, done); });
   ASSERT_TRUE(administrators);
-  EXPECT_EQ(run(rig.directory->members(administrators->id)), std::vector<std::string>{root->id});
+  EXPECT_EQ(read_value<std::vector<std::string>>(
+                [&](lugh::Executor executor, auto done) { rig.directory->members(administrators->id, kTestDeadline, executor, done); }),
+            std::vector<std::string>{root->id});
 
   EXPECT_TRUE(run(rig.passwords->verify(root->id, copy_of(password.value))));
   EXPECT_TRUE(rig.audited("genesis"));
@@ -51,13 +55,16 @@ TEST_F(GenesisTest, RootInAdministratorsWithARandomPassword) {
 TEST_F(GenesisTest, OnceOnly) {
   ASSERT_TRUE(genesis().ok());
   EXPECT_EQ(genesis().fault, Fault::refused);
-  EXPECT_EQ(run(rig.directory->users()).size(), 1u);
+  EXPECT_EQ(
+      read_value<std::vector<lugh::directory::User>>([&](lugh::Executor executor, auto done) { rig.directory->users(kTestDeadline, executor, done); }).size(),
+      1u);
 }
 
 TEST_F(GenesisTest, NotOnADirectoryWithAnyoneInIt) {
   rig.person("alice");
   EXPECT_EQ(genesis().fault, Fault::refused);
-  EXPECT_FALSE(run(rig.directory->user_by_name("root")));
+  EXPECT_FALSE(read_value<std::optional<lugh::directory::User>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->user_by_name("root", kTestDeadline, executor, done); }));
 }
 
 TEST_F(GenesisTest, EachGenesisAPasswordOfItsOwn) {
@@ -82,7 +89,9 @@ TEST_F(GenesisTest, RootsFirstSignInIsEnrolment) {
   EXPECT_EQ(done.sign_in.stage, Stage::complete);
   EXPECT_EQ(done.sign_in.reached, Assurance::mfa);
   EXPECT_EQ(done.recovery_codes.size(), Factors::kRecoveryCodes);
-  EXPECT_TRUE(run(rig.directory->user_by_name("root"))->enrolled);
+  EXPECT_TRUE(read_value<std::optional<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+                rig.directory->user_by_name("root", kTestDeadline, executor, done);
+              })->enrolled);
 
   // From then on, as anyone: the password, then a code.
   rig.advance(std::chrono::seconds(30));
@@ -99,7 +108,8 @@ TEST_F(GenesisTest, TheFirstSignInHappensOnce) {
   run(auth.enrol_confirm(first.sign_in, setup.factor_id, rig.code_for(setup.secret), kSource));
 
   // Reset, root's password alone no longer opens enrolment: a new link must.
-  const auto root = *run(rig.directory->user_by_name("root"));
+  const auto root = *read_value<std::optional<lugh::directory::User>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->user_by_name("root", kTestDeadline, executor, done); });
   ASSERT_TRUE(run(auth.reset_factors(rig.admin, root.id)).ok());
   EXPECT_EQ(run(auth.password("root", copy_of(password), kSource)).kind, Kind::refused);
 }

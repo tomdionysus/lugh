@@ -70,14 +70,19 @@ TEST_F(EnrolmentLinksTest, ANewLinkEndsTheOld) {
 }
 
 TEST_F(EnrolmentLinksTest, OnlyForAPersonWhoIsNotEnrolled) {
-  const auto service = run(rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", ""})).value;
+  const auto service = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+                         rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", ""}, kTestDeadline, executor, done);
+                       }).value;
   EXPECT_EQ(run(links.issue(rig.admin, service.id)).fault, Fault::refused);
   EXPECT_EQ(run(links.issue(rig.admin, "nobody")).fault, Fault::not_found);
 
-  run(rig.directory->enrolled_set(rig.admin, alice.id, true));
+  wait_for<lugh::Outcome<lugh::directory::User>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->enrolled_set(rig.admin, alice.id, true, kTestDeadline, executor, done); });
   EXPECT_EQ(run(links.issue(rig.admin, alice.id)).fault, Fault::refused);
-  run(rig.directory->enrolled_set(rig.admin, alice.id, false));
-  run(rig.directory->disable_user(rig.admin, alice.id, true));
+  wait_for<lugh::Outcome<lugh::directory::User>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->enrolled_set(rig.admin, alice.id, false, kTestDeadline, executor, done); });
+  wait_for<lugh::Outcome<lugh::directory::User>>(
+      [&](lugh::Executor executor, auto done) { rig.directory->disable_user(rig.admin, alice.id, true, std::nullopt, kTestDeadline, executor, done); });
   EXPECT_EQ(run(links.issue(rig.admin, alice.id)).fault, Fault::refused);
 }
 

@@ -246,7 +246,13 @@ Task<Result<Services>> start(Ports ports, Config config) {
   services.authenticator = std::make_shared<authn::Authenticator>(ports.log, ports.time, services.directory, passwords, services.factors, services.policies,
                                                                   services.links, services.audit, authn::Authenticator::Settings{});
 
-  logger.info(std::to_string((co_await services.directory->users()).size()) + " users, " + std::to_string((co_await services.directory->groups()).size()) +
+  logger.info(std::to_string((co_await awaited_value<std::vector<directory::User>>([&](Executor executor, Done<Outcome<std::vector<directory::User>>> done) {
+                               services.directory->users(kTransitionDeadline, std::move(executor), std::move(done));
+                             })).size()) +
+              " users, " +
+              std::to_string((co_await awaited_value<std::vector<directory::Group>>([&](Executor executor, Done<Outcome<std::vector<directory::Group>>> done) {
+                               services.directory->groups(kTransitionDeadline, std::move(executor), std::move(done));
+                             })).size()) +
               " groups, " + std::to_string(services.audit->size()) + " audit entries");
   co_return Answer::success(std::move(services));
 }
