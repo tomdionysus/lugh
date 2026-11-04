@@ -47,7 +47,6 @@
 #include "lugh/store/sealed_store.h"
 #include "lugh/store/tables.h"
 #include "lugh/system/system_console.h"
-#include "lugh/system/system_environment.h"
 #include "lugh/system/system_files.h"
 #include "lugh/version.h"
 
@@ -273,7 +272,8 @@ int run(const cli::Options& options) {
   // The node's clocks: Dannan's, one of each for the process.
   const auto& time = dannan::contract::steady_time_source();
   const auto& wall = dannan::contract::system_wall_clock();
-  auto environment = std::make_shared<system::SystemEnvironment>();
+  // The process's environment, Dannan's, held by everything that reads it.
+  const std::shared_ptr<const system::Environment> environment(&dannan::config::process_environment(), [](const system::Environment*) {});
 
   logger.info(std::string("Lugh ") + LUGH_VERSION);
 
@@ -308,7 +308,7 @@ int run(const cli::Options& options) {
   auto keyrings = std::make_shared<keys::KeyringManager>(log, files, console, environment, config.state_directory, hashing.get_executor());
   const Ports ports{log, time, wall, files, console, keyrings, blocking.get_executor(), hashing.get_executor()};
 
-  if (options.command == cli::Command::init) return run_until(io_context, run_init(options, ports, config.state_directory));
+  if (config.command == cli::Command::init) return run_until(io_context, run_init(options, ports, config.state_directory));
 
   auto started = run_until(io_context, start(ports, config));
   if (!started.ok) {
@@ -388,12 +388,8 @@ int main(int argc, char* argv[]) {
 
   const auto options = lugh::cli::parse(argc, argv);
 
-  if (!options.ok) {
-    std::cerr << options.error << "\n\n" << lugh::cli::usage();
-    return 2;
-  }
   if (options.help) {
-    std::cout << lugh::cli::usage();
+    std::cout << lugh::cli::usage(lugh::ConfigLoader::describe());
     return 0;
   }
   if (options.version) {

@@ -25,7 +25,6 @@ function(lugh_fuzz_target name source)
     add_test(NAME fuzz_${name} COMMAND ${name} -runs=2000 -max_total_time=10)
 endfunction()
 
-lugh_fuzz_target(fuzz_cli cli_fuzz.cpp)
 lugh_fuzz_target(fuzz_keyring keyring_fuzz.cpp)
 lugh_fuzz_target(fuzz_store_log store_log_fuzz.cpp)
 lugh_fuzz_target(fuzz_records records_fuzz.cpp)

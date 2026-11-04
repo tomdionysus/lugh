@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "lugh/node/cli.h"
+#include "lugh/node/config.h"
 
 using lugh::cli::Options;
 
@@ -25,78 +26,29 @@ Options parse(std::vector<std::string> arguments) {
 
 }  // namespace
 
-TEST(Cli, NothingIsFine) { EXPECT_TRUE(parse({}).ok); }
-
-TEST(Cli, TakesBothForms) {
-  const auto options = parse({"--config", "/a.yaml", "--port=8099", "-c", "/b.yaml"});
-  ASSERT_TRUE(options.ok);
-  EXPECT_EQ(options.config, "/b.yaml");
-  EXPECT_EQ(options.port, "8099");
-}
-
-TEST(Cli, EverySetting) {
-  const auto options = parse({"--address", "127.0.0.1", "--tls-certificate", "c.pem", "--tls-key", "k.pem", "--log-level", "debug", "--log-format", "json"});
-  ASSERT_TRUE(options.ok);
-  EXPECT_EQ(options.address, "127.0.0.1");
-  EXPECT_EQ(options.tls_certificate, "c.pem");
-  EXPECT_EQ(options.tls_key, "k.pem");
-  EXPECT_EQ(options.log_level, "debug");
-  EXPECT_EQ(options.log_format, "json");
-}
-
-TEST(Cli, VersionAndHelp) {
+// The command line keeps the switches that say what the process does; the command word and
+// every setting go, in order, to Dannan's settings reader (node_config_test.cpp).
+TEST(Cli, TheSwitches) {
   EXPECT_TRUE(parse({"-v"}).version);
+  EXPECT_TRUE(parse({"--version"}).version);
   EXPECT_TRUE(parse({"--help"}).help);
+  EXPECT_TRUE(parse({"-h"}).help);
+  EXPECT_TRUE(parse({"init", "--passphrase"}).passphrase);
+  const auto none = parse({});
+  EXPECT_FALSE(none.version || none.help || none.passphrase);
+  EXPECT_TRUE(none.arguments.empty());
 }
 
-TEST(Cli, UnknownIsAnError) {
-  const auto options = parse({"--prot", "80"});
-  EXPECT_FALSE(options.ok);
-  EXPECT_EQ(options.error, "unknown option: --prot");
-}
-
-TEST(Cli, AMissingValueIsAnError) {
-  EXPECT_FALSE(parse({"--port"}).ok);
-  EXPECT_FALSE(parse({"--port="}).ok);
+TEST(Cli, EverythingElseGoesToTheReaderInOrder) {
+  const auto options = parse({"init", "--config", "/a.yaml", "--passphrase", "--port=8099", "--prot", "80"});
+  EXPECT_TRUE(options.passphrase);
+  EXPECT_EQ(options.arguments, (std::vector<std::string>{"init", "--config", "/a.yaml", "--port=8099", "--prot", "80"}));
 }
 
 TEST(Cli, UsageNamesEverySetting) {
-  const auto text = lugh::cli::usage();
+  const auto text = lugh::cli::usage(lugh::ConfigLoader::describe());
   for (const auto* flag : {"--config", "--address", "--port", "--tls-certificate", "--tls-key", "--log-level", "--log-format", "--state-directory",
-                           "--passphrase", "init", "systemd-creds"}) {
+                           "--passphrase", "init", "systemd-creds", "LUGH_PORT", "server.port"}) {
     EXPECT_NE(text.find(flag), std::string::npos) << flag;
   }
-}
-
-TEST(Cli, ServeIsTheDefault) { EXPECT_EQ(parse({}).command, lugh::cli::Command::serve); }
-
-TEST(Cli, Init) {
-  const auto options = parse({"init", "--config", "/a.yaml", "--state-directory=/var/lib/lugh"});
-  ASSERT_TRUE(options.ok) << options.error;
-  EXPECT_EQ(options.command, lugh::cli::Command::init);
-  EXPECT_FALSE(options.passphrase);
-  EXPECT_EQ(options.state_directory, "/var/lib/lugh");
-
-  const auto after = parse({"--config", "/a.yaml", "init", "--passphrase"});
-  ASSERT_TRUE(after.ok) << after.error;
-  EXPECT_EQ(after.command, lugh::cli::Command::init);
-  EXPECT_TRUE(after.passphrase);
-}
-
-TEST(Cli, PassphraseIsForInitOnly) {
-  const auto options = parse({"--passphrase"});
-  EXPECT_FALSE(options.ok);
-  EXPECT_EQ(options.error, "--passphrase is for init");
-}
-
-TEST(Cli, UnknownCommandsAndStrayWords) {
-  const auto unknown = parse({"serve"});
-  EXPECT_FALSE(unknown.ok);
-  EXPECT_EQ(unknown.error, "unknown command: serve");
-
-  const auto stray = parse({"init", "now"});
-  EXPECT_FALSE(stray.ok);
-  EXPECT_EQ(stray.error, "unexpected argument: now");
-
-  EXPECT_FALSE(parse({"init", "init"}).ok);
 }

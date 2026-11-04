@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "dannan/config/config.h"
 #include "dannan/status/log.h"
 #include "lugh/core/status.h"
 #include "lugh/network/cidr.h"
@@ -24,6 +25,9 @@ namespace lugh {
 // is data, filled once by ConfigLoader and read by main. The master key is not here and
 // never will be; it arrives as a systemd credential, or is typed.
 struct Config {
+  // The command word: none is serve.
+  cli::Command command = cli::Command::serve;
+
   // The file read, empty when the defaults alone were used.
   std::string path;
 
@@ -50,27 +54,32 @@ struct Config {
   std::vector<network::Cidr> trusted_proxies;
 };
 
+// Lugh's settings, read by Dannan's settings reader (dannan/config/config.h, the one reader
+// for every node binary in the stack) and then checked and typed here: the addresses,
+// networks and levels are Lugh's to understand.
 class ConfigLoader {
  public:
   static constexpr const char* kInstalledPath = "/usr/local/etc/lugh/config.yaml";
 
   // default_path is read when neither --config nor $LUGH_CONFIG names a file, and only if
   // it exists; empty reads nothing.
-  ConfigLoader(std::shared_ptr<system::Environment> environment, std::string default_path);
+  ConfigLoader(std::shared_ptr<const system::Environment> environment, std::string default_path);
 
   // The defaults, then the file, then secrets.yaml beside it, then the environment, then
   // the command line, each overriding the one before. A value that cannot be used is an
-  // error, never a silent default.
+  // error, never a silent default, in the same words from any layer.
   Result<Config> load(const cli::Options& options);
 
   // Keys present in a file that nothing reads: a misspelling, most likely. For the log.
   const std::vector<std::string>& warnings() const { return _warnings; }
 
- private:
-  Status _apply_file(Config& config, const std::string& path);
-  Status _apply(Config& config, const std::string& key, const std::string& value, const std::string& source);
+  // Every setting, as the reader takes it.
+  static std::vector<dannan::config::Setting> settings();
+  // The flags, settings and variables, for the usage text.
+  static std::string describe();
 
-  std::shared_ptr<system::Environment> _environment;
+ private:
+  std::shared_ptr<const system::Environment> _environment;
   std::string _default_path;
   std::vector<std::string> _warnings;
 };

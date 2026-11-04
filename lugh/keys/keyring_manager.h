@@ -37,7 +37,7 @@ class KeyringManager {
 
   // `hashing` runs Argon2id over a passphrase, which takes its whole 64 MiB and a while.
   KeyringManager(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<system::Files> files, std::shared_ptr<system::Console> console,
-                 std::shared_ptr<system::Environment> environment, std::string state_directory, Executor hashing);
+                 std::shared_ptr<const system::Environment> environment, std::string state_directory, Executor hashing);
 
   std::string path() const;
 
@@ -73,7 +73,7 @@ class KeyringManager {
   dannan::status::ScopedLogger _logger;
   std::shared_ptr<system::Files> _files;
   std::shared_ptr<system::Console> _console;
-  std::shared_ptr<system::Environment> _environment;
+  std::shared_ptr<const system::Environment> _environment;
   std::string _state_directory;
   Executor _hashing;
 };

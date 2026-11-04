@@ -77,12 +77,13 @@ const std::vector<Pattern>& patterns() {
       // The concrete adapters and sinks, by name: everything else takes the port.
       {"concrete adapter",
        {"System", "ConsoleSink", "JsonSink", "console_sink"},
-       std::regex(R"(\bSystem(?:Environment|Files|Console)\b|\b(?:ConsoleSink|JsonSink|console_sink)\b)"),
+       std::regex(R"(\bSystem(?:Files|Console)\b|\b(?:ConsoleSink|JsonSink|console_sink)\b)"),
        "auto files = std::make_shared<SystemFiles>(pool);"},
-      // Dannan's clocks are the process's: only the composition root reaches for them.
-      {"Dannan clock",
-       {"SteadyTimeSource", "SystemWallClock", "steady_time_source", "system_wall_clock"},
-       std::regex(R"(\b(?:SteadyTimeSource|SystemWallClock|steady_time_source|system_wall_clock)\b)"),
+      // Dannan's clocks and environment are the process's: only the composition root reaches
+      // for them.
+      {"Dannan clock or environment",
+       {"SteadyTimeSource", "SystemWallClock", "steady_time_source", "system_wall_clock", "process_environment"},
+       std::regex(R"(\b(?:SteadyTimeSource|SystemWallClock|steady_time_source|system_wall_clock|process_environment)\b)"),
        "const auto& wall = dannan::contract::system_wall_clock();"},
       // Every lock is one of Dannan's (dannan/contract/thread_safety.h), so the thread-safety
       // analysis sees every one.
@@ -98,8 +99,6 @@ const std::vector<Pattern>& patterns() {
 // one place that names the real thing. Add each adapter here as it is written.
 const std::set<std::string> kAdapters = {
     "tools/lugh_node.cpp",
-    "lugh/system/system_environment.h",
-    "lugh/system/system_environment.cpp",
     "lugh/system/system_files.h",  // SystemFiles: the keyring on disk
     "lugh/system/system_files.cpp",
     "lugh/system/system_console.h",  // SystemConsole: a passphrase typed without echo

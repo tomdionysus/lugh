@@ -21,7 +21,7 @@ constexpr std::size_t kMostCredentialBytes = 4096;
 }  // namespace
 
 KeyringManager::KeyringManager(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<system::Files> files, std::shared_ptr<system::Console> console,
-                               std::shared_ptr<system::Environment> environment, std::string state_directory, Executor hashing)
+                               std::shared_ptr<const system::Environment> environment, std::string state_directory, Executor hashing)
     : _logger(std::move(log), "keys"),
       _files(std::move(files)),
       _console(std::move(console)),

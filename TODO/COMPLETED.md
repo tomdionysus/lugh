@@ -2,6 +2,15 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: onto Dannan 0.4.0's settings reader and percent-encoding (rule 3)
+
+- **Dannan pinned to its tag 0.4.0.**
+- **Percent-encoding:** the router decodes with Dannan's (`dannan/encoding/percent.h`). Path parameters are decoded strictly (`+` stays `+`, as RFC 3986 has it for paths) and queries as forms (`+` a space); a malformed escape (`%zz`, a trailing `%`) is answered 400 instead of passing through as it did. `Router::percent_decode` is gone; its unit test became a test through a route of both modes and the 400.
+- **Settings:** `ConfigLoader` reads through Dannan's reader (`dannan/config/config.h`), which was lifted from it. Lugh declares its settings (`ConfigLoader::settings()`) and keeps its typed `Config` and its own checks: addresses, networks, log levels, the TLS pair needed to serve, the command word, `--passphrase` only for init. The command line keeps only `--help`, `--version` and `--passphrase`; everything else, the command word among it, goes to the reader, and the command is now `Config::command`. Lugh no longer uses yaml-cpp itself (Dannan still does).
+- **The environment port** was an exact copy of Dannan's: `lugh::system::Environment` is now `dannan::config::Environment`, `SystemEnvironment` is deleted, and the composition root hands out `dannan::config::process_environment()`, which the IoC check now allows nowhere else.
+- `fuzz_cli` is deleted: what it fuzzed, the command line, is parsed by Dannan's reader now, and Dannan fuzzes its own parsers.
+- **Tests: 378 to 369.** A drop, so here is why. The CLI tests went from 11 to 3: what they covered (both flag forms, every setting's flag, unknown and valueless flags) is Dannan's reader's, tested in Dannan; the command word, stray words and `--passphrase` moved into the config tests. The config tests went from 19 to 18: the three layer-order tests became one (`TheLayersInOrder`), `TheStateDirectory` and `TheBreachedPasswordList` were folded into the defaults and file tests, and three were added (the command word, `--passphrase` only for init, unknown and valueless flags); the bad-values test also checks a bad log format now. Green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: P6 step O2, the scope model
 
 - `lugh/scopes/`: what a scope is (RFC 6749 section 3.3's word, at most 1024 bytes) and its four kinds, Lugh's own, OIDC's, an application's `<prefix>:<name>` and Lir's topic scopes; the space-delimited list split and joined. Lugh's own scope names move here from `lugh/api/scopes.h`, which now refers to them.

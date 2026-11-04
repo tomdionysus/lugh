@@ -43,7 +43,6 @@ add_library(lugh STATIC
     store/log_format.cpp
     store/sealed_store.cpp
     system/system_console.cpp
-    system/system_environment.cpp
     system/system_files.cpp
 )
 
@@ -61,7 +60,6 @@ target_link_libraries(lugh
         OpenSSL::SSL
         OpenSSL::Crypto
         Threads::Threads
-        yaml-cpp::yaml-cpp
 )
 
 # Every source parses the same Boost headers before a line of ours; precompiling them is
