@@ -67,6 +67,7 @@ add_library(lugh STATIC
     session/sessions.cpp
     signin/html.cpp
     signin/pages.cpp
+    signin/qr.cpp
     store/sealed_store.cpp
     system/system_console.cpp
     system/system_files.cpp

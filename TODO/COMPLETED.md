@@ -2,6 +2,12 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O5b, the TOTP QR code; P6 complete
+
+- `lugh/signin/qr.h`: a QR encoder from ISO/IEC 18004 (byte mode, level M, versions 1 to 40, all eight masks by the standard's penalties) and an inline SVG with no script or style attribute, so it passes the pages' policy. The enrolment page shows it above the key, which stays as text.
+- The test has a reader of its own, written apart from the encoder, which reads every version at the standard's capacity back through its error correction. Checked once outside the suite as well: thirteen symbols, versions 1 to 29, read back exactly by macOS's CoreImage decoder.
+- Tests: 521 to 527, green in the debug, ASan and TSan builds, repeated and shuffled.
+
 ## 2026-11-04: P6 step O10d, opaque access tokens
 
 - An application registered with `opaque_access_tokens` now gets what it asked for: a `lo_` handle in place of the JWT, read at introspection and userinfo, never at `/api/v1`. The signed token stands behind it, so binding, revocation and expiry are the JWT's, and `at_hash` and a DPoP proof's `ath` are over the handle the client holds.

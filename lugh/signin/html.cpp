@@ -153,6 +153,12 @@ a { color: var(--good); }
   background: color-mix(in srgb, var(--warn) 14%, transparent);
   border-color: color-mix(in srgb, var(--warn) 40%, transparent);
 }
+.qr {
+  display: block;
+  width: min(100%, 16rem);
+  margin: 0 auto var(--gap);
+  border-radius: calc(var(--radius) / 2);
+}
 .secret {
   font-family: ui-monospace, "SFMono-Regular", monospace;
   font-size: 1.05rem;

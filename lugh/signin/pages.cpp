@@ -13,6 +13,7 @@
 
 #include "lugh/http/forms.h"
 #include "lugh/signin/html.h"
+#include "lugh/signin/qr.h"
 
 namespace lugh::signin {
 
@@ -119,9 +120,12 @@ std::string grouped(const std::string& secret) {
 }
 
 std::string totp_form(const std::string& csrf, const PreSession& pre, const std::string& warning) {
+  const auto code = qr_encode(text_of(pre.totp_uri));
   return notice(warning) +
-         "<p>Add this key to your authenticator app, then type the code it shows. Every sign-in after this needs the password and a code.</p>\n"
-         "<p class=\"secret\">" +
+         "<p>Scan this with your authenticator app, or add the key below by hand, then type the code it shows. Every sign-in after this needs the password and "
+         "a "
+         "code.</p>\n" +
+         (code ? qr_svg(*code, "A QR code holding your authenticator key") + "\n" : std::string()) + "<p class=\"secret\">" +
          escape(grouped(text_of(pre.totp_secret))) +
          "</p>\n"
          "<p class=\"muted\">Or open this in the app: <span class=\"secret\">" +

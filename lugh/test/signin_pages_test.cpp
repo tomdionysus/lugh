@@ -136,6 +136,7 @@ TEST(SigninPages, EnrolmentFromALink) {
   const auto secret = add.totp_secret();
   ASSERT_FALSE(secret.empty());
   EXPECT_TRUE(add.says("otpauth://totp/"));
+  EXPECT_TRUE(add.says("<svg class=\"qr\""));
 
   // A wrong code keeps the same secret on the page.
   const auto wrong = rig.post("/signin/enrol/totp", {{"csrf", add.csrf()}, {"code", "000000"}});
