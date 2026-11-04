@@ -95,10 +95,10 @@ TEST(KeyringFormat, RefusesHeadersThatAreNot) {
   version[8] = 2;
   EXPECT_FALSE(decode_header(version));
 
-  for (const unsigned char source : {0, 3, 255}) {
+  for (const int source : {0, 3, 255}) {
     auto other = good;
-    other[9] = source;
-    EXPECT_FALSE(decode_header(other)) << int(source);
+    other[9] = static_cast<unsigned char>(source);
+    EXPECT_FALSE(decode_header(other)) << source;
   }
 
   // Costs that would take a terabyte, or that Argon2 cannot have.

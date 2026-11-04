@@ -87,6 +87,9 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   its tables of what was lifted from where are `docs/provenance.md`. Following the rule
   The maintainer set for all the source repositories, sanitizers now run before a release rather
   than routinely, which `code-style.md` had made a deliberate Lugh exception.
+- Dannan's warning set on every target: `-Wshadow -Wconversion -Wno-sign-conversion` beside
+  `-Wall -Wextra -Wpedantic`, under `-Werror`. The library and the node were already
+  clean; three tests were not (a shadowed name twice, a narrowing in a loop).
 
 ## 2026-10-18: P5, the management API (not committed)
 

@@ -69,8 +69,8 @@ class AuthnRig {
   }
 
   // The code an authenticator app would show now for a base32 secret.
-  std::string code_for(const lugh::Secret& secret, std::int64_t steps_ahead = 0) const {
-    const auto raw = lugh::encoding::base32_decode(lugh::secret_text(secret));
+  std::string code_for(const lugh::Secret& factor_secret, std::int64_t steps_ahead = 0) const {
+    const auto raw = lugh::encoding::base32_decode(lugh::secret_text(factor_secret));
     const auto now = wall.unix_ms() / 1000;
     return lugh::authn::totp_code(*raw, lugh::authn::totp_step(now) + static_cast<std::uint64_t>(steps_ahead));
   }

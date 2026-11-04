@@ -26,8 +26,8 @@ TEST(Offload, RunsElsewhereAndComesBack) {
   boost::asio::thread_pool pool(1);
   const auto here = std::this_thread::get_id();
   const auto [there, back] = run([&]() -> Task<std::pair<std::thread::id, std::thread::id>> {
-    const auto there = co_await lugh::offload(pool.get_executor(), [] { return std::this_thread::get_id(); });
-    co_return std::make_pair(there, std::this_thread::get_id());
+    const auto on_pool = co_await lugh::offload(pool.get_executor(), [] { return std::this_thread::get_id(); });
+    co_return std::make_pair(on_pool, std::this_thread::get_id());
   }());
   EXPECT_NE(there, here);
   EXPECT_EQ(back, here);

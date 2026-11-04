@@ -114,7 +114,7 @@ endif()
 # The same flags on every target, PRIVATE: they govern how a target's own sources compile,
 # not how anything linking it does.
 function(lugh_flags target)
-    target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion)
     if (LUGH_WARNINGS_AS_ERRORS)
         target_compile_options(${target} PRIVATE -Werror)
     endif()
