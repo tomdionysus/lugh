@@ -31,6 +31,7 @@
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/authenticator.h"
 #include "lugh/authn/genesis.h"
+#include "lugh/core/awaited.h"
 #include "lugh/directory/directory.h"
 #include "lugh/http/client_address.h"
 #include "lugh/http/health_routes.h"
@@ -141,7 +142,9 @@ Task<int> genesis(Ports ports, keys::Keyring keyring, std::string state_director
 
   const auto opened = co_await store::SealedStore::open(ports.log, ports.files, ports.keyrings, std::move(keyring), state_directory + "/store", all_tables());
   if (!opened.ok) co_return failed(opened.error);
-  const auto audit = co_await audit::AuditLog::open(ports.log, opened.value, ports.wall);
+  const auto audit = co_await awaited<Result<std::shared_ptr<audit::AuditLog>>>([&](Executor executor, Done<Result<std::shared_ptr<audit::AuditLog>>> done) {
+    audit::AuditLog::open(ports.log, opened.value, ports.wall, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!audit.ok) co_return failed(audit.error);
 
   auto directory = std::make_shared<directory::Directory>(ports.log, opened.value, ports.wall, audit.value);
@@ -216,7 +219,9 @@ Task<Result<Services>> start(Ports ports, Config config) {
 
   Services services;
   services.store = opened.value;
-  auto audit = co_await audit::AuditLog::open(ports.log, services.store, ports.wall);
+  auto audit = co_await awaited<Result<std::shared_ptr<audit::AuditLog>>>([&](Executor executor, Done<Result<std::shared_ptr<audit::AuditLog>>> done) {
+    audit::AuditLog::open(ports.log, services.store, ports.wall, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!audit.ok) co_return Answer::failure(audit.error);
   services.audit = audit.value;
 

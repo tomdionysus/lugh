@@ -8,6 +8,7 @@
 #include "lugh/authn/passwords.h"
 
 #include "dannan/identity/crypto.h"
+#include "lugh/core/awaited.h"
 #include "lugh/core/codec.h"
 
 namespace lugh::authn {
@@ -125,7 +126,10 @@ Task<Outcome<>> Passwords::set(audit::Actor actor, directory::User user, Secret 
 
   const auto written = co_await _store->put(kTable, user.id, encode(Credential{std::move(hashed.value), (_wall.unix_ms() / 1000)}));
   if (!written.ok()) co_return Answer::failure(directory::fault_of(written.error), written.message);
-  co_await _audit->record(audit::Event{"password.set", actor.id, user.id, actor.source, "version " + std::to_string(written.version)});
+  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
+    _audit->record(audit::Event{"password.set", actor.id, user.id, actor.source, "version " + std::to_string(written.version)}, kTransitionDeadline,
+                   std::move(executor), std::move(done));
+  });
   co_return Answer::success();
 }
 
@@ -174,7 +178,9 @@ Task<Status> Passwords::forget(audit::Actor actor, std::string user_id) {
   if (!co_await _store->get(kTable, user_id)) co_return Status::success();
   const auto removed = co_await _store->remove(kTable, user_id);
   if (!removed.ok()) co_return Status::failure("cannot remove the password: " + removed.message);
-  co_await _audit->record(audit::Event{"password.remove", actor.id, user_id, actor.source, {}});
+  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
+    _audit->record(audit::Event{"password.remove", actor.id, user_id, actor.source, {}}, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   co_return Status::success();
 }
 

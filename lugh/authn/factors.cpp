@@ -11,6 +11,7 @@
 
 #include "dannan/identity/crypto.h"
 #include "lugh/authn/totp.h"
+#include "lugh/core/awaited.h"
 #include "lugh/core/codec.h"
 #include "lugh/core/encoding.h"
 
@@ -363,7 +364,10 @@ std::optional<std::string> Factors::_new_key(std::string_view user_id, FactorKin
 }
 
 Task<void> Factors::_audit(const audit::Actor& actor, std::string action, std::string user_id, std::string detail) {
-  co_await _audit_log->record(audit::Event{std::move(action), actor.id, std::move(user_id), actor.source, std::move(detail)});
+  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
+    _audit_log->record(audit::Event{std::move(action), actor.id, std::move(user_id), actor.source, std::move(detail)}, kTransitionDeadline, std::move(executor),
+                       std::move(done));
+  });
 }
 
 }  // namespace lugh::authn

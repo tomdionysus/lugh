@@ -18,6 +18,7 @@
 #include "lugh/core/encoding.h"
 #include "lugh/directory/directory.h"
 #include "lugh/store/tables.h"
+#include "lugh/test/fixtures/audit_calls.h"
 #include "lugh/test/fixtures/memory_store.h"
 #include "lugh/test/fixtures/pools.h"
 #include "lugh/test/fixtures/recording_sink.h"
@@ -50,7 +51,7 @@ inline constexpr lugh::crypto::Argon2Costs kTestArgon2{64, 1, 1};
 class AuthnRig {
  public:
   explicit AuthnRig(lugh::authn::BreachedPasswords breached = {}, lugh::authn::Authenticator::Settings settings = {}) {
-    audit = run(lugh::audit::AuditLog::open(logger, store, wall)).value;
+    audit = audit_open(logger, store, wall).value;
     directory = std::make_shared<lugh::directory::Directory>(logger, store, wall, audit);
     passwords =
         std::make_shared<lugh::authn::Passwords>(logger, store, wall, audit, test_pool(), kTestArgon2, lugh::authn::PasswordRules{}, std::move(breached));
@@ -78,7 +79,7 @@ class AuthnRig {
   // The actions in the audit log, in order.
   std::vector<std::string> actions() const {
     std::vector<std::string> out;
-    for (const auto& entry : run(audit->entries(1, 100000))) out.push_back(entry.event.action);
+    for (const auto& entry : audit_entries(audit, 1, 100000)) out.push_back(entry.event.action);
     return out;
   }
 

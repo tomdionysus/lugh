@@ -7,6 +7,7 @@
 
 #include "lugh/authn/genesis.h"
 
+#include "lugh/core/awaited.h"
 #include "lugh/core/encoding.h"
 
 namespace lugh::authn {
@@ -34,7 +35,9 @@ Task<Outcome<Secret>> Genesis::run() {
   if (const auto set = co_await _passwords->set(actor, root.value, Secret(password.reveal())); !set.ok()) co_return Answer::from(set);
   if (const auto allowed = co_await _links->first_sign_in_allow(actor, root.value.id); !allowed.ok()) co_return Answer::from(allowed);
 
-  co_await _audit->record(audit::Event{"genesis", actor.id, root.value.id, {}, "root, in administrators"});
+  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
+    _audit->record(audit::Event{"genesis", actor.id, root.value.id, {}, "root, in administrators"}, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   co_return Answer::success(std::move(password));
 }
 

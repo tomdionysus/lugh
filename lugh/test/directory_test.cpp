@@ -180,7 +180,7 @@ TEST_F(DirectoryTest, GroupUpdates) {
 
 TEST_F(DirectoryTest, EveryChangeNamesItsActor) {
   rig.person("alice");
-  const auto entry = run(rig.audit->entries(1, 1)).at(0);
+  const auto entry = audit_entries(rig.audit, 1, 1).at(0);
   EXPECT_EQ(entry.event.actor, "admin");
   EXPECT_EQ(entry.event.source, "192.0.2.10");
 }

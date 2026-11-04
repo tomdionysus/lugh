@@ -9,8 +9,8 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -20,10 +20,11 @@
 #include "dannan/contract/time_source.h"
 #include "dannan/identity/crypto.h"
 #include "dannan/status/log.h"
-#include "lugh/core/async_mutex.h"
+#include "lugh/core/completion.h"
+#include "lugh/core/outcome.h"
 #include "lugh/core/status.h"
-#include "lugh/core/task.h"
 #include "lugh/store/store.h"
+#include "lugh/store/store_calls.h"
 
 namespace lugh::audit {
 
@@ -68,7 +69,10 @@ struct Entry {
 //
 // One chain per node for now. P8 gives each node its own sequence, so two nodes appending
 // at once do not contend for one number.
-class AuditLog {
+//
+// Every operation takes Dannan's shape: its deadline, the caller's executor, and `done`,
+// posted there once. Safe from any number of threads.
+class AuditLog : public std::enable_shared_from_this<AuditLog> {
  public:
   static constexpr const char* kTable = "audit";
 
@@ -78,23 +82,26 @@ class AuditLog {
   static constexpr std::size_t kMostDetailBytes = 1024;
 
   // Reads the tail of the chain, to carry on from it.
-  static Task<Result<std::shared_ptr<AuditLog>>> open(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store,
-                                                      const dannan::contract::WallClock& wall);
+  static void open(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+                   Deadline deadline, Executor executor, Done<Result<std::shared_ptr<AuditLog>>> done);
 
   // Appends one entry. A failure is logged here as well as answered: the caller has
   // usually already done what it is recording, and cannot undo it. Entries are appended
-  // one at a time, each waiting its turn without holding a thread.
-  Task<Status> record(Event event);
+  // one at a time, in the order asked, from a queue: each is numbered only once the one
+  // before has been written or refused, so the chain has no gaps and no forks. Past the
+  // deadline the caller is told the entry may yet be recorded, and it still takes its turn.
+  void record(Event event, Deadline deadline, Executor executor, Done<Status> done);
 
-  // Up to `most` entries from `from` on, in order.
-  Task<std::vector<Entry>> entries(std::uint64_t from, std::size_t most) const;
+  // Up to `most` entries from `from` on, in order; fewer where the chain ends. `failed` when
+  // the store fails or the deadline passes, never a short page.
+  void entries(std::uint64_t from, std::size_t most, Deadline deadline, Executor executor, Done<Outcome<std::vector<Entry>>> done) const;
 
   // The number of entries.
   std::uint64_t size() const;
 
   // Walks the whole chain, recomputing every hash. The number of entries, or where it
-  // breaks.
-  Task<Result<std::uint64_t>> verify() const;
+  // breaks, or that the walk did not finish within the deadline.
+  void verify(Deadline deadline, Executor executor, Done<Result<std::uint64_t>> done) const;
 
   // The record's value, and back. Public for the tests and the fuzz target.
   static Bytes encode(const Entry& entry);
@@ -104,17 +111,31 @@ class AuditLog {
  private:
   AuditLog(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall);
 
+  // An entry asked for and not yet written.
+  struct Pending {
+    Event event;
+    std::shared_ptr<Completion<Status>> completion;
+    Executor executor;
+  };
+  // A walk along the chain, entries() or verify(): where it is and what it has found.
+  struct Walk;
+
+  // Writes the entry at the head of the queue, then the next, until it is empty.
+  void _append_next();
+  void _walk_entries(std::shared_ptr<Walk> walk) const;
+  void _walk_verify(std::shared_ptr<Walk> walk) const;
+
   dannan::status::ScopedLogger _logger;
-  std::shared_ptr<store::Store> _store;
+  store::StoreCalls _calls;
   const dannan::contract::WallClock& _wall;
 
-  // Held from taking a sequence number to its record being written, so the chain has no
-  // gaps and no forks.
-  AsyncMutex _appending;
-  // Guards the two below for size(), which does not wait.
+  // Guards the chain's tail and the queue. Held for moments only: never across a write.
   mutable dannan::contract::Mutex _mutex;
   std::uint64_t _next DANNAN_GUARDED_BY(_mutex) = 1;
   Hash _last DANNAN_GUARDED_BY(_mutex){};
+  std::deque<Pending> _queue DANNAN_GUARDED_BY(_mutex);
+  // Whether an entry is being written: the queue's one in flight.
+  bool _appending DANNAN_GUARDED_BY(_mutex) = false;
 };
 
 }  // namespace lugh::audit

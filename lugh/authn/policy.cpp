@@ -9,6 +9,8 @@
 
 #include <algorithm>
 
+#include "lugh/core/awaited.h"
+
 namespace lugh::authn {
 
 namespace {
@@ -72,7 +74,10 @@ Task<Outcome<>> Policies::_write(audit::Actor actor, std::string key, std::optio
   SecureBuffer value{kFormat, level ? static_cast<std::uint8_t>(*level) : kNone};
   const auto written = co_await _store->put(kTable, std::move(key), std::move(value));
   if (!written.ok()) co_return Outcome<>::failure(directory::fault_of(written.error), written.message);
-  co_await _audit->record(audit::Event{"policy.set", actor.id, std::move(subject), actor.source, level ? std::string(acr(*level)) : "none"});
+  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
+    _audit->record(audit::Event{"policy.set", actor.id, std::move(subject), actor.source, level ? std::string(acr(*level)) : "none"}, kTransitionDeadline,
+                   std::move(executor), std::move(done));
+  });
   co_return Outcome<>::success();
 }
 

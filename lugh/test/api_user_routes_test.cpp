@@ -57,7 +57,7 @@ TEST_F(UserRoutesTest, CreateThenRead) {
   EXPECT_EQ(read.header(field::cache_control), "no-store");
 
   // The audit log names the caller and where they called from.
-  const auto entry = run(rig.audit->entries(1, 1)).at(0);
+  const auto entry = audit_entries(rig.audit, 1, 1).at(0);
   EXPECT_EQ(entry.event.actor, ApiRig::kAdministrator);
   EXPECT_EQ(entry.event.source, "192.0.2.50");
 }

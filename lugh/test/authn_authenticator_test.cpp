@@ -159,7 +159,7 @@ TEST_F(AuthenticatorTest, RefusalsAllLookTheSame) {
 
 TEST_F(AuthenticatorTest, AnUnknownNameIsNotWrittenToTheAuditLog) {
   password("hunter2-typed-in-the-wrong-box", kPassword);
-  for (const auto& entry : run(rig.audit->entries(1, 1000))) {
+  for (const auto& entry : audit_entries(rig.audit, 1, 1000)) {
     EXPECT_EQ(entry.event.subject.find("hunter2"), std::string::npos);
     EXPECT_EQ(entry.event.detail.find("hunter2"), std::string::npos);
   }
@@ -168,7 +168,7 @@ TEST_F(AuthenticatorTest, AnUnknownNameIsNotWrittenToTheAuditLog) {
 TEST_F(AuthenticatorTest, ARefusalIsAuditedAsAnonymous) {
   const auto alice = rig.enrolled("alice");
   password("alice", "wrong password here");
-  const auto entries = run(rig.audit->entries(1, 1000));
+  const auto entries = audit_entries(rig.audit, 1, 1000);
   const auto& last = entries.back();
   EXPECT_EQ(last.event.action, "signin.password.refused");
   EXPECT_EQ(last.event.actor, "anonymous");
@@ -265,5 +265,5 @@ TEST_F(AuthenticatorTest, EveryStepIsAudited) {
                              "factor.recovery.generate", "user.enrolled", "signin.password.accepted", "signin.complete"}) {
     EXPECT_NE(std::find(actions.begin(), actions.end(), action), actions.end()) << action;
   }
-  EXPECT_TRUE(run(rig.audit->verify()).ok);
+  EXPECT_TRUE(audit_verify(rig.audit).ok);
 }

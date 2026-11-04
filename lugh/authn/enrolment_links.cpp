@@ -8,6 +8,7 @@
 #include "lugh/authn/enrolment_links.h"
 
 #include "dannan/identity/crypto.h"
+#include "lugh/core/awaited.h"
 #include "lugh/core/codec.h"
 #include "lugh/core/encoding.h"
 
@@ -49,7 +50,10 @@ Task<Outcome<Secret>> EnrolmentLinks::issue(audit::Actor actor, std::string user
 
   const auto written = co_await _store->put(kTable, *_key(token), encode(link), 0);
   if (!written.ok()) co_return Answer::failure(directory::fault_of(written.error), written.message);
-  co_await _audit->record(audit::Event{"enrolment.issue", actor.id, link.user_id, actor.source, "expires " + std::to_string(link.expires)});
+  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
+    _audit->record(audit::Event{"enrolment.issue", actor.id, link.user_id, actor.source, "expires " + std::to_string(link.expires)}, kTransitionDeadline,
+                   std::move(executor), std::move(done));
+  });
   co_return Answer::success(std::move(token));
 }
 
@@ -86,7 +90,9 @@ Task<Outcome<std::string>> EnrolmentLinks::spend(Secret token, audit::Actor acto
     }
     co_return Answer::failure(directory::fault_of(removed.error), removed.message);
   }
-  co_await _audit->record(audit::Event{"enrolment.redeem", actor.id, link.user_id, actor.source, {}});
+  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
+    _audit->record(audit::Event{"enrolment.redeem", actor.id, link.user_id, actor.source, {}}, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   co_return Answer::success(link.user_id);
 }
 
@@ -98,7 +104,10 @@ Task<Outcome<>> EnrolmentLinks::first_sign_in_allow(audit::Actor actor, std::str
   link.expires = UINT64_MAX;
   const auto written = co_await _store->put(kTable, kFirstSignIn + link.user_id, encode(link), 0);
   if (!written.ok()) co_return Outcome<>::failure(directory::fault_of(written.error), written.message);
-  co_await _audit->record(audit::Event{"enrolment.first_sign_in", actor.id, link.user_id, actor.source, {}});
+  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
+    _audit->record(audit::Event{"enrolment.first_sign_in", actor.id, link.user_id, actor.source, {}}, kTransitionDeadline, std::move(executor),
+                   std::move(done));
+  });
   co_return Outcome<>::success();
 }
 

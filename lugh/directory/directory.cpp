@@ -10,6 +10,7 @@
 #include <set>
 
 #include "dannan/identity/crypto.h"
+#include "lugh/core/awaited.h"
 #include "lugh/core/encoding.h"
 
 namespace lugh::directory {
@@ -398,7 +399,10 @@ Task<Outcome<Group>> Directory::_put_group(audit::Actor actor, Group group, std:
 
 Task<void> Directory::_audit(const audit::Actor& actor, std::string action, std::string subject, std::string detail) {
   // A failure is logged by the audit log itself; the change has been made.
-  co_await _audit_log->record(audit::Event{std::move(action), actor.id, std::move(subject), actor.source, std::move(detail)});
+  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
+    _audit_log->record(audit::Event{std::move(action), actor.id, std::move(subject), actor.source, std::move(detail)}, kTransitionDeadline, std::move(executor),
+                       std::move(done));
+  });
 }
 
 }  // namespace lugh::directory

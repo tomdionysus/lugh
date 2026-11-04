@@ -10,6 +10,7 @@
 #include "lugh/api/api_support.h"
 #include "lugh/api/representations.h"
 #include "lugh/api/scopes.h"
+#include "lugh/core/awaited.h"
 
 namespace lugh::api {
 
@@ -26,8 +27,16 @@ void AuditRoutes::register_routes(http::Router& router) {
       co_return;
     }
 
+    const auto read = co_await awaited<Outcome<std::vector<audit::Entry>>>([&](Executor executor, Done<Outcome<std::vector<audit::Entry>>> done) {
+      audit->entries(from, limit, kTransitionDeadline, std::move(executor), std::move(done));
+    });
+    if (!read.ok()) {
+      write_fault(context.response, read);
+      context.done();
+      co_return;
+    }
+    const auto& page = read.value;
     boost::json::array entries;
-    const auto page = co_await audit->entries(from, limit);
     for (const auto& entry : page) entries.push_back(entry_json(entry));
     boost::json::object body;
     body["entries"] = std::move(entries);
@@ -42,7 +51,8 @@ void AuditRoutes::register_routes(http::Router& router) {
   });
 
   router.add(http::verb::get, "/api/v1/audit/verify", kAuditRead, [audit = _audit](http::RouteContext context) -> Task<void> {
-    const auto verified = co_await audit->verify();
+    const auto verified = co_await awaited<Result<std::uint64_t>>(
+        [&](Executor executor, Done<Result<std::uint64_t>> done) { audit->verify(kTransitionDeadline, std::move(executor), std::move(done)); });
     boost::json::object body;
     body["intact"] = verified.ok;
     if (verified.ok) {

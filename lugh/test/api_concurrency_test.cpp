@@ -95,7 +95,7 @@ TEST_F(Concurrency, ManyWritersAtOnce) {
   EXPECT_TRUE(responses.answered_elsewhere());
   EXPECT_EQ(run(rig.directory->users()).size(), 64u);
 
-  const auto verified = run(rig.audit->verify());
+  const auto verified = audit_verify(rig.audit);
   ASSERT_TRUE(verified.ok) << verified.error;
   EXPECT_EQ(verified.value, 64u);
 }

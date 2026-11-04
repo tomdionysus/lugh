@@ -7,6 +7,8 @@
 
 #include "lugh/authn/authenticator.h"
 
+#include "lugh/core/awaited.h"
+
 namespace lugh::authn {
 
 namespace {
@@ -276,7 +278,10 @@ Task<Step> Authenticator::_complete(SignIn sign_in, std::string source) {
 }
 
 Task<void> Authenticator::_audit(std::string action, std::string actor, std::string subject, std::string source, std::string detail) {
-  co_await _audit_log->record(audit::Event{std::move(action), std::move(actor), std::move(subject), std::move(source), std::move(detail)});
+  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
+    _audit_log->record(audit::Event{std::move(action), std::move(actor), std::move(subject), std::move(source), std::move(detail)}, kTransitionDeadline,
+                       std::move(executor), std::move(done));
+  });
 }
 
 }  // namespace lugh::authn

@@ -132,6 +132,16 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   answer or the deadline's, never inline), with five tests, run twenty times under TSan
   with no report. `Executor` moved there from `core/task.h`. The design for the rest is in
   `TODO/ACTIVE.md`. 346 to 351.
+- Callback style, the audit log: `open`, `record`, `entries` and `verify` take Dannan's
+  shape. The async lock held across numbering and writing is now a queue on the log, one
+  write in flight, each entry numbered only once the one before has settled, so the chain
+  keeps no gaps and no forks; a caller past its deadline is told the entry may yet be
+  recorded, and it keeps its turn. `entries` answers `failed` on a store failure or the
+  deadline rather than a short page. The frozen store is reached through
+  `lugh/store/store_calls.h`; the layers not yet converted reach the log through the
+  temporary bridge `lugh/core/awaited.h`; the tests through `wait_for` and
+  `lugh/test/fixtures/audit_calls.h`. A new test has 100 callers on four threads record at
+  once: one intact chain of 100, no TSan report in five runs. 351 to 352.
 
 ## 2026-10-18: P5, the management API (not committed)
 

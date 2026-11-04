@@ -50,66 +50,119 @@ Hash hash_of(std::span<const unsigned char> body) {
 }  // namespace
 
 AuditLog::AuditLog(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall)
-    : _logger(std::move(log), "audit"), _store(std::move(store)), _wall(wall) {}
+    : _logger(std::move(log), "audit"), _calls(std::move(store)), _wall(wall) {}
 
-Task<Result<std::shared_ptr<AuditLog>>> AuditLog::open(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store,
-                                                       const dannan::contract::WallClock& wall) {
+void AuditLog::open(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
+                    Deadline deadline, Executor executor, Done<Result<std::shared_ptr<AuditLog>>> done) {
   using Answer = Result<std::shared_ptr<AuditLog>>;
   std::shared_ptr<AuditLog> opened(new AuditLog(std::move(log), std::move(store), wall));
 
   // Keys are zero-padded, so the last in key order is the newest.
-  const auto all = co_await opened->_store->list(kTable);
-  if (!all.empty()) {
-    const auto& last = all.back();
-    const auto entry = decode(last.value);
-    if (!entry || key(entry->sequence) != last.key) co_return Answer::failure("audit: entry " + last.key + " cannot be read");
-    dannan::contract::Lock lock(opened->_mutex);
-    opened->_next = entry->sequence + 1;
-    opened->_last = entry->hash;
-  }
-  co_return Answer::success(std::move(opened));
+  opened->_calls.list(kTable, deadline, executor, [opened, done = std::move(done)](Outcome<std::vector<store::Record>> all) {
+    if (!all.ok()) return done(Answer::failure("audit: " + all.message));
+    if (!all.value.empty()) {
+      const auto& last = all.value.back();
+      const auto entry = decode(last.value);
+      if (!entry || key(entry->sequence) != last.key) return done(Answer::failure("audit: entry " + last.key + " cannot be read"));
+      dannan::contract::Lock lock(opened->_mutex);
+      opened->_next = entry->sequence + 1;
+      opened->_last = entry->hash;
+    }
+    done(Answer::success(opened));
+  });
 }
 
-Task<Status> AuditLog::record(Event event) {
-  auto appending = co_await _appending.lock();
+void AuditLog::record(Event event, Deadline deadline, Executor executor, Done<Status> done) {
+  auto completion = Completion<Status>::start(
+      deadline, executor, std::move(done), [] { return Status::failure("the audit log did not answer within the deadline; the entry may yet be recorded"); });
+  bool start = false;
+  {
+    dannan::contract::Lock lock(_mutex);
+    _queue.push_back(Pending{std::move(event), std::move(completion), std::move(executor)});
+    start = !_appending;
+    _appending = true;
+  }
+  if (start) _append_next();
+}
 
+void AuditLog::_append_next() {
+  Pending pending;
   Entry entry;
   {
     dannan::contract::Lock lock(_mutex);
+    if (_queue.empty()) {
+      _appending = false;
+      return;
+    }
+    pending = std::move(_queue.front());
+    _queue.pop_front();
     entry.sequence = _next;
     entry.previous = _last;
   }
   entry.time = (_wall.unix_ms() / 1000);
-  entry.event.action = cut(std::move(event.action), kMostFieldBytes);
-  entry.event.actor = cut(std::move(event.actor), kMostFieldBytes);
-  entry.event.subject = cut(std::move(event.subject), kMostFieldBytes);
-  entry.event.source = cut(std::move(event.source), kMostFieldBytes);
-  entry.event.detail = cut(std::move(event.detail), kMostDetailBytes);
+  entry.event.action = cut(std::move(pending.event.action), kMostFieldBytes);
+  entry.event.actor = cut(std::move(pending.event.actor), kMostFieldBytes);
+  entry.event.subject = cut(std::move(pending.event.subject), kMostFieldBytes);
+  entry.event.source = cut(std::move(pending.event.source), kMostFieldBytes);
+  entry.event.detail = cut(std::move(pending.event.detail), kMostDetailBytes);
   entry.hash = hash_of(body(entry));
 
   const auto encoded = encode(entry);
-  const auto written = co_await _store->put(kTable, key(entry.sequence), SecureBuffer(encoded.begin(), encoded.end()), 0);
-  if (!written.ok()) {
-    _logger.error("cannot record " + entry.event.action + " for " + entry.event.subject + ": " + written.message);
-    co_return Status::failure("the audit log cannot be written: " + written.message);
-  }
-
-  dannan::contract::Lock lock(_mutex);
-  _next = entry.sequence + 1;
-  _last = entry.hash;
-  co_return Status::success();
+  // The write's own answer, however long it takes: the next entry is numbered from it.
+  _calls.put_settled(kTable, key(entry.sequence), SecureBuffer(encoded.begin(), encoded.end()), 0, pending.executor,
+                     [self = shared_from_this(), entry, completion = pending.completion](store::Write written) {
+                       if (!written.ok()) {
+                         self->_logger.error("cannot record " + entry.event.action + " for " + entry.event.subject + ": " + written.message);
+                         completion->finish(Status::failure("the audit log cannot be written: " + written.message));
+                       } else {
+                         {
+                           dannan::contract::Lock lock(self->_mutex);
+                           self->_next = entry.sequence + 1;
+                           self->_last = entry.hash;
+                         }
+                         completion->finish(Status::success());
+                       }
+                       self->_append_next();
+                     });
 }
 
-Task<std::vector<Entry>> AuditLog::entries(std::uint64_t from, std::size_t most) const {
+struct AuditLog::Walk {
+  // The entries walk's answer, or the verify walk's.
+  std::shared_ptr<Completion<Outcome<std::vector<Entry>>>> page;
+  std::shared_ptr<Completion<Result<std::uint64_t>>> verdict;
+  Executor executor;
+  std::uint64_t sequence = 1;
+  std::size_t most = 0;
   std::vector<Entry> out;
-  for (auto sequence = std::max<std::uint64_t>(from, 1); out.size() < most; ++sequence) {
-    const auto record = co_await _store->get(kTable, key(sequence));
-    if (!record) break;
-    auto entry = decode(record->value);
-    if (!entry) break;
-    out.push_back(std::move(*entry));
-  }
-  co_return out;
+  // verify(): how far to go, and the hash the next entry must follow.
+  std::uint64_t count = 0;
+  Hash previous{};
+};
+
+void AuditLog::entries(std::uint64_t from, std::size_t most, Deadline deadline, Executor executor, Done<Outcome<std::vector<Entry>>> done) const {
+  auto walk = std::make_shared<Walk>();
+  walk->page = Completion<Outcome<std::vector<Entry>>>::start(deadline, executor, std::move(done), [] {
+    return Outcome<std::vector<Entry>>::failure(Fault::failed, "the audit log was not read within the deadline");
+  });
+  walk->executor = std::move(executor);
+  walk->sequence = std::max<std::uint64_t>(from, 1);
+  walk->most = most;
+  _walk_entries(std::move(walk));
+}
+
+void AuditLog::_walk_entries(std::shared_ptr<Walk> walk) const {
+  using Answer = Outcome<std::vector<Entry>>;
+  if (walk->page->answered()) return;
+  if (walk->out.size() >= walk->most) return walk->page->finish(Answer::success(std::move(walk->out)));
+  _calls.get_settled(kTable, key(walk->sequence), walk->executor, [self = shared_from_this(), walk](Outcome<std::optional<store::Record>> record) {
+    if (!record.ok()) return walk->page->finish(Answer::failure(record.fault, record.message));
+    // The chain ends where a record is missing or unreadable.
+    const auto entry = record.value ? decode(record.value->value) : std::nullopt;
+    if (!entry) return walk->page->finish(Answer::success(std::move(walk->out)));
+    walk->out.push_back(std::move(*entry));
+    ++walk->sequence;
+    self->_walk_entries(walk);
+  });
 }
 
 std::uint64_t AuditLog::size() const {
@@ -117,23 +170,33 @@ std::uint64_t AuditLog::size() const {
   return _next - 1;
 }
 
-Task<Result<std::uint64_t>> AuditLog::verify() const {
-  using Answer = Result<std::uint64_t>;
-  const auto count = size();
+void AuditLog::verify(Deadline deadline, Executor executor, Done<Result<std::uint64_t>> done) const {
+  auto walk = std::make_shared<Walk>();
+  walk->verdict = Completion<Result<std::uint64_t>>::start(deadline, executor, std::move(done),
+                                                           [] { return Result<std::uint64_t>::failure("the audit chain was not walked within the deadline"); });
+  walk->executor = std::move(executor);
+  walk->count = size();
+  _walk_verify(std::move(walk));
+}
 
-  Hash previous{};
-  for (std::uint64_t sequence = 1; sequence <= count; ++sequence) {
-    const auto record = co_await _store->get(kTable, key(sequence));
-    if (!record) co_return Answer::failure("audit entry " + std::to_string(sequence) + " is missing");
-    const auto entry = decode(record->value);
-    if (!entry || entry->sequence != sequence) co_return Answer::failure("audit entry " + std::to_string(sequence) + " cannot be read");
-    if (!dannan::identity::constant_time_equal(entry->previous, previous))
-      co_return Answer::failure("audit entry " + std::to_string(sequence) + " does not follow the one before");
+void AuditLog::_walk_verify(std::shared_ptr<Walk> walk) const {
+  using Answer = Result<std::uint64_t>;
+  if (walk->verdict->answered()) return;
+  if (walk->sequence > walk->count) return walk->verdict->finish(Answer::success(walk->count));
+  _calls.get_settled(kTable, key(walk->sequence), walk->executor, [self = shared_from_this(), walk](Outcome<std::optional<store::Record>> record) {
+    const auto sequence = std::to_string(walk->sequence);
+    if (!record.ok()) return walk->verdict->finish(Answer::failure("audit entry " + sequence + ": " + record.message));
+    if (!record.value) return walk->verdict->finish(Answer::failure("audit entry " + sequence + " is missing"));
+    const auto entry = decode(record.value->value);
+    if (!entry || entry->sequence != walk->sequence) return walk->verdict->finish(Answer::failure("audit entry " + sequence + " cannot be read"));
+    if (!dannan::identity::constant_time_equal(entry->previous, walk->previous))
+      return walk->verdict->finish(Answer::failure("audit entry " + sequence + " does not follow the one before"));
     if (!dannan::identity::constant_time_equal(entry->hash, hash_of(body(*entry))))
-      co_return Answer::failure("audit entry " + std::to_string(sequence) + " has been altered");
-    previous = entry->hash;
-  }
-  co_return Answer::success(count);
+      return walk->verdict->finish(Answer::failure("audit entry " + sequence + " has been altered"));
+    walk->previous = entry->hash;
+    ++walk->sequence;
+    self->_walk_verify(walk);
+  });
 }
 
 Bytes AuditLog::encode(const Entry& entry) {
