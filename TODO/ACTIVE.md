@@ -26,6 +26,10 @@ Not yet tried on Linux: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DON
 
 Dannan's identity step (step 10, Dannan 09a525f, design in `../dannan/TODO/2026-11-04-identity.md`) gives what Lugh fills when it hosts on Dannan: the scope seam, `dannan/contract/scope.h` (`contract::Principal`, `contract::ScopeDecision`, and `ScopeSource::may_write(principal, prefix)`, answered from memory and never waiting), installed with `context.identity().install_scope_source(...)`; without a source the cluster's own nodes may write and nobody else. Single-node revocation is CA-signed, kept by every node and gossiped, closing the revoked node's sessions at once. Node keys live in Dannan's key custody, like Lugh's master key. Not tagged; whether to cut 0.3.0 is the maintainer's.
 
+## For P8, from Dagda
+
+Dagda (2026-11-04, on Dannan 0.3.0, its step 6) gives the write shape Lugh will see: every Dagda write takes `WriteOptions` with a durability level, a principal (`dannan::contract::Principal`, default the writing node) and a prefix (default the domain's name), and every storing replica calls `Identity::verify(principal, prefix)` before storing, refusing with evidence per node. So the `ScopeSource` Lugh installs through `Identity::install_scope_source` is what decides a directory principal's write to `lugh/scope` and `lugh/secrets`. Node-local domains are under the node's custody (`derive_local`), domain keys are wrapped to members over per-node X25519 wrap keys, and the domain is bound into the AEAD associated data. The domain catalogue, node-local spaces, per-space k and retained values come with Dagda's heads (its step 4), which wait on Macha's tree-native merge; P8 waits on those.
+
 ## Decided (the maintainer, 2026-11-04)
 
 From this session and the stack document's "Decided" section (`../dagda/TODO/2026-11-03-stack.md`):
