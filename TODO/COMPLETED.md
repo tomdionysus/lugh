@@ -90,6 +90,13 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
 - Dannan's warning set on every target: `-Wshadow -Wconversion -Wno-sign-conversion` beside
   `-Wall -Wextra -Wpedantic`, under `-Werror`. The library and the node were already
   clean; three tests were not (a shadowed name twice, a narrowing in a loop).
+- `SystemFiles::write` is Dannan's `durable_replace_file`, or `durable_create_file` when an
+  existing file must not be replaced (added at Lugh's request; it ends in `link()`, so of
+  two inits racing exactly one makes the keyring, and Dannan's own key custody had the
+  same race, now closed). Lugh's temporary, sync, rename and link code is deleted. Dannan
+  is pinned to bd2f720. Finding: a write now makes the directories its file needs, where
+  Lugh's refused; the test says so. Dannan makes them with the process umask, where Lugh
+  made its own 0700; asked of Dannan whether its should be owner-only.
 
 ## 2026-10-18: P5, the management API (not committed)
 

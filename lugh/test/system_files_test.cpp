@@ -148,8 +148,11 @@ TEST(SystemFiles, AppendDoesNotFollowSymlinks) {
   EXPECT_EQ(run(files.read(target.string(), 100)).value, bytes("content"));
 }
 
-TEST(SystemFiles, AWriteIntoAMissingDirectoryFails) {
+// Dannan's durable writes make the directories a file needs.
+TEST(SystemFiles, AWriteMakesTheDirectoriesItNeeds) {
   TempDirectory dir;
   SystemFiles files(test_pool());
-  EXPECT_FALSE(run(files.write((dir.path() / "missing" / "keyring").string(), bytes("x"), false)).ok);
+  const auto path = (dir.path() / "missing" / "keyring").string();
+  ASSERT_TRUE(run(files.write(path, bytes("x"), false)).ok);
+  EXPECT_EQ(run(files.read(path, 100)).value, bytes("x"));
 }

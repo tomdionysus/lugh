@@ -14,6 +14,9 @@
 #include <cerrno>
 #include <cstring>
 #include <filesystem>
+#include <system_error>
+
+#include "dannan/identity/durable_file.h"
 
 namespace lugh::system {
 
@@ -102,53 +105,24 @@ bool exists_now(const std::string& path) {
   return ::lstat(path.c_str(), &status) == 0;
 }
 
+// Dannan's durable writes (dannan/identity/durable_file.h): a temporary beside the file,
+// synced, moved into place, the directory synced, owner-only. Creating refuses an existing
+// file atomically, so of two inits racing exactly one makes the keyring.
 Status write_now(const std::string& path, std::span<const unsigned char> data, bool replace) {
-  if (!replace && exists_now(path)) return Status::failure(path + " exists, and is not replaced");
-
-  const auto directory = directory_of(path);
-  const auto temporary = path + ".new";
-
-  // A temporary left by a crash is ours, and stale.
-  ::unlink(temporary.c_str());
-
-  Descriptor fd(::open(temporary.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600));
-  if (!fd.valid()) return Status::failure("cannot write " + temporary + ": " + reason());
-
-  std::size_t done = 0;
-  while (done < data.size()) {
-    const auto put = ::write(fd.get(), data.data() + done, data.size() - done);
-    if (put < 0 && errno == EINTR) continue;
-    if (put <= 0) {
-      const auto why = reason();
-      ::unlink(temporary.c_str());
-      return Status::failure("cannot write " + temporary + ": " + why);
+  const std::string_view contents(reinterpret_cast<const char*>(data.data()), data.size());
+  try {
+    if (replace) {
+      dannan::identity::durable_replace_file(path, contents);
+    } else {
+      dannan::identity::durable_create_file(path, contents);
     }
-    done += static_cast<std::size_t>(put);
+    return Status::success();
+  } catch (const std::filesystem::filesystem_error& e) {
+    if (e.code() == std::errc::file_exists) return Status::failure(path + " exists, and is not replaced");
+    return Status::failure("cannot write " + path + ": " + e.what());
+  } catch (const std::exception& e) {
+    return Status::failure("cannot write " + path + ": " + e.what());
   }
-
-  if (::fsync(fd.get()) != 0 || ::close(fd.release()) != 0) {
-    const auto why = reason();
-    ::unlink(temporary.c_str());
-    return Status::failure("cannot sync " + temporary + ": " + why);
-  }
-
-  if (replace) {
-    if (::rename(temporary.c_str(), path.c_str()) != 0) {
-      const auto why = reason();
-      ::unlink(temporary.c_str());
-      return Status::failure("cannot move " + temporary + " to " + path + ": " + why);
-    }
-  } else {
-    // link() refuses an existing name atomically, which a check then a rename cannot.
-    if (::link(temporary.c_str(), path.c_str()) != 0) {
-      const auto why = errno == EEXIST ? std::string("it exists, and is not replaced") : reason();
-      ::unlink(temporary.c_str());
-      return Status::failure("cannot write " + path + ": " + why);
-    }
-    ::unlink(temporary.c_str());
-  }
-
-  return sync_directory(directory);
 }
 
 Status append_now(const std::string& path, std::span<const unsigned char> data) {
