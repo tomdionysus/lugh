@@ -17,6 +17,10 @@ What was next, in order:
 
 Not yet tried on Linux: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DONTDUMP` are written for Ubuntu 26.04's systemd and kernel, and only the macOS paths have run. Check them on the first node.
 
+## Not merged yet: Alpine and OpenRC (origin/main aaac977)
+
+GitHub's `main` carries one commit this tree was never based on: aaac977 "Update" (the maintainer, 2026-10-29), Lugh building under Alpine (musl, GCC 15) for Raven, the maintainer's planned Alpine distribution, which every project of the stack will run under. It adds `deploy/openrc/` (the init script, its conf.d, and `lugh-master-key`, sealing the master key under the arm64 build node's OTP device key in place of `systemd-creds`), `GNUInstallDirs` so a package at `/usr` reads `/etc/lugh`, `deploy/lugh.service.in`, `LUGH_INSTALL_SYSTEMD` and `LUGH_INSTALL_OPENRC`, the installed config path in the version header, three GCC 15 `co_await` workarounds (no longer applicable above the frozen layers) and four test tweaks. It is on the old `src/` layout; a trial merge gave ten conflicts, mostly docs, CMake and the deleted coroutine files. The maintainer, 2026-11-04: real, leave it there, not important now. So local `main` (the 0.1.0 tag, pushed) is not pushed, since it would not fast-forward; when the time comes, merge `origin/main` into `develop` on the new layout, test in all three trees, fast-forward `main`, push.
+
 ## Waiting on the maintainer
 
 - The open questions in `docs/architecture.md`, "Still open": question 2 (single-use grants) is needed by P6 and P8, question 14 (Lugh's hostname) by P13.
