@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -111,6 +112,21 @@ class Sessions : public std::enable_shared_from_this<Sessions> {
   // nothing.
   void end(audit::Actor actor, std::string handle, Deadline deadline, Executor executor, Done<Outcome<>> done);
 
+  // A user's live sessions, from memory, newest first.
+  std::vector<Session> of_user(std::string_view user_id) const;
+
+  // Ends the user's session with this sid; not_found for one the user does not have.
+  void end_sid(audit::Actor actor, std::string user_id, std::string sid, Deadline deadline, Executor executor, Done<Outcome<>> done);
+
+  // Ends every session of the user's but the one with `keep` (a sid; empty keeps none): what a
+  // password change, a factor reset, or an administrator does. Answers how many ended.
+  void end_user(audit::Actor actor, std::string user_id, std::string keep, std::string why, Deadline deadline, Executor executor,
+                Done<Outcome<std::size_t>> done);
+
+  // Told of every session that ends, however it ends, once it is gone from memory: where the
+  // back-channel logout starts (O10b). Set before anything is served.
+  void on_end(std::function<void(const Session& session, const std::string& why)> listener);
+
   // Each live session's user and scopes read again, and when it was last seen saved; the
   // sessions of users removed or disabled, and those expired, ended.
   void refresh(Deadline deadline, Executor executor, Done<Status> done);
@@ -137,6 +153,7 @@ class Sessions : public std::enable_shared_from_this<Sessions> {
   std::map<std::string, Session> _held DANNAN_GUARDED_BY(_mutex);
   // When each session was last written, so refresh() saves only what has moved.
   std::map<std::string, std::uint64_t> _saved_seen DANNAN_GUARDED_BY(_mutex);
+  std::function<void(const Session&, const std::string&)> _on_end;
 };
 
 }  // namespace lugh::session

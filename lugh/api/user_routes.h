@@ -14,6 +14,7 @@
 #include "lugh/core/task.h"
 #include "lugh/directory/directory.h"
 #include "lugh/http/router.h"
+#include "lugh/session/sessions.h"
 
 namespace lugh::api {
 
@@ -22,7 +23,7 @@ namespace lugh::api {
 class UserRoutes {
  public:
   UserRoutes(std::shared_ptr<directory::Directory> directory, std::shared_ptr<authn::Factors> factors, std::shared_ptr<authn::Authenticator> authenticator,
-             std::shared_ptr<authn::EnrolmentLinks> links);
+             std::shared_ptr<authn::EnrolmentLinks> links, std::shared_ptr<session::Sessions> sessions = nullptr);
 
   void register_routes(http::Router& router);
 
@@ -42,6 +43,9 @@ class UserRoutes {
   std::shared_ptr<authn::Factors> _factor_store;
   std::shared_ptr<authn::Authenticator> _authenticator;
   std::shared_ptr<authn::EnrolmentLinks> _links;
+  // When set, a user disabled, removed or reset loses every session at once, rather than at
+  // the next minute's refresh.
+  std::shared_ptr<session::Sessions> _sessions;
 };
 
 }  // namespace lugh::api

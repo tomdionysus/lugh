@@ -14,6 +14,7 @@
 #include "dannan/encoding/percent.h"
 #include "lugh/api/app_password_routes.h"
 #include "lugh/api/me_routes.h"
+#include "lugh/api/session_routes.h"
 #include "lugh/api/user_routes.h"
 #include "lugh/oauth/client_auth.h"
 #include "lugh/oauth/consents.h"
@@ -78,8 +79,10 @@ class SigninRig : public AuthnRig {
     pages->register_routes(*router);
     me = std::make_unique<lugh::api::MeRoutes>(directory, sessions);
     me->register_routes(*router);
-    users = std::make_unique<lugh::api::UserRoutes>(directory, factors, authenticator, links);
+    users = std::make_unique<lugh::api::UserRoutes>(directory, factors, authenticator, links, sessions);
     users->register_routes(*router);
+    session_routes = std::make_unique<lugh::api::SessionRoutes>(sessions, directory, passwords);
+    session_routes->register_routes(*router);
     own_app_passwords = std::make_unique<lugh::api::AppPasswordRoutes>(app_passwords);
     own_app_passwords->register_routes(*router);
     clients = std::make_shared<lugh::oauth::ClientAuthenticator>(apps, test_pool(), wall, time, kIssuer);
@@ -157,6 +160,7 @@ class SigninRig : public AuthnRig {
   std::unique_ptr<lugh::signin::Pages> pages;
   std::unique_ptr<lugh::api::MeRoutes> me;
   std::unique_ptr<lugh::api::UserRoutes> users;
+  std::unique_ptr<lugh::api::SessionRoutes> session_routes;
   std::unique_ptr<lugh::api::AppPasswordRoutes> own_app_passwords;
   std::shared_ptr<lugh::tokens::SigningKeys> keys;
   std::shared_ptr<lugh::oauth::TokenIssuer> issuer;

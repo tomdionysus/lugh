@@ -32,6 +32,7 @@
 #include "lugh/api/me_routes.h"
 #include "lugh/api/policy_routes.h"
 #include "lugh/api/scope_routes.h"
+#include "lugh/api/session_routes.h"
 #include "lugh/api/user_routes.h"
 #include "lugh/apps/apps.h"
 #include "lugh/audit/audit_log.h"
@@ -155,6 +156,7 @@ struct Services {
   std::shared_ptr<session::Sessions> sessions;
   std::shared_ptr<authn::AppPasswords> app_passwords;
   std::shared_ptr<oauth::Consents> consents;
+  std::shared_ptr<authn::Passwords> passwords;
 };
 
 // The cluster's birth, once its first keyring is saved: the store under it, then root,
@@ -275,6 +277,7 @@ Task<Result<Services>> start(Ports ports, Config config) {
   services.consents = std::make_shared<oauth::Consents>(store, services.audit);
   services.policies = std::make_shared<authn::Policies>(store, services.directory, services.audit);
   services.links = std::make_shared<authn::EnrolmentLinks>(store, ports.wall, services.directory, services.audit);
+  services.passwords = passwords;
   apps::Apps::Settings app_settings;
   app_settings.allow_client_secrets = config.allow_client_secrets;
   services.apps = std::make_shared<apps::Apps>(store, ports.wall, services.directory, services.audit, ports.hashing, app_settings);
@@ -384,7 +387,7 @@ int run(const cli::Options& options) {
 
   http::HealthRoutes health;
   health.register_routes(*router);
-  api::UserRoutes user_routes(services.directory, services.factors, services.authenticator, services.links);
+  api::UserRoutes user_routes(services.directory, services.factors, services.authenticator, services.links, services.sessions);
   user_routes.register_routes(*router);
   api::GroupRoutes group_routes(services.directory);
   group_routes.register_routes(*router);
@@ -400,6 +403,8 @@ int run(const cli::Options& options) {
   key_routes.register_routes(*router);
   api::MeRoutes me_routes(services.directory, services.sessions);
   me_routes.register_routes(*router);
+  api::SessionRoutes session_routes(services.sessions, services.directory, services.passwords);
+  session_routes.register_routes(*router);
   api::AppPasswordRoutes app_password_routes(services.app_passwords);
   app_password_routes.register_routes(*router);
   auto pre_sessions = std::make_shared<session::PreSessions>(time, authn::Authenticator::Settings{}.lifetime);

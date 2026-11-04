@@ -24,8 +24,24 @@ void write_user(const http::RouteContext& context, http::status status, const di
 }  // namespace
 
 UserRoutes::UserRoutes(std::shared_ptr<directory::Directory> directory, std::shared_ptr<authn::Factors> factors,
-                       std::shared_ptr<authn::Authenticator> authenticator, std::shared_ptr<authn::EnrolmentLinks> links)
-    : _directory(std::move(directory)), _factor_store(std::move(factors)), _authenticator(std::move(authenticator)), _links(std::move(links)) {}
+                       std::shared_ptr<authn::Authenticator> authenticator, std::shared_ptr<authn::EnrolmentLinks> links,
+                       std::shared_ptr<session::Sessions> sessions)
+    : _directory(std::move(directory)),
+      _factor_store(std::move(factors)),
+      _authenticator(std::move(authenticator)),
+      _links(std::move(links)),
+      _sessions(std::move(sessions)) {}
+
+namespace {
+
+// Every session of the user's ended, then `then`; nothing to do without sessions.
+void end_sessions(const std::shared_ptr<session::Sessions>& sessions, const http::RouteContext& context, const std::string& user_id, const std::string& why,
+                  std::function<void()> then) {
+  if (!sessions) return then();
+  sessions->end_user(actor_of(context), user_id, "", why, kRouteDeadline, context.executor, [then](Outcome<std::size_t>) { then(); });
+}
+
+}  // namespace
 
 void UserRoutes::register_routes(http::Router& router) {
   using http::verb;
@@ -132,10 +148,15 @@ void UserRoutes::_update(http::RouteContext context) {
   const auto id = context.parameter("id");
   const auto actor = actor_of(context);
   const auto directory = _directory;
-  const auto answer = [context](Outcome<directory::User> updated) {
+  const auto answer = [context, sessions = _sessions](Outcome<directory::User> updated) {
     if (!updated.ok()) return answer_fault(context, updated);
-    write_user(context, http::status::ok, updated.value);
-    context.done();
+    const auto user = updated.value;
+    const auto respond = [context, user] {
+      write_user(context, http::status::ok, user);
+      context.done();
+    };
+    if (user.disabled) return end_sessions(sessions, context, user.id, "the user was disabled", respond);
+    respond();
   };
   directory->update_user(actor, id, std::move(change), precondition.expected, kRouteDeadline, context.executor, [=](Outcome<directory::User> updated) {
     if (!updated.ok() || !disabled) return answer(std::move(updated));
@@ -146,11 +167,15 @@ void UserRoutes::_update(http::RouteContext context) {
 void UserRoutes::_remove(http::RouteContext context) {
   const auto precondition = if_match(context);
   if (!precondition.ok) return context.done();
-  _directory->remove_user(actor_of(context), context.parameter("id"), precondition.expected, kRouteDeadline, context.executor, [context](Outcome<> removed) {
-    if (!removed.ok()) return answer_fault(context, removed);
-    http::write_no_content(context.response);
-    context.done();
-  });
+  const auto id = context.parameter("id");
+  _directory->remove_user(actor_of(context), id, precondition.expected, kRouteDeadline, context.executor,
+                          [context, id, sessions = _sessions](Outcome<> removed) {
+                            if (!removed.ok()) return answer_fault(context, removed);
+                            end_sessions(sessions, context, id, "the user was removed", [context] {
+                              http::write_no_content(context.response);
+                              context.done();
+                            });
+                          });
 }
 
 void UserRoutes::_groups(http::RouteContext context) const {
@@ -221,10 +246,13 @@ void UserRoutes::_remove_factor(http::RouteContext context) {
 
 void UserRoutes::_reset_factors(http::RouteContext context) {
   if (!body_object(context, {})) return context.done();
-  _authenticator->reset_factors(actor_of(context), context.parameter("id"), kRouteDeadline, context.executor, [context](Outcome<> reset) {
+  const auto id = context.parameter("id");
+  _authenticator->reset_factors(actor_of(context), id, kRouteDeadline, context.executor, [context, id, sessions = _sessions](Outcome<> reset) {
     if (!reset.ok()) return answer_fault(context, reset);
-    http::write_no_content(context.response);
-    context.done();
+    end_sessions(sessions, context, id, "the user's factors were reset", [context] {
+      http::write_no_content(context.response);
+      context.done();
+    });
   });
 }
 

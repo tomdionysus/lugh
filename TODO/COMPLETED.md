@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O10a, sessions managed and ended
+
+- `Sessions`: a user's sessions listed from memory; one ended by its sid; all of a user's ended but one; and `on_end`, told of every session that ends, however it ends, which O10b's back-channel logout starts from.
+- `/api/v1/me/sessions` (list, end one), `/api/v1/me/password` (current and new, through the person's own session only, never a token; every other session of theirs ends), `/api/v1/users/{id}/sessions` (list under directory.read, end all under a new scope, `lugh:sessions.write`).
+- A user disabled, removed or with their factors reset loses every session at once, not at the next minute's refresh; a refresh family dies with its session, so the applications' next refresh fails.
+- Tests: 479 to 483, green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: P6 step O9, the device grant
 
 - `lugh/oauth/device_grants.h` (RFC 8628): a device's request answered with a device code and a user code, eight letters from twenty consonants drawn by rejection so each is as likely, shown `XXXX-XXXX` and taken any case with or without the dash. Held in memory on the node for ten minutes; approved or denied once; the approval answered to the device's poll once. Polling sooner than the interval is `slow_down`, and the interval grows by five seconds.

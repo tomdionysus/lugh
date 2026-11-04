@@ -16,6 +16,7 @@ add_executable(lugh_tests
     api_key_routes_test.cpp
     api_policy_routes_test.cpp
     api_scope_routes_test.cpp
+    api_session_routes_test.cpp
     api_user_routes_test.cpp
     apps_app_test.cpp
     apps_test.cpp

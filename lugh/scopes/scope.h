@@ -37,6 +37,8 @@ inline constexpr const char* kAuditRead = "lugh:audit.read";
 inline constexpr const char* kAppsWrite = "lugh:apps.write";
 // Rotating the token signing keys.
 inline constexpr const char* kKeysWrite = "lugh:keys.write";
+// Ending another person's sessions.
+inline constexpr const char* kSessionsWrite = "lugh:sessions.write";
 
 inline constexpr std::string_view kLughPrefix = "lugh";
 

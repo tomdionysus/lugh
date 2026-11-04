@@ -22,6 +22,7 @@ using scopes::kDirectoryRead;
 using scopes::kDirectoryWrite;
 using scopes::kKeysWrite;
 using scopes::kPoliciesWrite;
+using scopes::kSessionsWrite;
 
 inline std::vector<std::string> all_scopes() { return scopes::lugh_scopes(); }
 

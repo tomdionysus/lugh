@@ -177,6 +177,7 @@ void Sessions::_remove(std::string key, std::string why, Executor executor, std:
   auto self = shared_from_this();
   _calls.remove_settled(kTable, key, std::nullopt, executor, [self, session, why, executor, then](store::Write) {
     if (!session) return then();
+    if (self->_on_end) self->_on_end(*session, why);
     self->_audit->record(audit::Event{"session.end", "lugh", session->user_id, {}, why + ", sid " + session->sid}, kStepDeadline, executor,
                          [then](Status) { then(); });
   });
@@ -193,6 +194,51 @@ void Sessions::end(audit::Actor actor, std::string handle, Deadline deadline, Ex
   if (!held) return answer->finish(Outcome<>::success());
   _remove(key, "signed out from " + actor.source, executor, [answer] { answer->finish(Outcome<>::success()); });
 }
+
+std::vector<Session> Sessions::of_user(std::string_view user_id) const {
+  const auto now = _now();
+  std::vector<Session> out;
+  {
+    dannan::contract::Lock state(_mutex);
+    for (const auto& [key, session] : _held) {
+      if (session.user_id == user_id && _live(session, now)) out.push_back(session);
+    }
+  }
+  std::sort(out.begin(), out.end(), [](const Session& a, const Session& b) { return a.created > b.created || (a.created == b.created && a.sid > b.sid); });
+  return out;
+}
+
+void Sessions::end_sid(audit::Actor actor, std::string user_id, std::string sid, Deadline deadline, Executor executor, Done<Outcome<>> done) {
+  auto answer = answering<Nothing>(deadline, executor, std::move(done), kChangeLate);
+  std::optional<std::string> key;
+  {
+    dannan::contract::Lock state(_mutex);
+    for (const auto& [held_key, session] : _held) {
+      if (session.user_id == user_id && session.sid == sid) key = held_key;
+    }
+  }
+  if (!key) return answer->finish(Outcome<>::failure(Fault::not_found, "no such session"));
+  _remove(*key, "ended by " + actor.id + " from " + actor.source, executor, [answer] { answer->finish(Outcome<>::success()); });
+}
+
+void Sessions::end_user(audit::Actor actor, std::string user_id, std::string keep, std::string why, Deadline deadline, Executor executor,
+                        Done<Outcome<std::size_t>> done) {
+  auto answer = answering<std::size_t>(deadline, executor, std::move(done), kChangeLate);
+  auto keys = std::make_shared<std::vector<std::string>>();
+  {
+    dannan::contract::Lock state(_mutex);
+    for (const auto& [key, session] : _held) {
+      if (session.user_id == user_id && (keep.empty() || session.sid != keep)) keys->push_back(key);
+    }
+  }
+  auto self = shared_from_this();
+  const auto reason = why + " (" + actor.id + ")";
+  in_turn<std::string>(
+      keys, 0, [self, reason, executor](const std::string& key, std::function<void()> next) { self->_remove(key, reason, executor, std::move(next)); },
+      [answer, keys] { answer->finish(Outcome<std::size_t>::success(keys->size())); });
+}
+
+void Sessions::on_end(std::function<void(const Session&, const std::string&)> listener) { _on_end = std::move(listener); }
 
 void Sessions::_refresh_one(std::string key, Executor executor, std::function<void()> then) {
   std::optional<Session> session;

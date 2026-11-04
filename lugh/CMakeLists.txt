@@ -17,6 +17,7 @@ add_library(lugh STATIC
     api/group_routes.cpp
     api/policy_routes.cpp
     api/scope_routes.cpp
+    api/session_routes.cpp
     api/user_routes.cpp
     apps/app.cpp
     apps/apps.cpp
