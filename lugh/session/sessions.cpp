@@ -19,7 +19,9 @@ namespace lugh::session {
 
 namespace {
 
-constexpr std::uint8_t kFormat = 1;
+// Format 1 had no applications.
+constexpr std::uint8_t kFormat = 2;
+constexpr int kNoteTries = 4;
 constexpr std::size_t kCsrfBytes = 32;
 constexpr std::size_t kSidBytes = 16;
 constexpr Deadline kStepDeadline = std::chrono::seconds(30);
@@ -49,12 +51,15 @@ SecureBuffer Sessions::encode(const Session& session) {
   writer.bytes(session.csrf);
   writer.u32(static_cast<std::uint32_t>(session.scopes.size()));
   for (const auto& one : session.scopes) writer.string(one);
+  writer.u32(static_cast<std::uint32_t>(session.apps.size()));
+  for (const auto& one : session.apps) writer.string(one);
   return writer.take();
 }
 
 std::optional<Session> Sessions::decode(std::span<const unsigned char> value) {
   return decode_whole<Session>(value, [](dannan::net::Reader& reader) -> std::optional<Session> {
-    if (reader.u8() != kFormat) return std::nullopt;
+    const auto format = reader.u8();
+    if (format != 1 && format != kFormat) return std::nullopt;
     Session session;
     session.user_id = reader.string(kMostFieldBytes);
     session.sid = reader.string(kMostFieldBytes);
@@ -73,6 +78,11 @@ std::optional<Session> Sessions::decode(std::span<const unsigned char> value) {
     const auto scopes = reader.u32();
     if (scopes > 4096) return std::nullopt;
     for (std::uint32_t i = 0; i < scopes; ++i) session.scopes.push_back(reader.string(scopes::kMostScopeBytes));
+    if (format >= 2) {
+      const auto apps = reader.u32();
+      if (apps > 4096) return std::nullopt;
+      for (std::uint32_t i = 0; i < apps; ++i) session.apps.push_back(reader.string(kMostFieldBytes));
+    }
     return session;
   });
 }
@@ -236,6 +246,47 @@ void Sessions::end_user(audit::Actor actor, std::string user_id, std::string kee
   in_turn<std::string>(
       keys, 0, [self, reason, executor](const std::string& key, std::function<void()> next) { self->_remove(key, reason, executor, std::move(next)); },
       [answer, keys] { answer->finish(Outcome<std::size_t>::success(keys->size())); });
+}
+
+void Sessions::note_app(std::string key, std::string client_id, Deadline deadline, Executor executor, Done<Outcome<>> done) {
+  auto answer = answering<Nothing>(deadline, executor, std::move(done), kChangeLate);
+  bool held = false;
+  bool noted = false;
+  {
+    dannan::contract::Lock state(_mutex);
+    const auto found = _held.find(key);
+    if (found != _held.end()) {
+      held = true;
+      noted = std::find(found->second.apps.begin(), found->second.apps.end(), client_id) != found->second.apps.end();
+    }
+  }
+  if (!held) return answer->finish(Outcome<>::failure(Fault::not_found, "the session has ended"));
+  if (noted) return answer->finish(Outcome<>::success());
+  _note_app(std::move(key), std::move(client_id), kNoteTries, executor, [answer](Outcome<> result) { answer->finish(std::move(result)); });
+}
+
+// From the stored record, so a refresh writing at the same moment costs a try and nothing else.
+void Sessions::_note_app(std::string key, std::string client_id, int tries, Executor executor, std::function<void(Outcome<>)> then) {
+  auto self = shared_from_this();
+  _calls.get_settled(kTable, key, executor, [=](Outcome<std::optional<store::Record>> record) {
+    if (!record.ok()) return then(Outcome<>::failure(Fault::failed, record.message));
+    auto stored = record.value ? decode(record.value->value) : std::nullopt;
+    if (!stored) return then(Outcome<>::failure(Fault::not_found, "the session has ended"));
+    if (std::find(stored->apps.begin(), stored->apps.end(), client_id) == stored->apps.end()) stored->apps.push_back(client_id);
+    self->_calls.put_settled(kTable, key, encode(*stored), record.value->version, executor, [=](store::Write written) {
+      if (written.error == store::StoreError::conflict && tries > 1) return self->_note_app(key, client_id, tries - 1, executor, then);
+      if (!written.ok()) return then(Outcome<>::failure(Fault::failed, written.message));
+      {
+        dannan::contract::Lock state(self->_mutex);
+        const auto found = self->_held.find(key);
+        if (found != self->_held.end()) {
+          found->second.version = written.version;
+          found->second.apps = stored->apps;
+        }
+      }
+      then(Outcome<>::success());
+    });
+  });
 }
 
 void Sessions::on_end(std::function<void(const Session&, const std::string&)> listener) { _on_end = std::move(listener); }

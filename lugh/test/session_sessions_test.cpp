@@ -171,17 +171,19 @@ TEST(SessionRecord, RoundTripsAndRefusesWhatEncodingWouldNotMake) {
   session.last_seen = 3;
   session.csrf = lugh::SecureBuffer(32, 7);
   session.scopes = {"openid"};
+  session.apps = {"client-a", "client-b"};
   const auto bytes = Sessions::encode(session);
   const auto back = Sessions::decode(bytes);
   ASSERT_TRUE(back);
   EXPECT_EQ(back->amr, session.amr);
   EXPECT_EQ(back->csrf, session.csrf);
   EXPECT_EQ(back->scopes, session.scopes);
+  EXPECT_EQ(back->apps, session.apps);
 
   auto longer = bytes;
   longer.push_back(0);
   EXPECT_FALSE(Sessions::decode(longer));
   auto format = bytes;
-  format[0] = 2;
+  format[0] = 3;
   EXPECT_FALSE(Sessions::decode(format));
 }

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 
+#include "dannan/encoding/percent.h"
 #include "dannan/identity/crypto.h"
 #include "lugh/core/encoding.h"
 #include "lugh/scopes/scope.h"
@@ -41,6 +42,17 @@ std::optional<std::string> without_loopback_port(std::string_view uri) {
 bool unreserved(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' || c == '~'; }
 
 }  // namespace
+
+std::string with_query(const std::string& uri, const std::vector<std::pair<std::string, std::string>>& parameters) {
+  const auto encoded = [](std::string_view text) { return dannan::encoding::percent_encode(text, dannan::encoding::PercentSet::unreserved()); };
+  std::string out = uri;
+  char joiner = uri.find('?') == std::string::npos ? '?' : '&';
+  for (const auto& [name, value] : parameters) {
+    out += joiner + encoded(name) + "=" + encoded(value);
+    joiner = '&';
+  }
+  return out;
+}
 
 bool redirect_registered(const apps::App& app, std::string_view uri) {
   if (std::find(app.redirect_uris.begin(), app.redirect_uris.end(), uri) != app.redirect_uris.end()) return true;

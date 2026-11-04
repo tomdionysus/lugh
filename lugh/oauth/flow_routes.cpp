@@ -46,17 +46,6 @@ bool has(const std::vector<std::string>& list, std::string_view item) { return s
 
 std::string encoded(std::string_view text) { return dannan::encoding::percent_encode(text, dannan::encoding::PercentSet::unreserved()); }
 
-// `uri` with `parameters` added to its query.
-std::string with_query(const std::string& uri, const std::vector<std::pair<std::string, std::string>>& parameters) {
-  std::string out = uri;
-  char joiner = uri.find('?') == std::string::npos ? '?' : '&';
-  for (const auto& [name, value] : parameters) {
-    out += joiner + encoded(name) + "=" + encoded(value);
-    joiner = '&';
-  }
-  return out;
-}
-
 void error_page(const RouteContext& context, const std::string& description) {
   signin::write_page(context.response, http::status::bad_request,
                      signin::page("This request cannot be completed", "<p>" + signin::escape(description) +
@@ -79,12 +68,17 @@ void error_back(const Shared& shared, const RouteContext& context, const Authori
 void issue_code(const std::shared_ptr<Shared>& shared, const RouteContext& context, const AuthorizationRequest& request, const session::Session& session) {
   CodeGrant grant{request.client_id, request.redirect_uri, request.scopes, request.code_challenge, request.nonce, session.user_id,
                   session.sid,       session.acr,          session.amr,    session.auth_time};
-  const auto code = shared->codes.put(std::move(grant));
-  std::vector<std::pair<std::string, std::string>> parameters{{"code", code}};
-  if (!request.state.empty()) parameters.emplace_back("state", request.state);
-  parameters.emplace_back("iss", shared->parts.issuer->issuer());
-  signin::write_redirect(context.response, with_query(request.redirect_uri, parameters));
-  context.done();
+  // The session knows of the application before the application has anything from it.
+  shared->parts.sessions->note_app(session.key, request.client_id, kStepDeadline, context.executor,
+                                   [shared, context, request, grant = std::move(grant)](Outcome<> noted) mutable {
+                                     if (!noted.ok()) return error_back(*shared, context, request, "server_error", "the session could not be kept");
+                                     const auto code = shared->codes.put(std::move(grant));
+                                     std::vector<std::pair<std::string, std::string>> parameters{{"code", code}};
+                                     if (!request.state.empty()) parameters.emplace_back("state", request.state);
+                                     parameters.emplace_back("iss", shared->parts.issuer->issuer());
+                                     signin::write_redirect(context.response, with_query(request.redirect_uri, parameters));
+                                     context.done();
+                                   });
 }
 
 // What a scope lets the application do, for the consent page.
@@ -522,25 +516,26 @@ void device_answer(const std::shared_ptr<Shared>& shared, RouteContext context) 
         if (!app.ok() || !app.value) return error_page(context, "The application could not be read.");
         const auto required = authn::assurance_from_acr(app.value->acr).value_or(authn::Assurance::pwd);
         if (session->acr < required) return done_page("Not connected", "This application needs a stronger sign-in than this one.");
-        shared->parts.directory->groups_of(session->user_id, kStepDeadline, context.executor,
-                                           [shared, context, session, code, app = *app.value, done_page](Outcome<std::vector<std::string>> groups) {
-                                             if (!groups.ok()) return error_page(context, "Your groups could not be read.");
-                                             const bool allowed = std::any_of(app.access.begin(), app.access.end(),
-                                                                              [&](const std::string& group) { return has(groups.value, group); });
-                                             if (!allowed) {
-                                               shared->parts.devices->deny(code);
-                                               return done_page("Not connected", "You are not allowed to use this application.");
-                                             }
-                                             CodeGrant grant;
-                                             grant.user_id = session->user_id;
-                                             grant.sid = session->sid;
-                                             grant.acr = session->acr;
-                                             grant.amr = session->amr;
-                                             grant.auth_time = session->auth_time;
-                                             if (!shared->parts.devices->approve(code, grant))
-                                               return done_page("Not connected", "That code is no longer waiting.");
-                                             done_page("Connected", "Your device is signed in. You can close this page.");
-                                           });
+        shared->parts.directory->groups_of(
+            session->user_id, kStepDeadline, context.executor,
+            [shared, context, session, code, app = *app.value, done_page](Outcome<std::vector<std::string>> groups) {
+              if (!groups.ok()) return error_page(context, "Your groups could not be read.");
+              const bool allowed = std::any_of(app.access.begin(), app.access.end(), [&](const std::string& group) { return has(groups.value, group); });
+              if (!allowed) {
+                shared->parts.devices->deny(code);
+                return done_page("Not connected", "You are not allowed to use this application.");
+              }
+              CodeGrant grant;
+              grant.user_id = session->user_id;
+              grant.sid = session->sid;
+              grant.acr = session->acr;
+              grant.amr = session->amr;
+              grant.auth_time = session->auth_time;
+              shared->parts.sessions->note_app(session->key, app.client_id, kStepDeadline, context.executor, [shared, code, grant, done_page](Outcome<> noted) {
+                if (!noted.ok() || !shared->parts.devices->approve(code, grant)) return done_page("Not connected", "That code is no longer waiting.");
+                done_page("Connected", "Your device is signed in. You can close this page.");
+              });
+            });
       });
 }
 

@@ -43,6 +43,7 @@ add_executable(lugh_tests
     http_health_routes_test.cpp
     http_rate_limiter_test.cpp
     http_router_test.cpp
+    http_outbound_test.cpp
     http_server_test.cpp
     http_tls_context_test.cpp
     keys_keyring_format_test.cpp
@@ -52,6 +53,7 @@ add_executable(lugh_tests
     oauth_device_grants_test.cpp
     oauth_dpop_test.cpp
     oauth_flow_test.cpp
+    oauth_logout_test.cpp
     oauth_metadata_routes_test.cpp
     oauth_request_test.cpp
     scopes_grants_test.cpp

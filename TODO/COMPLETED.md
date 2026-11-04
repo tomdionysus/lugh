@@ -2,6 +2,16 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O10b, logout
+
+- `/oauth2/logout` (OIDC RP-Initiated Logout 1.0): an `id_token_hint` of this session's ends it, expired or not; anything less asks the person, on a page whose answer carries the session's CSRF token. A `post_logout_redirect_uri` must be registered exactly by the application the hint or `client_id` names; otherwise it is refused and never followed.
+- The session record keeps the applications signed in through it (format 2; format 1 still read), noted before a code or a device approval is issued, so a logout cannot miss one.
+- `BackchannelLogout` (OIDC Back-Channel Logout 1.0): when a session ends, however it ends, a logout token (`typ` logout+jwt, two minutes, fresh for each try) goes to each of its applications that registered a URI. Tried again with the wait doubling from 30 seconds, for an hour; delivery and giving up are audited. What waits is in memory, so a restart forgets it.
+- `lugh/http/outbound.h`: an HTTPS client that always verifies the certificate and the name, follows no redirect, and has no way to turn that off. `oauth.outbound_ca` changes the roots.
+- `signin::write_leaving`: leaving Lugh from a form's answer goes by a page, not a 303, since `form-action 'self'` covers where a form's answer redirects.
+- `session_sessions_test` used format 2 as its unknown format; format 2 is now real, so it uses 3. No test removed.
+- Tests: 483 to 514, green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: P6 step O10a, sessions managed and ended
 
 - `Sessions`: a user's sessions listed from memory; one ended by its sid; all of a user's ended but one; and `on_end`, told of every session that ends, however it ends, which O10b's back-channel logout starts from.

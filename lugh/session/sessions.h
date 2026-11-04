@@ -53,6 +53,9 @@ struct Session {
   SecureBuffer csrf;
   // The user's scopes as last read (refresh()), so a request is resolved from memory.
   std::vector<std::string> scopes;
+  // The applications signed in through this session, by client_id: who a back-channel logout
+  // tells when it ends.
+  std::vector<std::string> apps;
 };
 
 // The Lugh sessions, in the sealed `sessions` table, held in memory as well so a request is
@@ -123,6 +126,10 @@ class Sessions : public std::enable_shared_from_this<Sessions> {
   void end_user(audit::Actor actor, std::string user_id, std::string keep, std::string why, Deadline deadline, Executor executor,
                 Done<Outcome<std::size_t>> done);
 
+  // Records that `client_id` signed in through the session stored under `key`, before anything
+  // is issued to it, so its logout cannot be missed. not_found for a session that has ended.
+  void note_app(std::string key, std::string client_id, Deadline deadline, Executor executor, Done<Outcome<>> done);
+
   // Told of every session that ends, however it ends, once it is gone from memory: where the
   // back-channel logout starts (O10b). Set before anything is served.
   void on_end(std::function<void(const Session& session, const std::string& why)> listener);
@@ -141,6 +148,7 @@ class Sessions : public std::enable_shared_from_this<Sessions> {
   bool _live(const Session& session, std::uint64_t now) const;
   void _remove(std::string key, std::string why, Executor executor, std::function<void()> then);
   void _refresh_one(std::string key, Executor executor, std::function<void()> then);
+  void _note_app(std::string key, std::string client_id, int tries, Executor executor, std::function<void(Outcome<>)> then);
 
   store::StoreCalls _calls;
   const dannan::contract::WallClock& _wall;

@@ -39,6 +39,7 @@ add_library(lugh STATIC
     http/forms.cpp
     http/health_routes.cpp
     http/http_server.cpp
+    http/outbound.cpp
     http/router.cpp
     http/tls_context.cpp
     keys/keyring.cpp
@@ -53,7 +54,9 @@ add_library(lugh STATIC
     oauth/consents.cpp
     oauth/device_grants.cpp
     oauth/dpop.cpp
+    oauth/backchannel.cpp
     oauth/flow_routes.cpp
+    oauth/logout_routes.cpp
     oauth/issuer.cpp
     oauth/metadata_routes.cpp
     oauth/refresh_tokens.cpp

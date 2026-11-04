@@ -53,6 +53,9 @@ using Parameters = std::map<std::string, std::string>;
 // comes with a nonce, and nothing Lugh does not offer is asked for.
 std::variant<AuthorizationRequest, RequestError> check_request(const apps::App& app, const Parameters& parameters);
 
+// `uri` with `parameters` added to its query, percent-encoded.
+std::string with_query(const std::string& uri, const std::vector<std::pair<std::string, std::string>>& parameters);
+
 // Whether `uri` is one of the app's registered redirect URIs, by RFC 8252's rule for loopback.
 bool redirect_registered(const apps::App& app, std::string_view uri);
 

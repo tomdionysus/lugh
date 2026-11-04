@@ -36,7 +36,7 @@ std::string escape(std::string_view text) {
   return out;
 }
 
-std::string page(std::string_view title, std::string_view body) {
+std::string page(std::string_view title, std::string_view body, std::string_view head) {
   std::string out =
       "<!doctype html>\n"
       "<html lang=\"en\">\n"
@@ -48,7 +48,9 @@ std::string page(std::string_view title, std::string_view body) {
   out += escape(title);
   out +=
       " - Lugh</title>\n"
-      "<link rel=\"stylesheet\" href=\"/signin/style.css\">\n"
+      "<link rel=\"stylesheet\" href=\"/signin/style.css\">\n";
+  out += head;
+  out +=
       "</head>\n"
       "<body>\n"
       "<main class=\"card\">\n"
@@ -181,6 +183,13 @@ void write_redirect(const std::shared_ptr<http::HttpResponse>& response, std::st
   response->set(http::field::cache_control, "no-store");
   response->set("Content-Security-Policy", kPagePolicy);
   response->body().clear();
+}
+
+void write_leaving(const std::shared_ptr<http::HttpResponse>& response, std::string_view location) {
+  const auto safe = escape(location);
+  write_page(response, http::status::ok,
+             page("Continuing", "<p><a class=\"leaving\" href=\"" + safe + "\">Continue to the application</a></p>\n",
+                  "<meta http-equiv=\"refresh\" content=\"0; url=" + safe + "\">\n"));
 }
 
 }  // namespace lugh::signin

@@ -43,18 +43,21 @@
 #include "lugh/http/client_address.h"
 #include "lugh/http/health_routes.h"
 #include "lugh/http/http_server.h"
+#include "lugh/http/outbound.h"
 #include "lugh/http/rate_limiter.h"
 #include "lugh/http/router.h"
 #include "lugh/http/tls_context.h"
 #include "lugh/keys/keyring_manager.h"
 #include "lugh/node/cli.h"
 #include "lugh/node/config.h"
+#include "lugh/oauth/backchannel.h"
 #include "lugh/oauth/client_auth.h"
 #include "lugh/oauth/consents.h"
 #include "lugh/oauth/device_grants.h"
 #include "lugh/oauth/dpop.h"
 #include "lugh/oauth/flow_routes.h"
 #include "lugh/oauth/issuer.h"
+#include "lugh/oauth/logout_routes.h"
 #include "lugh/oauth/metadata_routes.h"
 #include "lugh/oauth/refresh_tokens.h"
 #include "lugh/scopes/grants.h"
@@ -414,6 +417,8 @@ int run(const cli::Options& options) {
   metadata_routes.register_routes(*router);
   if (config.issuer.empty()) logger.warn("No oauth.issuer: the OAuth metadata, the code flow and the token endpoint are not served");
   std::unique_ptr<oauth::FlowRoutes> flow_routes;
+  std::unique_ptr<oauth::LogoutRoutes> logout_routes;
+  std::shared_ptr<oauth::BackchannelLogout> backchannel;
   if (token_issuer) {
     auto clients = std::make_shared<oauth::ClientAuthenticator>(services.apps, ports.hashing, wall, time, config.issuer);
     auto refresh = std::make_shared<oauth::RefreshTokens>(services.store, wall, services.sessions, services.audit);
@@ -421,6 +426,11 @@ int run(const cli::Options& options) {
         std::make_unique<oauth::FlowRoutes>(oauth::FlowRoutes::Parts{services.apps, services.directory, services.sessions, services.consents, token_issuer,
                                                                      clients, refresh, dpop, std::make_shared<oauth::DeviceGrants>(time), &time, &wall});
     flow_routes->register_routes(*router);
+    logout_routes = std::make_unique<oauth::LogoutRoutes>(services.apps, services.sessions, token_issuer);
+    logout_routes->register_routes(*router);
+    backchannel = std::make_shared<oauth::BackchannelLogout>(services.apps, token_issuer, std::make_shared<http::HttpsOutbound>(io_context, config.outbound_ca),
+                                                             services.audit, time, oauth::BackchannelLogout::Settings{});
+    services.sessions->on_end([backchannel](const session::Session& session, const std::string&) { backchannel->session_ended(session); });
   }
 
   auto server = std::make_shared<http::HttpServer>(log, io_context, tls.value, client_address);
@@ -480,6 +490,18 @@ int run(const cli::Options& options) {
     });
   };
   refresh_sessions();
+
+  // Every second, the back-channel logouts that are due. A post that is slow holds up no other.
+  boost::asio::steady_timer logout_tick(io_context);
+  std::function<void()> deliver_logouts = [&] {
+    logout_tick.expires_after(std::chrono::seconds(1));
+    logout_tick.async_wait([&](const boost::system::error_code& ec) {
+      if (ec) return;
+      backchannel->deliver_due(kTransitionDeadline, io_context.get_executor(), [](Status) {});
+      deliver_logouts();
+    });
+  };
+  if (backchannel) deliver_logouts();
 
   boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
   signals.async_wait([&](const boost::system::error_code& ec, int number) {

@@ -66,6 +66,9 @@ struct Config {
   // The CA a client certificate must chain to for its subject to name a client. Empty: only a
   // certificate's thumbprint names one.
   std::string tls_client_ca;
+  // The roots an application's certificate is checked against when Lugh posts to it; the
+  // system's when empty. Never a way to stop checking.
+  std::string outbound_ca;
 
   // A request from one of these is taken at the last X-Forwarded-For entry; everything else
   // at its socket's address. Empty by default: no proxy is trusted until named.

@@ -66,6 +66,13 @@ struct Bearer {
   std::optional<std::string> x5t;
 };
 
+// What an id_token_hint says (OIDC RP-Initiated Logout 1.0).
+struct IdTokenHint {
+  std::string client_id;
+  std::string subject;
+  std::string sid;
+};
+
 // Makes and checks Lugh's tokens (TODO/2026-11-04-oauth.md, "Tokens"). An access token is a
 // JWT of RFC 9068 (`typ` at+jwt), signed ES256: iss, sub, aud, client_id, exp, iat, nbf, jti,
 // scope, and for a person acr, amr, auth_time and sid. Its audiences are the application's,
@@ -105,6 +112,14 @@ class TokenIssuer : public std::enable_shared_from_this<TokenIssuer> {
   // its lifetime (a minute's skew allowed), and with `audience` among its audiences when one
   // is given. Never waits.
   std::optional<Bearer> verify(std::string_view token, std::optional<std::string_view> audience) const;
+
+  // An ID token of Lugh's offered as a logout hint: signed by a published key and this issuer's.
+  // Its lifetime is not checked: a person may sign out after their ID token has expired.
+  std::optional<IdTokenHint> id_token_hint(std::string_view token) const;
+
+  // A logout token for `client_id` (OIDC Back-Channel Logout 1.0, section 2.4), `typ`
+  // logout+jwt, good for two minutes. Nothing when no key signs yet.
+  std::optional<std::string> logout_token(const std::string& client_id, const std::string& user_id, const std::string& sid) const;
 
  private:
   std::uint64_t _now() const { return _wall.unix_ms() / 1000; }

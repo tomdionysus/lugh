@@ -19,6 +19,7 @@ namespace lugh::oauth {
 
 namespace {
 
+constexpr std::uint64_t kLogoutTokenSeconds = 120;
 constexpr Deadline kStepDeadline = std::chrono::seconds(30);
 constexpr std::uint64_t kSkew = 60;
 
@@ -194,6 +195,34 @@ Outcome<Issued> TokenIssuer::for_client(const apps::App& app, const std::vector<
   issued.expires_in = app.access_seconds;
   issued.scopes = scopes;
   return Answer::success(std::move(issued));
+}
+
+std::optional<IdTokenHint> TokenIssuer::id_token_hint(std::string_view token) const {
+  const auto jws = tokens::jws_parse(token);
+  if (!jws || jws->typ != "JWT" || !tokens::jws_verify(*jws, _keys->published())) return std::nullopt;
+  const auto text = [&](const char* name) {
+    const auto found = jws->claims.if_contains(name);
+    return found && found->is_string() ? std::string(found->as_string()) : std::string();
+  };
+  IdTokenHint hint{text("aud"), text("sub"), text("sid")};
+  if (text("iss") != _issuer || hint.client_id.empty() || hint.subject.empty()) return std::nullopt;
+  return hint;
+}
+
+std::optional<std::string> TokenIssuer::logout_token(const std::string& client_id, const std::string& user_id, const std::string& sid) const {
+  const auto signer = _keys->signer();
+  if (!signer) return std::nullopt;
+  const auto now = _now();
+  boost::json::object claims;
+  claims["iss"] = _issuer;
+  claims["sub"] = user_id;
+  claims["aud"] = client_id;
+  claims["iat"] = now;
+  claims["exp"] = now + kLogoutTokenSeconds;
+  claims["jti"] = random_id();
+  claims["sid"] = sid;
+  claims["events"] = boost::json::object{{"http://schemas.openid.net/event/backchannel-logout", boost::json::object{}}};
+  return tokens::jws_sign(*signer->key, signer->kid, "logout+jwt", claims);
 }
 
 std::optional<Bearer> TokenIssuer::verify(std::string_view token, std::optional<std::string_view> audience) const {

@@ -21,7 +21,7 @@ namespace lugh::signin {
 std::string escape(std::string_view text);
 
 // A whole page around `body` (already HTML), titled `title` (text).
-std::string page(std::string_view title, std::string_view body);
+std::string page(std::string_view title, std::string_view body, std::string_view head = {});
 
 // The stylesheet the pages link to, in the dashboard's tokens (docs/architecture.md,
 // "Frontend"): plain CSS, dark only.
@@ -37,5 +37,10 @@ void write_page(const std::shared_ptr<http::HttpResponse>& response, http::statu
 
 // A 303 to `location`, on this server.
 void write_redirect(const std::shared_ptr<http::HttpResponse>& response, std::string_view location);
+
+// On to `location` on another server, from a form's answer: a page that goes there by itself,
+// and a link if it does not. A 303 would not do: form-action 'self' covers where a form's answer
+// redirects to, and browsers that enforce that stop it there.
+void write_leaving(const std::shared_ptr<http::HttpResponse>& response, std::string_view location);
 
 }  // namespace lugh::signin

@@ -65,3 +65,6 @@ oauth:
   # one. Left out, there is none. The main listener never asks, so a browser never sees a
   # certificate picker.
   # mtls_port: 8444
+  # outbound_ca: the roots an application's certificate must chain to when Lugh posts a
+  # back-channel logout to it; the system's when not set.
+  # outbound_ca: /etc/lugh/outbound-roots.pem

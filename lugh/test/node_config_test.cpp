@@ -288,9 +288,10 @@ TEST(Config, TheIssuerAndClientSecrets) {
 TEST(Config, TheMtlsListener) {
   EXPECT_EQ(Loader().load(with_tls()).value.mtls_port, 0);
   TempDirectory dir;
-  const auto path = dir.write("config.yaml", "oauth: { mtls_port: 8444 }\ntls: { client_ca: /etc/lugh/clients.pem }\n");
+  const auto path = dir.write("config.yaml", "oauth: { mtls_port: 8444, outbound_ca: /etc/lugh/outbound.pem }\ntls: { client_ca: /etc/lugh/clients.pem }\n");
   const auto config = Loader().load(with_config(path.string())).value;
   EXPECT_EQ(config.mtls_port, 8444);
   EXPECT_EQ(config.tls_client_ca, "/etc/lugh/clients.pem");
+  EXPECT_EQ(config.outbound_ca, "/etc/lugh/outbound.pem");
   EXPECT_FALSE(Loader().load(with_tls({"--mtls-port", "70000"})).ok);
 }

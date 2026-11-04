@@ -16,12 +16,15 @@
 #include "lugh/api/me_routes.h"
 #include "lugh/api/session_routes.h"
 #include "lugh/api/user_routes.h"
+#include "lugh/http/outbound.h"
+#include "lugh/oauth/backchannel.h"
 #include "lugh/oauth/client_auth.h"
 #include "lugh/oauth/consents.h"
 #include "lugh/oauth/device_grants.h"
 #include "lugh/oauth/dpop.h"
 #include "lugh/oauth/flow_routes.h"
 #include "lugh/oauth/issuer.h"
+#include "lugh/oauth/logout_routes.h"
 #include "lugh/oauth/refresh_tokens.h"
 #include "lugh/session/pre_sessions.h"
 #include "lugh/session/session_callers.h"
@@ -29,6 +32,24 @@
 #include "lugh/signin/pages.h"
 #include "lugh/test/fixtures/authn_rig.h"
 #include "lugh/test/fixtures/route_call.h"
+
+// Takes down what would be posted, and answers each with `status`, or no answer when 0.
+class RecordingOutbound : public lugh::http::Outbound {
+ public:
+  struct Post {
+    std::string url;
+    std::string body;
+  };
+
+  void post_form(std::string url, std::string body, lugh::Deadline, lugh::Executor executor, lugh::Done<lugh::Outcome<unsigned>> done) override {
+    posts.push_back({std::move(url), std::move(body)});
+    const auto answer = status == 0 ? lugh::Outcome<unsigned>::failure(lugh::Fault::failed, "no answer") : lugh::Outcome<unsigned>::success(status);
+    lugh::answer_now<lugh::Outcome<unsigned>>(executor, std::move(done), answer);
+  }
+
+  unsigned status = 200;
+  std::vector<Post> posts;
+};
 
 // The sign-in pages, the OAuth code flow, /api/v1/me and /api/v1/users behind one router whose
 // callers are sessions and Lugh's access tokens, over AuthnRig, with the issuer kIssuer, and a
@@ -90,6 +111,11 @@ class SigninRig : public AuthnRig {
     flow = std::make_unique<lugh::oauth::FlowRoutes>(
         lugh::oauth::FlowRoutes::Parts{apps, directory, sessions, consents, issuer, clients, refresh, dpop, devices, &time, &wall});
     flow->register_routes(*router);
+    logout = std::make_unique<lugh::oauth::LogoutRoutes>(apps, sessions, issuer);
+    logout->register_routes(*router);
+    outbound = std::make_shared<RecordingOutbound>();
+    backchannel = std::make_shared<lugh::oauth::BackchannelLogout>(apps, issuer, outbound, audit, time, lugh::oauth::BackchannelLogout::Settings{});
+    sessions->on_end([backchannel = backchannel](const lugh::session::Session& session, const std::string&) { backchannel->session_ended(session); });
   }
 
   // One request as a browser makes it, with its cookies; Set-Cookie answers kept.
@@ -170,5 +196,8 @@ class SigninRig : public AuthnRig {
   std::shared_ptr<lugh::oauth::DpopChecker> dpop;
   std::shared_ptr<lugh::oauth::DeviceGrants> devices;
   std::unique_ptr<lugh::oauth::FlowRoutes> flow;
+  std::unique_ptr<lugh::oauth::LogoutRoutes> logout;
+  std::shared_ptr<RecordingOutbound> outbound;
+  std::shared_ptr<lugh::oauth::BackchannelLogout> backchannel;
   std::map<std::string, std::string> jar;
 };
