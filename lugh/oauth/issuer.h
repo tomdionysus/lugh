@@ -48,6 +48,8 @@ struct Issued {
   std::vector<std::string> scopes;
   std::optional<std::string> id_token;
   std::optional<std::string> refresh_token;
+  // "DPoP" for a token bound to the client's key, "Bearer" otherwise.
+  std::string token_type = "Bearer";
 };
 
 // An access token, verified: its claims, and who it speaks for.
@@ -58,6 +60,8 @@ struct Bearer {
   // A client acting for itself (client credentials), not for a person.
   bool service = false;
   std::vector<std::string> scopes;
+  // The thumbprint of the key the token is bound to (cnf.jkt, RFC 9449), if it is.
+  std::optional<std::string> jkt;
 };
 
 // Makes and checks Lugh's tokens (TODO/2026-11-04-oauth.md, "Tokens"). An access token is a
@@ -77,7 +81,9 @@ class TokenIssuer : public std::enable_shared_from_this<TokenIssuer> {
   // Tokens for the person in `grant`, through `app`; an ID token too when openid is granted
   // and `id_token` is asked for (a refresh asks for none). refused when the person can no
   // longer have them: removed, disabled, or not enrolled.
-  void for_person(apps::App app, CodeGrant grant, Deadline deadline, Executor executor, Done<Outcome<Issued>> done, bool id_token = true);
+  // `jkt`, when given, binds the access token to that key (cnf.jkt, RFC 9449).
+  void for_person(apps::App app, CodeGrant grant, Deadline deadline, Executor executor, Done<Outcome<Issued>> done, bool id_token = true,
+                  std::optional<std::string> jkt = std::nullopt);
 
   // An access token stopped before it expires (RFC 7009): its jti refused until then. Held
   // in memory on this node.
@@ -85,7 +91,7 @@ class TokenIssuer : public std::enable_shared_from_this<TokenIssuer> {
 
   // An access token for `app` acting as itself, with `asked` of its client scopes (all of them
   // when it asks for none). invalid for a scope it does not hold.
-  Outcome<Issued> for_client(const apps::App& app, const std::vector<std::string>& asked) const;
+  Outcome<Issued> for_client(const apps::App& app, const std::vector<std::string>& asked, std::optional<std::string> jkt = std::nullopt) const;
 
   // The claims userinfo answers for a person with `scopes` through `app`, as the ID token
   // carries them.
@@ -108,10 +114,6 @@ class TokenIssuer : public std::enable_shared_from_this<TokenIssuer> {
   // The jti of each access token revoked, kept as long as any access token lives.
   std::shared_ptr<Expiring<bool>> _revoked;
 };
-
-// The API's caller for a bearer token: one of Lugh's access tokens with `lugh` among its
-// audiences, a person's or a client's own, holding its scopes. Nothing for any other.
-std::optional<http::Caller> api_caller(const TokenIssuer& issuer, std::string_view token);
 
 // The audiences an application's access tokens carry: its registered ones, or, for one that
 // registered none, its own client_id, so the token is good at userinfo and nowhere else.

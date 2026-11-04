@@ -2,6 +2,14 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O8b, DPoP
+
+- `lugh/oauth/dpop.h` (RFC 9449): a proof's own parser, since Lugh's JWS parser refuses a key in the header and a proof is exactly that: typ dpop+jwt, alg ES256 or EdDSA, a public jwk, nothing else; checked for its method and URL, made within five minutes either way, used once on the node, and for an access token carrying its hash. RFC 7638 thumbprints, matching RFC 9449's own example.
+- The token endpoint binds what it issues to a proof's key: `cnf.jkt` in the access token, `token_type` DPoP, and the key's thumbprint in a new refresh family (the family's record gains it; format 1 is still read). An application whose `sender_constraint` is dpop gets nothing without a proof.
+- A bound token is accepted only with the DPoP scheme and a proof by its key, for that request and token, at the API and at userinfo; presented as a bearer token it is nothing.
+- Found by the tests and fixed: a bound family's key was checked after the rotation, so a refresh refused for want of a proof left the client's token stale and its next try read as reuse. The key is now checked first, and a refused refresh changes nothing.
+- Tests: 464 to 470 (the thumbprint vector, proofs and their refusals, the checker's rules, binding through the token endpoint and the API, a bound family), green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: P6 step O8a, refresh tokens, revocation and introspection
 
 - `lugh/oauth/refresh_tokens.h`: refresh tokens as the maintainer decided, replicated with the session and single use by the family's version. A token is `rt.<family>.<secret>`; the family, in the sealed `grants` table, keeps only the hash of the newest secret. Rotation writes the family at the version it read; a token that is not the newest, or the loser of two rotations racing, is reuse, and revokes the family (RFC 9700 section 4.14.2). A family ends with its Lugh session (`Sessions::live_sid`), at the application's idle and absolute lifetimes, and when revoked. A refresh may narrow the scopes, never widen them, and makes no new ID token.

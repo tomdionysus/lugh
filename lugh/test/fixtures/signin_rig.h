@@ -17,6 +17,7 @@
 #include "lugh/api/user_routes.h"
 #include "lugh/oauth/client_auth.h"
 #include "lugh/oauth/consents.h"
+#include "lugh/oauth/dpop.h"
 #include "lugh/oauth/flow_routes.h"
 #include "lugh/oauth/issuer.h"
 #include "lugh/oauth/refresh_tokens.h"
@@ -63,13 +64,14 @@ class SigninRig : public AuthnRig {
     EXPECT_TRUE(wait_for<lugh::Status>([&](lugh::Executor executor, auto done) { keys->open(kTestDeadline, executor, done); }).ok);
     issuer = std::make_shared<lugh::oauth::TokenIssuer>(keys, kIssuer, wall, time, directory, grants);
     consents = std::make_shared<lugh::oauth::Consents>(store, audit);
+    dpop = std::make_shared<lugh::oauth::DpopChecker>(time, wall);
     sessions = std::make_shared<lugh::session::Sessions>(store, wall, directory, grants, audit, lugh::session::Sessions::Settings{});
     EXPECT_TRUE(wait_for<lugh::Status>([&](lugh::Executor executor, auto done) { sessions->open(kTestDeadline, executor, done); }).ok);
     pre = std::make_shared<lugh::session::PreSessions>(time, std::chrono::minutes(15));
-    router = std::make_shared<lugh::http::Router>(io.get_executor(),
-                                                  std::make_shared<lugh::http::Throttle>(time, lugh::http::RateLimits{{1000, 1000}, {1000, 1000}}),
-                                                  std::make_shared<lugh::session::SessionCallers>(
-                                                      sessions, [issuer = issuer](std::string_view token) { return lugh::oauth::api_caller(*issuer, token); }));
+    router = std::make_shared<lugh::http::Router>(
+        io.get_executor(), std::make_shared<lugh::http::Throttle>(time, lugh::http::RateLimits{{1000, 1000}, {1000, 1000}}),
+        std::make_shared<lugh::session::SessionCallers>(
+            sessions, [issuer = issuer, dpop = dpop](const lugh::http::HttpRequest& request) { return lugh::oauth::api_caller(*issuer, *dpop, request); }));
     pages = std::make_unique<lugh::signin::Pages>(authenticator, directory, sessions, pre);
     pages->register_routes(*router);
     me = std::make_unique<lugh::api::MeRoutes>(directory, sessions);
@@ -80,8 +82,8 @@ class SigninRig : public AuthnRig {
     own_app_passwords->register_routes(*router);
     clients = std::make_shared<lugh::oauth::ClientAuthenticator>(apps, test_pool(), wall, time, kIssuer);
     refresh = std::make_shared<lugh::oauth::RefreshTokens>(store, wall, sessions, audit);
-    flow =
-        std::make_unique<lugh::oauth::FlowRoutes>(lugh::oauth::FlowRoutes::Parts{apps, directory, sessions, consents, issuer, clients, refresh, &time, &wall});
+    flow = std::make_unique<lugh::oauth::FlowRoutes>(
+        lugh::oauth::FlowRoutes::Parts{apps, directory, sessions, consents, issuer, clients, refresh, dpop, &time, &wall});
     flow->register_routes(*router);
   }
 
@@ -159,6 +161,7 @@ class SigninRig : public AuthnRig {
   std::shared_ptr<lugh::oauth::Consents> consents;
   std::shared_ptr<lugh::oauth::ClientAuthenticator> clients;
   std::shared_ptr<lugh::oauth::RefreshTokens> refresh;
+  std::shared_ptr<lugh::oauth::DpopChecker> dpop;
   std::unique_ptr<lugh::oauth::FlowRoutes> flow;
   std::map<std::string, std::string> jar;
 };

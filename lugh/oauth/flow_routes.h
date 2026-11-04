@@ -15,6 +15,7 @@
 #include "lugh/http/router.h"
 #include "lugh/oauth/client_auth.h"
 #include "lugh/oauth/consents.h"
+#include "lugh/oauth/dpop.h"
 #include "lugh/oauth/expiring.h"
 #include "lugh/oauth/issuer.h"
 #include "lugh/oauth/refresh_tokens.h"
@@ -62,6 +63,7 @@ class FlowRoutes {
     std::shared_ptr<TokenIssuer> issuer;
     std::shared_ptr<ClientAuthenticator> clients;
     std::shared_ptr<RefreshTokens> refresh;
+    std::shared_ptr<DpopChecker> dpop;
     const dannan::contract::TimeSource* time = nullptr;
     const dannan::contract::WallClock* wall = nullptr;
   };

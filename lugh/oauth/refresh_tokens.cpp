@@ -18,7 +18,9 @@ namespace lugh::oauth {
 
 namespace {
 
-constexpr std::uint8_t kFormat = 1;
+// Format 1 had no DPoP key; it is still read, as a family bound to none.
+constexpr std::uint8_t kFormat1 = 1;
+constexpr std::uint8_t kFormat = 2;
 constexpr std::size_t kFamilyBytes = 16;
 constexpr std::size_t kSecretBytes = 32;
 constexpr Deadline kStepDeadline = std::chrono::seconds(30);
@@ -64,12 +66,14 @@ SecureBuffer RefreshTokens::encode(const Family& family) {
   writer.u32(family.absolute_seconds);
   writer.string(family.current);
   writer.u8(family.revoked ? 1 : 0);
+  writer.string(family.jkt);
   return writer.take();
 }
 
 std::optional<Family> RefreshTokens::decode(std::span<const unsigned char> value) {
   return decode_whole<Family>(value, [](dannan::net::Reader& reader) -> std::optional<Family> {
-    if (reader.u8() != kFormat) return std::nullopt;
+    const auto format = reader.u8();
+    if (format != kFormat1 && format != kFormat) return std::nullopt;
     Family family;
     family.client_id = reader.string(kMostFieldBytes);
     family.user_id = reader.string(kMostFieldBytes);
@@ -88,6 +92,7 @@ std::optional<Family> RefreshTokens::decode(std::span<const unsigned char> value
     const auto revoked = reader.u8();
     if (revoked > 1) return std::nullopt;
     family.revoked = revoked == 1;
+    if (format == kFormat) family.jkt = reader.string(64);
     return family;
   });
 }
@@ -134,7 +139,7 @@ void RefreshTokens::_revoke(Family family, std::string why, Executor executor, s
   });
 }
 
-void RefreshTokens::issue(const apps::App& app, const CodeGrant& grant, std::vector<std::string> scopes, Deadline deadline, Executor executor,
+void RefreshTokens::issue(const apps::App& app, const CodeGrant& grant, std::vector<std::string> scopes, std::string jkt, Deadline deadline, Executor executor,
                           Done<Outcome<std::string>> done) {
   using Answer = Outcome<std::string>;
   auto answer = answering<std::string>(deadline, executor, std::move(done), kLate);
@@ -151,6 +156,7 @@ void RefreshTokens::issue(const apps::App& app, const CodeGrant& grant, std::vec
   family.created = family.last_used = now;
   family.idle_seconds = app.refresh_idle_seconds;
   family.absolute_seconds = app.refresh_absolute_seconds;
+  family.jkt = std::move(jkt);
   const auto secret = encoding::base64url(secure_random(kSecretBytes));
   family.current = hash_of(secret);
   const auto token = std::string(kPrefix) + family.id + "." + secret;
@@ -160,7 +166,8 @@ void RefreshTokens::issue(const apps::App& app, const CodeGrant& grant, std::vec
   });
 }
 
-void RefreshTokens::rotate(std::string token, std::string client_id, Deadline deadline, Executor executor, Done<Outcome<Rotated>> done) {
+void RefreshTokens::rotate(std::string token, std::string client_id, std::optional<std::string> jkt, Deadline deadline, Executor executor,
+                           Done<Outcome<Rotated>> done) {
   using Answer = Outcome<Rotated>;
   auto answer = answering<Rotated>(deadline, executor, std::move(done), kLate);
   const auto parsed = _parse(token);
@@ -177,6 +184,7 @@ void RefreshTokens::rotate(std::string token, std::string client_id, Deadline de
       return self->_revoke(family, "a rotated refresh token was used again", executor, [answer] { answer->finish(Answer::failure(Fault::refused, kNotGood)); });
     }
     if (!self->_live(family)) return answer->finish(Answer::failure(Fault::refused, kNotGood));
+    if (!family.jkt.empty() && jkt != family.jkt) return answer->finish(Answer::failure(Fault::invalid, "this refresh token is bound to another DPoP key"));
 
     const auto version = family.version;
     const auto secret = encoding::base64url(secure_random(kSecretBytes));

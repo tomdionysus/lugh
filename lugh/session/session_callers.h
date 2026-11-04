@@ -17,8 +17,9 @@
 
 namespace lugh::session {
 
-// The API's caller: an OAuth access token in `Authorization: Bearer` whose audiences include
-// `lugh` (oauth::TokenIssuer::verify(); a person's or a client's), or else a Lugh session:
+// The API's caller: an OAuth access token in `Authorization` (Bearer, or DPoP with its proof)
+// whose audiences include `lugh` (oauth::api_caller(); a person's or a client's), or else a
+// Lugh session:
 // the `__Host-lugh_session` cookie, and, on any request that may change something (anything
 // but GET and HEAD), the session's CSRF token in `X-CSRF-Token`. A token that does not verify,
 // a session that does not resolve, or a change without the token, is no caller (401). The
@@ -27,8 +28,9 @@ class SessionCallers : public http::CallerResolver {
  public:
   static constexpr const char* kCsrfHeader = "X-CSRF-Token";
 
-  // A bearer token, verified from memory, or nothing: what TokenIssuer::verify() answers.
-  using BearerCheck = std::function<std::optional<http::Caller>(std::string_view token)>;
+  // The caller an Authorization header makes, checked from memory, or nothing:
+  // oauth::api_caller().
+  using BearerCheck = std::function<std::optional<http::Caller>(const http::HttpRequest& request)>;
 
   explicit SessionCallers(std::shared_ptr<Sessions> sessions, BearerCheck bearer = nullptr);
 

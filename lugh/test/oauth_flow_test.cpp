@@ -10,6 +10,7 @@
 #include "dannan/identity/crypto.h"
 #include "lugh/core/encoding.h"
 #include "lugh/scopes/scope.h"
+#include "lugh/test/fixtures/dpop_proofs.h"
 #include "lugh/test/fixtures/signin_rig.h"
 #include "lugh/tokens/jose.h"
 
@@ -458,4 +459,80 @@ TEST_F(OAuthRefreshTest, Introspection) {
   const auto theirs =
       rig.request(verb::post, "/oauth2/introspect", {{"token", text(with.tokens, "access_token")}}, {{"Authorization", basic(other.client_id, other_secret)}});
   EXPECT_EQ(boost::json::parse(theirs.body).at("active"), false);
+}
+
+// RFC 9449: a token bound to the client's key; without a proof by that key it is nothing.
+TEST_F(OAuthFlowTest, DpopBindsTheToken) {
+  lugh::apps::App draft;
+  draft.name = "hub";
+  draft.kind = lugh::apps::Kind::service;
+  draft.auth = lugh::apps::ClientAuth::client_secret_basic;
+  draft.grants = lugh::apps::kClientCredentials;
+  draft.client_scopes = {"lugh:directory.read"};
+  draft.audiences = {"lugh"};
+  draft.sender = lugh::apps::SenderConstraint::dpop;
+  const auto made = wait_for<lugh::Outcome<lugh::apps::Apps::Made>>(
+      [&](lugh::Executor executor, auto done) { rig.apps->create(rig.admin, draft, kTestDeadline, executor, done); });
+  ASSERT_TRUE(made.ok()) << made.message;
+  const auto id = made.value.app.client_id;
+  const auto credential = basic(id, std::string(lugh::secret_text(*made.value.secret)));
+  const auto now = rig.wall.unix_ms() / 1000;
+  const std::string token_url = std::string(SigninRig::kIssuer) + "/oauth2/token";
+  DpopClient client;
+
+  // This client's tokens are bound: no proof, no token.
+  const auto unbound = rig.request(verb::post, "/oauth2/token", {{"grant_type", "client_credentials"}}, {{"Authorization", credential}});
+  EXPECT_EQ(boost::json::parse(unbound.body).at("error"), "invalid_dpop_proof");
+
+  const auto issued = rig.request(verb::post, "/oauth2/token", {{"grant_type", "client_credentials"}},
+                                  {{"Authorization", credential}, {"DPoP", client.proof("POST", token_url, now)}});
+  ASSERT_EQ(issued.status, 200u) << issued.body;
+  const auto body = boost::json::parse(issued.body);
+  EXPECT_EQ(body.at("token_type"), "DPoP");
+  const auto access = std::string(body.at("access_token").as_string());
+  EXPECT_EQ(claims_of(access).at("cnf").at("jkt"), boost::json::value(lugh::oauth::jwk_thumbprint({"", client.key.algorithm(), client.key.public_key()})));
+
+  const std::string users_url = std::string(SigninRig::kIssuer) + "/api/v1/users";
+  // As a bearer token, refused.
+  EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, {{"Authorization", "Bearer " + access}}).status, 401u);
+  // With a proof by its key, for this request and token: accepted, once.
+  const auto proof = client.proof("GET", users_url, now, access);
+  EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, {{"Authorization", "DPoP " + access}, {"DPoP", proof}}).status, 200u);
+  EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, {{"Authorization", "DPoP " + access}, {"DPoP", proof}}).status, 401u);
+  // Without a proof, with one for another URL, or by another key: refused.
+  EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, {{"Authorization", "DPoP " + access}}).status, 401u);
+  EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, {{"Authorization", "DPoP " + access}, {"DPoP", client.proof("GET", token_url, now, access)}}).status,
+            401u);
+  DpopClient thief;
+  EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, {{"Authorization", "DPoP " + access}, {"DPoP", thief.proof("GET", users_url, now, access)}}).status,
+            401u);
+  // A proof that does not check out is refused at the token endpoint too.
+  const auto stale = rig.request(verb::post, "/oauth2/token", {{"grant_type", "client_credentials"}},
+                                 {{"Authorization", credential}, {"DPoP", client.proof("POST", token_url, now - 3600)}});
+  EXPECT_EQ(boost::json::parse(stale.body).at("error"), "invalid_dpop_proof");
+}
+
+// A family made with a proof refreshes only with a proof by the same key.
+TEST_F(OAuthRefreshTest, ABoundFamilyNeedsItsKey) {
+  auto [app, secret] = register_web(true, lugh::apps::kAuthorizationCode | lugh::apps::kRefreshToken);
+  const auto back = sign_in_through(rig.get(authorize_target(app.client_id)).location());
+  const auto now = rig.wall.unix_ms() / 1000;
+  const std::string token_url = std::string(SigninRig::kIssuer) + "/oauth2/token";
+  DpopClient client;
+  const auto tokens =
+      rig.request(verb::post, "/oauth2/token",
+                  {{"grant_type", "authorization_code"}, {"code", query_value(back, "code")}, {"redirect_uri", kRedirect}, {"code_verifier", kVerifier}},
+                  {{"Authorization", basic(app.client_id, secret)}, {"DPoP", client.proof("POST", token_url, now)}});
+  ASSERT_EQ(tokens.status, 200u) << tokens.body;
+  const auto refresh_token = std::string(boost::json::parse(tokens.body).at("refresh_token").as_string());
+  const auto ask = [&](std::vector<std::pair<std::string, std::string>> headers) {
+    headers.emplace_back("Authorization", basic(app.client_id, secret));
+    return rig.request(verb::post, "/oauth2/token", {{"grant_type", "refresh_token"}, {"refresh_token", refresh_token}}, headers);
+  };
+  EXPECT_EQ(boost::json::parse(ask({}).body).at("error"), "invalid_dpop_proof");
+  DpopClient other;
+  EXPECT_EQ(boost::json::parse(ask({{"DPoP", other.proof("POST", token_url, now)}}).body).at("error"), "invalid_dpop_proof");
+  const auto good = ask({{"DPoP", client.proof("POST", token_url, now)}});
+  ASSERT_EQ(good.status, 200u) << good.body;
+  EXPECT_EQ(boost::json::parse(good.body).at("token_type"), "DPoP");
 }

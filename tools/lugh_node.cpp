@@ -50,6 +50,7 @@
 #include "lugh/node/config.h"
 #include "lugh/oauth/client_auth.h"
 #include "lugh/oauth/consents.h"
+#include "lugh/oauth/dpop.h"
 #include "lugh/oauth/flow_routes.h"
 #include "lugh/oauth/issuer.h"
 #include "lugh/oauth/metadata_routes.h"
@@ -370,7 +371,8 @@ int run(const cli::Options& options) {
     token_issuer = std::make_shared<oauth::TokenIssuer>(services.keys, config.issuer, wall, time, services.directory, services.grants);
   }
   session::SessionCallers::BearerCheck bearer;
-  if (token_issuer) bearer = [token_issuer](std::string_view token) { return oauth::api_caller(*token_issuer, token); };
+  const auto dpop = std::make_shared<oauth::DpopChecker>(time, wall);
+  if (token_issuer) bearer = [token_issuer, dpop](const http::HttpRequest& request) { return oauth::api_caller(*token_issuer, *dpop, request); };
   std::shared_ptr<http::CallerResolver> resolver = std::make_shared<session::SessionCallers>(services.sessions, bearer);
 
   // Route handlers run on the io_context's own threads: they are coroutines, and suspend
@@ -410,7 +412,7 @@ int run(const cli::Options& options) {
     auto clients = std::make_shared<oauth::ClientAuthenticator>(services.apps, ports.hashing, wall, time, config.issuer);
     auto refresh = std::make_shared<oauth::RefreshTokens>(services.store, wall, services.sessions, services.audit);
     flow_routes = std::make_unique<oauth::FlowRoutes>(
-        oauth::FlowRoutes::Parts{services.apps, services.directory, services.sessions, services.consents, token_issuer, clients, refresh, &time, &wall});
+        oauth::FlowRoutes::Parts{services.apps, services.directory, services.sessions, services.consents, token_issuer, clients, refresh, dpop, &time, &wall});
     flow_routes->register_routes(*router);
   }
 

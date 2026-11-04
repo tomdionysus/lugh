@@ -46,6 +46,9 @@ struct Family {
   // The SHA-256 of the current token's secret, in hex: only the newest token works.
   std::string current;
   bool revoked = false;
+  // The thumbprint of the DPoP key the family is bound to (RFC 9449 section 5), or empty:
+  // every refresh of a bound family needs a proof by that key.
+  std::string jkt;
 };
 
 // Refresh tokens (TODO/2026-11-04-oauth.md, "Grants"; the maintainer 2026-11-04: replicated with the
@@ -71,13 +74,15 @@ class RefreshTokens : public std::enable_shared_from_this<RefreshTokens> {
 
   // A new family for the person in `grant`, through `app`, with `scopes` as the access token
   // got: its first token.
-  void issue(const apps::App& app, const CodeGrant& grant, std::vector<std::string> scopes, Deadline deadline, Executor executor,
+  void issue(const apps::App& app, const CodeGrant& grant, std::vector<std::string> scopes, std::string jkt, Deadline deadline, Executor executor,
              Done<Outcome<std::string>> done);
 
-  // The next token for `token`, presented by `client_id`. refused (invalid_grant) for anything
-  // but the family's newest token, live, of that client, whose session is live; reuse revokes
-  // the family as it refuses.
-  void rotate(std::string token, std::string client_id, Deadline deadline, Executor executor, Done<Outcome<Rotated>> done);
+  // The next token for `token`, presented by `client_id` with a DPoP proof by the key `jkt`, if
+  // any. refused (invalid_grant) for anything but the family's newest token, live, of that
+  // client, whose session is live; reuse revokes the family as it refuses. invalid, changing
+  // nothing, for a family bound to a key the proof is not by: checked before the rotation, so
+  // a refused refresh leaves the token as it was.
+  void rotate(std::string token, std::string client_id, std::optional<std::string> jkt, Deadline deadline, Executor executor, Done<Outcome<Rotated>> done);
 
   // The family `token` belongs to, if live and `client_id`'s, and `token` its newest.
   void inspect(std::string token, std::string client_id, Deadline deadline, Executor executor, Done<Outcome<std::optional<Family>>> done) const;
