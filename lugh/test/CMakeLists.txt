@@ -12,6 +12,7 @@ add_executable(lugh_tests
     api_audit_routes_test.cpp
     api_concurrency_test.cpp
     api_group_routes_test.cpp
+    api_key_routes_test.cpp
     api_policy_routes_test.cpp
     api_scope_routes_test.cpp
     api_user_routes_test.cpp
@@ -44,6 +45,7 @@ add_executable(lugh_tests
     keys_keyring_manager_test.cpp
     keys_keyring_test.cpp
     network_cidr_test.cpp
+    oauth_metadata_routes_test.cpp
     scopes_grants_test.cpp
     scopes_scope_test.cpp
     scopes_topic_scope_test.cpp
@@ -58,6 +60,8 @@ add_executable(lugh_tests
     store_log_format_test.cpp
     store_sealed_store_test.cpp
     system_files_test.cpp
+    tokens_jose_test.cpp
+    tokens_signing_keys_test.cpp
 )
 
 target_link_libraries(lugh_tests PRIVATE lugh GTest::gtest_main)

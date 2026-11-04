@@ -63,3 +63,28 @@ TEST(Encoding, Base64UrlKnownAnswers) {
   EXPECT_EQ(base64url(byte_span("foobar")), "Zm9vYmFy");
   EXPECT_EQ(base64url(from_hex("fbff")), "-_8");
 }
+
+// RFC 4648 section 10's vectors, in base64url and unpadded, back to their bytes; and nothing
+// for what an encoder would never write, so a value has one spelling.
+TEST(Encoding, Base64UrlDecodesExactlyWhatItEncodes) {
+  const auto text = [](const std::optional<lugh::Bytes>& bytes) { return std::string(bytes->begin(), bytes->end()); };
+  EXPECT_EQ(text(base64url_decode("")), "");
+  EXPECT_EQ(text(base64url_decode("Zg")), "f");
+  EXPECT_EQ(text(base64url_decode("Zm8")), "fo");
+  EXPECT_EQ(text(base64url_decode("Zm9v")), "foo");
+  EXPECT_EQ(text(base64url_decode("Zm9vYmFy")), "foobar");
+  EXPECT_EQ(*base64url_decode("-_8"), (lugh::Bytes{0xfb, 0xff}));
+
+  EXPECT_FALSE(base64url_decode("Zg=="));
+  EXPECT_FALSE(base64url_decode("Zh"));
+  EXPECT_FALSE(base64url_decode("Z"));
+  EXPECT_FALSE(base64url_decode("Zm9v+"));
+  EXPECT_FALSE(base64url_decode("Zm9v/"));
+  EXPECT_FALSE(base64url_decode("Zm 9v"));
+
+  for (std::size_t size = 0; size < 40; ++size) {
+    lugh::Bytes bytes;
+    for (std::size_t i = 0; i < size; ++i) bytes.push_back(static_cast<unsigned char>(i * 37 + 11));
+    EXPECT_EQ(*base64url_decode(base64url(bytes)), bytes) << size;
+  }
+}

@@ -103,4 +103,36 @@ inline std::string base64url(std::span<const unsigned char> data) {
   return out;
 }
 
+// RFC 4648 base64url, unpadded and exact: the alphabet only, no '=', and no length or
+// trailing bits that an encoder would not make. nullopt for anything else, so one value has
+// one spelling (a JWS is compared and hashed as it is written).
+inline std::optional<Bytes> base64url_decode(std::string_view text) {
+  if (text.size() % 4 == 1) return std::nullopt;
+  const auto value = [](char c) -> int {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '-') return 62;
+    if (c == '_') return 63;
+    return -1;
+  };
+  Bytes out;
+  out.reserve(text.size() * 3 / 4);
+  unsigned buffer = 0;
+  int bits = 0;
+  for (const char c : text) {
+    const auto v = value(c);
+    if (v < 0) return std::nullopt;
+    buffer = (buffer << 6) | static_cast<unsigned>(v);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push_back(static_cast<unsigned char>((buffer >> bits) & 0xff));
+    }
+    buffer &= (1u << bits) - 1;
+  }
+  if (buffer != 0) return std::nullopt;
+  return out;
+}
+
 }  // namespace lugh::encoding

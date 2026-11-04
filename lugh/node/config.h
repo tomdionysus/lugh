@@ -53,6 +53,10 @@ struct Config {
   // authenticate with private_key_jwt or tls_client_auth.
   bool allow_client_secrets = false;
 
+  // The issuer: `iss` in every token, and the base of every URL in the metadata. An https
+  // URL without a query, fragment or trailing '/'. Empty: no metadata is served.
+  std::string issuer;
+
   // A request from one of these is taken at the last X-Forwarded-For entry; everything else
   // at its socket's address. Empty by default: no proxy is trusted until named.
   std::vector<network::Cidr> trusted_proxies;

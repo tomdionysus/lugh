@@ -16,6 +16,7 @@
 #include "lugh/api/app_routes.h"
 #include "lugh/api/audit_routes.h"
 #include "lugh/api/group_routes.h"
+#include "lugh/api/key_routes.h"
 #include "lugh/api/policy_routes.h"
 #include "lugh/api/scope_routes.h"
 #include "lugh/api/scopes.h"
@@ -50,12 +51,17 @@ class ApiRig : public AuthnRig {
         policy_routes(policies, directory),
         scope_routes(grants),
         app_routes(apps),
+        // Not opened: a test about keys opens them, so the audit log holds only what the
+        // other tests make.
+        keys(std::make_shared<lugh::tokens::SigningKeys>(store, wall, audit, lugh::tokens::SigningKeys::Settings{})),
+        key_routes(keys),
         audit_routes(audit) {
     users.register_routes(*router);
     groups.register_routes(*router);
     policy_routes.register_routes(*router);
     scope_routes.register_routes(*router);
     app_routes.register_routes(*router);
+    key_routes.register_routes(*router);
     audit_routes.register_routes(*router);
   }
 
@@ -100,5 +106,7 @@ class ApiRig : public AuthnRig {
   lugh::api::PolicyRoutes policy_routes;
   lugh::api::ScopeRoutes scope_routes;
   lugh::api::AppRoutes app_routes;
+  std::shared_ptr<lugh::tokens::SigningKeys> keys;
+  lugh::api::KeyRoutes key_routes;
   lugh::api::AuditRoutes audit_routes;
 };

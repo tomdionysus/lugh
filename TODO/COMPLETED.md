@@ -2,6 +2,16 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O4, signing keys, JWKS and metadata
+
+- `lugh/tokens/jose.h`: a public key as a JWK (P-256 and Ed25519, built and read as the SubjectPublicKeyInfo Dannan signs with), and a compact JWS signed and verified with Dannan's ES256 and EdDSA. Parsing refuses every algorithm but those two (no `none`, HMAC or RSA), a missing kid, and any header member but `alg`, `kid` and `typ` (no `crit`, `jku`, `jwk`); verifying takes the algorithm from the key, never from the token. RFC 7515 A.3 and RFC 8037 A.4's signatures verify.
+- `lugh/core/encoding.h`: a strict base64url decoder, one spelling per value.
+- `SigningKeys`: the sealed `signing_keys` table, held in memory so signing and publishing never wait. A key of each algorithm is made at a cluster's first start; a rotated key is published an hour before it signs, and the key it replaces stays published two hours after that, longer than any token lives; nothing is deleted. An hourly check in the node rotates a key that has signed for 90 days. Every key made or rotated is audited.
+- `/oauth2/jwks` (open, cached five minutes), and the server metadata at `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server` when `oauth.issuer` is set (a new setting, `--issuer`, `LUGH_ISSUER`; https, no query, fragment or trailing '/'). The metadata names every endpoint of the profile, which the coming steps serve.
+- `/api/v1/keys` and `/api/v1/keys/rotate`, and a new scope, `lugh:keys.write`.
+- `fuzz_jws`, over JWS parsing and verification and JWK round trips; syntax-checked only here.
+- Tests: 392 to 413 (base64url, JOSE with the RFC vectors and the refusals, the keys' life, the metadata, the key routes, the issuer setting, and the real node serving the same JWKS across a restart), green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: P6 step O3, applications
 
 - `lugh/apps/`: an application's record and every rule that can be checked without the store (`validate()`): client authentication by kind, a JWK Set of public keys only, redirect URIs written exactly (https, no fragment or user information, loopback http for native apps only), grants by kind, prefixes, audiences, role names, the least `acr`, and lifetimes.

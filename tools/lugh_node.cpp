@@ -27,6 +27,7 @@
 #include "lugh/api/app_routes.h"
 #include "lugh/api/audit_routes.h"
 #include "lugh/api/group_routes.h"
+#include "lugh/api/key_routes.h"
 #include "lugh/api/policy_routes.h"
 #include "lugh/api/scope_routes.h"
 #include "lugh/api/user_routes.h"
@@ -45,11 +46,13 @@
 #include "lugh/keys/keyring_manager.h"
 #include "lugh/node/cli.h"
 #include "lugh/node/config.h"
+#include "lugh/oauth/metadata_routes.h"
 #include "lugh/scopes/grants.h"
 #include "lugh/store/sealed_store.h"
 #include "lugh/store/tables.h"
 #include "lugh/system/system_console.h"
 #include "lugh/system/system_files.h"
+#include "lugh/tokens/signing_keys.h"
 #include "lugh/version.h"
 
 namespace {
@@ -135,6 +138,7 @@ struct Services {
   std::shared_ptr<authn::Authenticator> authenticator;
   std::shared_ptr<apps::Apps> apps;
   std::shared_ptr<scopes::Grants> grants;
+  std::shared_ptr<tokens::SigningKeys> keys;
 };
 
 // The cluster's birth, once its first keyring is saved: the store under it, then root,
@@ -256,6 +260,10 @@ Task<Result<Services>> start(Ports ports, Config config) {
   app_settings.allow_client_secrets = config.allow_client_secrets;
   services.apps = std::make_shared<apps::Apps>(store, ports.wall, services.directory, services.audit, ports.hashing, app_settings);
   services.grants = std::make_shared<scopes::Grants>(store, services.directory, services.apps, services.audit);
+  services.keys = std::make_shared<tokens::SigningKeys>(store, ports.wall, services.audit, tokens::SigningKeys::Settings{});
+  const auto keys_open =
+      co_await awaited<Status>([&](Executor executor, Done<Status> done) { services.keys->open(kTransitionDeadline, std::move(executor), std::move(done)); });
+  if (!keys_open.ok) co_return Answer::failure(keys_open.error);
   // Reached by the API now, and by the sign-in routes from P6.
   services.authenticator = std::make_shared<authn::Authenticator>(ports.log, ports.time, services.directory, passwords, services.factors, services.policies,
                                                                   services.links, services.audit, authn::Authenticator::Settings{});
@@ -356,17 +364,37 @@ int run(const cli::Options& options) {
   app_routes.register_routes(*router);
   api::AuditRoutes audit_routes(services.audit);
   audit_routes.register_routes(*router);
+  api::KeyRoutes key_routes(services.keys);
+  key_routes.register_routes(*router);
+  oauth::MetadataRoutes metadata_routes(services.keys, {config.issuer, config.allow_client_secrets});
+  metadata_routes.register_routes(*router);
+  if (config.issuer.empty()) logger.warn("No oauth.issuer: the OAuth metadata is not served");
 
   auto server = std::make_shared<http::HttpServer>(log, io_context, tls.value, client_address);
 
   // The router first, under the paths it owns; anything left is a 404. The dashboard
   // joins the chain after the API, in P7.
-  for (const auto* prefix : {"/health", "/ready", "/api"}) server->middleware_add(router->middleware(prefix));
+  for (const auto* prefix : {"/health", "/ready", "/api", "/oauth2", "/.well-known"}) server->middleware_add(router->middleware(prefix));
 
   if (const auto listening = server->listen(config.address, config.port); !listening.ok) {
     logger.error(listening.error);
     return 1;
   }
+
+  // Once an hour, a key that has signed for its time is replaced (the new one published for
+  // an hour before it signs). A failure is logged and tried again the next hour.
+  boost::asio::steady_timer rotation(io_context);
+  std::function<void()> rotate_when_due = [&] {
+    rotation.expires_after(std::chrono::hours(1));
+    rotation.async_wait([&](const boost::system::error_code& ec) {
+      if (ec) return;
+      services.keys->rotate_due(kTransitionDeadline, io_context.get_executor(), [&](Status rotated) {
+        if (!rotated.ok) logger.error("Key rotation: " + rotated.error);
+        rotate_when_due();
+      });
+    });
+  };
+  rotate_when_due();
 
   boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
   signals.async_wait([&](const boost::system::error_code& ec, int number) {

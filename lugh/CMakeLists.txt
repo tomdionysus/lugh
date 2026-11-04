@@ -11,6 +11,7 @@
 add_library(lugh STATIC
     api/app_routes.cpp
     api/audit_routes.cpp
+    api/key_routes.cpp
     api/group_routes.cpp
     api/policy_routes.cpp
     api/scope_routes.cpp
@@ -43,10 +44,13 @@ add_library(lugh STATIC
     scopes/scope.cpp
     scopes/topic_scope.cpp
     node/config.cpp
+    oauth/metadata_routes.cpp
     store/log_format.cpp
     store/sealed_store.cpp
     system/system_console.cpp
     system/system_files.cpp
+    tokens/jose.cpp
+    tokens/signing_keys.cpp
 )
 
 target_include_directories(lugh

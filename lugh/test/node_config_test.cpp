@@ -265,3 +265,22 @@ TEST(Config, MalformedYamlIsAnError) {
   TempDirectory dir;
   EXPECT_FALSE(Loader().load(with_config(dir.write("config.yaml", "server: [unclosed\n").string())).ok);
 }
+
+TEST(Config, TheIssuerAndClientSecrets) {
+  const auto defaults = Loader().load(with_tls()).value;
+  EXPECT_TRUE(defaults.issuer.empty());
+  EXPECT_FALSE(defaults.allow_client_secrets);
+
+  TempDirectory dir;
+  const auto path = dir.write("config.yaml", "oauth: { issuer: \"https://id.example.com\", allow_client_secrets: true }\n");
+  const auto from_file = Loader().load(with_config(path.string())).value;
+  EXPECT_EQ(from_file.issuer, "https://id.example.com");
+  EXPECT_TRUE(from_file.allow_client_secrets);
+  EXPECT_EQ(Loader({{"LUGH_ISSUER", "https://lugh.example.org"}}).load(with_tls()).value.issuer, "https://lugh.example.org");
+
+  for (const auto* bad : {"http://id.example.com", "https://id.example.com/", "https://id.example.com?x"}) {
+    const auto refused = Loader().load(with_tls({"--issuer", bad}));
+    EXPECT_FALSE(refused.ok) << bad;
+    EXPECT_NE(refused.error.find("--issuer"), std::string::npos) << refused.error;
+  }
+}

@@ -35,6 +35,8 @@ inline constexpr const char* kPoliciesWrite = "lugh:policies.write";
 inline constexpr const char* kAuditRead = "lugh:audit.read";
 // Registering, changing and removing applications, their access and secrets.
 inline constexpr const char* kAppsWrite = "lugh:apps.write";
+// Rotating the token signing keys.
+inline constexpr const char* kKeysWrite = "lugh:keys.write";
 
 inline constexpr std::string_view kLughPrefix = "lugh";
 

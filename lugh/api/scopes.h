@@ -20,6 +20,7 @@ using scopes::kAuditRead;
 using scopes::kCredentialsWrite;
 using scopes::kDirectoryRead;
 using scopes::kDirectoryWrite;
+using scopes::kKeysWrite;
 using scopes::kPoliciesWrite;
 
 inline std::vector<std::string> all_scopes() { return scopes::lugh_scopes(); }

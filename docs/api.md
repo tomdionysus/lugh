@@ -21,6 +21,7 @@ root's password, made at genesis (`lugh init` on the first node) and shown once.
 | `lugh:policies.write` | Setting the assurance level, globally and per group, and which scopes each group grants |
 | `lugh:audit.read` | Reading and verifying the audit log |
 | `lugh:apps.write` | Registering, changing and removing applications, who may use them, their roles and their secrets |
+| `lugh:keys.write` | Rotating a token signing key |
 
 No token, or one that does not resolve: `401` with `WWW-Authenticate: Bearer realm="lugh"`,
 limited by client address. A token without the route's scope: `403`. A caller is limited
@@ -98,6 +99,8 @@ the client reads again. Policies are settings written whole with `PUT`, and memb
 | `PUT`, `DELETE /api/v1/apps/{client_id}/access/{group}` | apps.write | Whether the group's members may sign in to it; answers the application |
 | `PUT /api/v1/apps/{client_id}/roles/{group}` | apps.write | `{roles: [...]}`: the application's role names the group maps to, for its audience only; empty clears |
 | `POST /api/v1/apps/{client_id}/secret` | apps.write | A new client secret, shown once; the one before works for 24 hours more (`previous_secret_expires_at`) |
+| `GET /api/v1/keys` | directory.read | The token signing keys, never their private parts: `kid`, `algorithm`, `created_at`, `signing_from`, `retired_at` |
+| `POST /api/v1/keys/rotate` | keys.write | `{algorithm}`, `ES256` or `EdDSA`: a new key, published now and signing in an hour; the one it replaces stays published two hours more. Keys also rotate by themselves after 90 days |
 | `GET /api/v1/audit` | audit.read | `?from=` (default 1) and `?limit=` (default 100, at most 1000): `{entries, next}`, `next` null at the end |
 | `GET /api/v1/audit/verify` | audit.read | Walks the whole chain: `{intact: true, entries}` or `{intact: false, problem}` |
 

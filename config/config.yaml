@@ -55,3 +55,6 @@ oauth:
   # Off: applications use private_key_jwt or a TLS client certificate, so Lugh holds no
   # secret of theirs, only a public key or a certificate's name.
   allow_client_secrets: false
+  # The issuer: every token's iss, and the base of the metadata's URLs. The public https URL
+  # clients reach Lugh at, without a trailing '/'. Left out, no metadata is served.
+  issuer: "https://localhost:8443"

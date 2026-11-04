@@ -112,7 +112,8 @@ void Apps::create(audit::Actor actor, App draft, Deadline deadline, Executor exe
     scopes_and_own.insert(scopes_and_own.end(), app->client_scopes.begin(), app->client_scopes.end());
     if (const auto ok = references_ok(registered, app->prefix, scopes_and_own, app->audiences); !ok.ok()) return answer->finish(Answer::from(ok));
 
-    const auto id = secure_random(kIdBytes);
+    // Not a secret: public, random so it cannot be guessed or reused.
+    const auto id = dannan::identity::random_bytes(kIdBytes);
     if (id.empty()) return answer->finish(Answer::failure(Fault::failed, "no randomness for a client_id"));
     app->client_id = "app_" + encoding::base64url(id);
     app->created = app->updated = self->_wall.unix_ms() / 1000;
