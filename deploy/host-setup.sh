@@ -1,5 +1,12 @@
 #!/bin/sh
 #
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+
+#
 # Prepares a node for lugh. Run by `cmake --install`, as root, on every install; every step
 # is safe to repeat. The certificate pair under /usr/local/etc/lugh/tls and the master key
 # credential are the operator's to put there; this only sets who may read them.
@@ -44,7 +51,7 @@ else
     echo "host-setup: WARNING: no $CONFDIR/tls/key.pem; put the certificate pair there before the service can start" >&2
 fi
 
-# The state directory, before the first start, so `lugh init` can make the keyring in it.
+# The state directory, before the first start, so `lugh-node init` can make the keyring in it.
 # systemd's StateDirectory= keeps it so afterwards.
 mkdir -p "$STATEDIR"
 chown lugh:lugh "$STATEDIR"
@@ -55,5 +62,5 @@ chmod 0700 "$STATEDIR"
 mkdir -p "$CREDSTORE"
 chmod 0700 "$CREDSTORE"
 if [ ! -f "$CREDSTORE/lugh-master-key" ]; then
-    echo "host-setup: WARNING: no master key credential; run lugh init (see the README) before the service can start" >&2
+    echo "host-setup: WARNING: no master key credential; run lugh-node init (see the README) before the service can start" >&2
 fi

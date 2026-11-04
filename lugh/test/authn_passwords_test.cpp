@@ -1,0 +1,139 @@
+//
+// Lugh - The Directory
+//
+// Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+// Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+//
+
+#include <gtest/gtest.h>
+
+#include "lugh/authn/passwords.h"
+#include "lugh/test/fixtures/authn_rig.h"
+#include "lugh/test/fixtures/memory_files.h"
+
+using lugh::byte_span;
+using lugh::Fault;
+using lugh::Secret;
+using lugh::text_secret;
+using lugh::authn::BreachedPasswords;
+using lugh::authn::Passwords;
+
+TEST(BreachedPasswords, OneALineFoldedToLowerCase) {
+  const auto list = BreachedPasswords::from_text(byte_span("# a comment\nPassword1\r\n\nletmein\nhunter2"));
+  EXPECT_EQ(list.size(), 3u);
+  EXPECT_TRUE(list.contains(byte_span("password1")));
+  EXPECT_TRUE(list.contains(byte_span("PASSWORD1")));
+  EXPECT_TRUE(list.contains(byte_span("hunter2")));
+  EXPECT_FALSE(list.contains(byte_span("# a comment")));
+  EXPECT_FALSE(list.contains(byte_span("")));
+  EXPECT_FALSE(list.contains(byte_span("correct horse battery")));
+}
+
+TEST(BreachedPasswords, LoadedThroughFiles) {
+  MemoryFiles files;
+  files.put("/etc/breached", lugh::Bytes{'a', 'b', 'c', '\n'});
+  const auto loaded = run(BreachedPasswords::load(files, "/etc/breached"));
+  ASSERT_TRUE(loaded.ok) << loaded.error;
+  EXPECT_TRUE(loaded.value.contains(byte_span("ABC")));
+  const auto missing = run(BreachedPasswords::load(files, "/etc/missing"));
+  ASSERT_FALSE(missing.ok);
+  EXPECT_EQ(missing.error.rfind("authn.breached_passwords: ", 0), 0u);
+}
+
+namespace {
+
+class PasswordsTest : public ::testing::Test {
+ protected:
+  AuthnRig rig{BreachedPasswords::from_text(byte_span("password1234\nCorrectHorseBattery"))};
+  std::shared_ptr<Passwords>& passwords = rig.passwords;
+};
+
+}  // namespace
+
+TEST_F(PasswordsTest, TheRules) {
+  const auto alice = rig.person("alice");
+  EXPECT_TRUE(passwords->acceptable(text_secret("twelve chars"), alice).ok());
+  EXPECT_EQ(passwords->acceptable(text_secret("eleven char"), alice).fault, Fault::invalid);
+  // Twelve characters, though more bytes: counted as a person counts them.
+  EXPECT_TRUE(
+      passwords->acceptable(text_secret("\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9"), alice).ok());
+  EXPECT_EQ(passwords->acceptable(text_secret(std::string(257, 'x')), alice).fault, Fault::invalid);
+  EXPECT_EQ(passwords->acceptable(text_secret("PASSWORD1234"), alice).fault, Fault::invalid);
+  EXPECT_EQ(passwords->acceptable(text_secret("correcthorsebattery"), alice).fault, Fault::invalid);
+  EXPECT_EQ(passwords->acceptable(text_secret("ALICE@example.com"), alice).fault, Fault::invalid);
+}
+
+TEST_F(PasswordsTest, ARefusalNeverSaysThePassword) {
+  const auto alice = rig.person("alice");
+  for (const auto* attempt : {"short", "password1234", "alice@example.com"}) {
+    const auto refused = passwords->acceptable(text_secret(attempt), alice);
+    EXPECT_EQ(refused.message.find(attempt), std::string::npos) << refused.message;
+  }
+}
+
+TEST_F(PasswordsTest, SetThenVerify) {
+  const auto alice = rig.person("alice");
+  EXPECT_FALSE(read_value<bool>([&](lugh::Executor executor, auto done) { passwords->has_password(alice.id, kTestDeadline, executor, done); }));
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                passwords->set(rig.admin, alice, text_secret("correct horse battery"), kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_TRUE(read_value<bool>([&](lugh::Executor executor, auto done) { passwords->has_password(alice.id, kTestDeadline, executor, done); }));
+  EXPECT_TRUE(read_value<bool>(
+      [&](lugh::Executor executor, auto done) { passwords->verify(alice.id, text_secret("correct horse battery"), kTestDeadline, executor, done); }));
+  EXPECT_FALSE(read_value<bool>(
+      [&](lugh::Executor executor, auto done) { passwords->verify(alice.id, text_secret("correct horse batterY"), kTestDeadline, executor, done); }));
+  EXPECT_FALSE(read_value<bool>(
+      [&](lugh::Executor executor, auto done) { passwords->verify("nobody", text_secret("correct horse battery"), kTestDeadline, executor, done); }));
+  EXPECT_TRUE(rig.audited("password.set"));
+}
+
+TEST_F(PasswordsTest, TheStoredRecordIsAHash) {
+  const auto alice = rig.person("alice");
+  wait_for<lugh::Outcome<lugh::Nothing>>(
+      [&](lugh::Executor executor, auto done) { passwords->set(rig.admin, alice, text_secret("correct horse battery"), kTestDeadline, executor, done); });
+  const auto record = rig.store->get_now(Passwords::kTable, alice.id);
+  ASSERT_TRUE(record);
+  const std::string value(record->value.begin(), record->value.end());
+  EXPECT_EQ(value.find("correct horse battery"), std::string::npos);
+}
+
+TEST_F(PasswordsTest, AServiceHasNoPassword) {
+  const auto service = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+                         rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", ""}, kTestDeadline, executor, done);
+                       }).value;
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              passwords->set(rig.admin, service, text_secret("correct horse battery"), kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
+}
+
+TEST_F(PasswordsTest, AnOldHashMovesToTheCurrentCosts) {
+  const auto alice = rig.person("alice");
+  {
+    // Set under cheaper costs, as an older release would have.
+    auto older = std::make_shared<Passwords>(rig.logger, rig.store, rig.wall, rig.audit, test_pool(), lugh::crypto::Argon2Costs{32, 1, 1},
+                                             lugh::authn::PasswordRules{}, lugh::authn::BreachedPasswords{});
+    ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                  older->set(rig.admin, alice, text_secret("correct horse battery"), kTestDeadline, executor, done);
+                }).ok());
+  }
+  const auto before = rig.store->get_now(Passwords::kTable, alice.id)->version;
+  EXPECT_TRUE(read_value<bool>(
+      [&](lugh::Executor executor, auto done) { passwords->verify(alice.id, text_secret("correct horse battery"), kTestDeadline, executor, done); }));
+  EXPECT_EQ(rig.store->get_now(Passwords::kTable, alice.id)->version, before + 1);
+  // Now current: no further write.
+  EXPECT_TRUE(read_value<bool>(
+      [&](lugh::Executor executor, auto done) { passwords->verify(alice.id, text_secret("correct horse battery"), kTestDeadline, executor, done); }));
+  EXPECT_EQ(rig.store->get_now(Passwords::kTable, alice.id)->version, before + 1);
+}
+
+TEST_F(PasswordsTest, ForgottenWithTheUser) {
+  const auto alice = rig.person("alice");
+  wait_for<lugh::Outcome<lugh::Nothing>>(
+      [&](lugh::Executor executor, auto done) { passwords->set(rig.admin, alice, text_secret("correct horse battery"), kTestDeadline, executor, done); });
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                rig.directory->remove_user(rig.admin, alice.id, std::nullopt, kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_FALSE(read_value<bool>([&](lugh::Executor executor, auto done) { passwords->has_password(alice.id, kTestDeadline, executor, done); }));
+  EXPECT_TRUE(rig.audited("password.remove"));
+}

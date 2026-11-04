@@ -1,0 +1,47 @@
+//
+// Lugh - The Directory
+//
+// Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+// Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+//
+
+#pragma once
+
+#include <memory>
+
+#include "dannan/contract/time_source.h"
+#include "lugh/authn/authenticator.h"
+#include "lugh/core/task.h"
+#include "lugh/directory/directory.h"
+#include "lugh/http/router.h"
+
+namespace lugh::api {
+
+// /api/v1/users: the directory's people and services, their groups, their factors, and
+// the enrolment links that let them in.
+class UserRoutes {
+ public:
+  UserRoutes(std::shared_ptr<directory::Directory> directory, std::shared_ptr<authn::Factors> factors, std::shared_ptr<authn::Authenticator> authenticator,
+             std::shared_ptr<authn::EnrolmentLinks> links);
+
+  void register_routes(http::Router& router);
+
+ private:
+  void _list(http::RouteContext context) const;
+  void _create(http::RouteContext context);
+  void _get(http::RouteContext context) const;
+  void _update(http::RouteContext context);
+  void _remove(http::RouteContext context);
+  void _groups(http::RouteContext context) const;
+  void _factors(http::RouteContext context) const;
+  void _remove_factor(http::RouteContext context);
+  void _reset_factors(http::RouteContext context);
+  void _enrolment(http::RouteContext context);
+
+  std::shared_ptr<directory::Directory> _directory;
+  std::shared_ptr<authn::Factors> _factor_store;
+  std::shared_ptr<authn::Authenticator> _authenticator;
+  std::shared_ptr<authn::EnrolmentLinks> _links;
+};
+
+}  // namespace lugh::api

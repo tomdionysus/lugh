@@ -1,3 +1,10 @@
+#
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+
 [Unit]
 Description=Lugh
 Documentation=file:///usr/local/share/lugh/docs/architecture.md
@@ -9,7 +16,7 @@ Type=simple
 
 # The config ships verbatim from the repository. Only the deployment facts are overridden
 # here: the privileged port, the installed certificate pair and the state directory.
-ExecStart=/usr/local/bin/lugh \
+ExecStart=/usr/local/bin/lugh-node \
     --config /usr/local/etc/lugh/config.yaml \
     --port 443 \
     --tls-certificate /usr/local/etc/lugh/tls/cert.pem \

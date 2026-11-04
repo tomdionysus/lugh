@@ -8,7 +8,9 @@
       "binaryDir": "${sourceDir}/build-${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_PREFIX_PATH": "/opt/local/libexec/boost/1.88;/opt/local",
+        "OPENSSL_ROOT_DIR": "/opt/local"
       }
     },
     {
@@ -46,7 +48,7 @@
       "inherits": "base",
       "displayName": "libFuzzer targets, with ASan and UBSan; needs a clang with libFuzzer",
       "cacheVariables": {
-        "LUGH_FUZZ": "ON",
+        "LUGH_BUILD_FUZZING": "ON",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
     }
