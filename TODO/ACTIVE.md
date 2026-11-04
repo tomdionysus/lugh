@@ -1,22 +1,26 @@
 # Active work
 
-What is being worked on now and what comes next. When an item ships, move it to `COMPLETE.md` with the date and the outcome.
+What is being worked on now and what comes next. When an item ships, move it to `COMPLETED.md` with the date and the outcome.
 
 ## Resume here
 
-2026-10-18: **P5 is done** (COMPLETE.md), not committed, and neither are P2 to P4. P1 is committed and pushed (`700092b`). `/api/v1` serves the directory, factors, enrolment links, policies and the audit log, but nothing resolves a caller yet, so it answers 401 to everyone. `lugh init` is genesis: root, with a random password shown once, the only credential there is. Next: P6, OAuth 2 and OIDC, with the sign-in and enrolment pages (root's first sign-in among them), sessions (async like everything else; the hashing pool is already in place), an admission limit on sign-ins in front of the hashing pool, scopes granted through groups (`administrators` holding every one), and the API taking sessions and OAuth tokens.
+2026-11-04: **Aligning with Dannan and Dagda** on `feature/dannan-alignment`, one commit per step, nothing pushed (COMPLETED.md, "Aligning with Dannan and Dagda", says what each step did and what it cost in tests). The stack, its seams and the maintainer's rules are in `../dagda/TODO/2026-11-03-stack.md`; Lugh must not duplicate Dannan or Dagda, and the three share one style, convention and layout. Done so far: the header and layout; Dannan's SHA-256, compare, hex, Argon2id, signing, time sources, secure memory, codec, HKDF, AES-GCM, `Secret`, randomness, logging (text and JSON sinks), checked locks and test temp directories; HMAC-SHA-1 kept inside TOTP. Dannan is pinned by commit (`LUGH_DANNAN_COMMIT`), as no tag carries its Context yet.
 
-P4, as left: the directory and sign-in work end to end in the tests; P5 put the directory behind the API, and P6 puts sign-in behind its pages.
+In the working tree: `SystemFiles::write` on Dannan's `durable_replace_file` and `durable_create_file` (pin bd2f720). One test, `SystemFiles.AWriteIntoAMissingDirectoryFails`, fails by design: Dannan makes missing directories, with the process umask. Asked Dannan whether they should be 0700, as Lugh's were; settle the test on the answer, then commit.
 
-P3, as left: the store opens its 14 tables at start; P4 gave the directory's tables their indexes.
-
-P2, as left: The `crypto/` layer, the keyring and `lugh init` build clean under `-Werror`, and `ctest` passes under `debug`, `release`, `asan` and `tsan`. The `fuzz` preset is still not built here: Apple's clang has no libFuzzer, and Homebrew's LLVM is not installed (`brew install llvm`, then `CXX=$(brew --prefix llvm)/bin/clang++ cmake --preset fuzz`). The keyring fuzz target was run instead under ASan with a stand-in driver. Next: P3, the store, on one node, using the keyring's data keys.
+Next, in order:
+1. The keyring's root from Dannan's `KeyCustody::derive("lugh/keyring/1")`, with `init` making custody through Dannan, and Lugh's own credential and console loading dropped where custody covers them.
+2. Callback style throughout (the maintainer: "Lugh goes callback style"): Dannan's shape, one shared state per operation on a strand, the deadline and the caller's executor, completion posted there and never inline. `Task<T>`, `offload` and `AsyncMutex` go.
+3. Conventions: `CONTRIBUTING.md` and `CLAUDE.md` from Dannan's (Layout, Shared code, Errors), `docs/code-style.md` removed; Dannan's warning set (`-Wshadow -Wconversion`); throwing instead of `Result` where Dannan's error rule says so; sanitizers before a release only; presets as the maintainer decides for all three.
+4. `docs/architecture.md` rewritten around the stack: what Lugh is (the directory and its sign-in) on top of Dannan (network, identity, crypto) and Dagda (the store).
 
 Not yet tried on Linux: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DONTDUMP` are written for Ubuntu 26.04's systemd and kernel, and only the macOS paths have run. Check them on the first node.
 
 ## Waiting on the maintainer
 
-- The open questions in `docs/architecture.md`, "Still open". None blocks P1. Question 1 (node identity) is needed by P8, question 2 (single-use grants) by P6 and P8, question 9 (second factor for everyone) was built as proposed in P4 (`mfa` for everyone by default, groups may only raise it), and is a setting, not code, if the answer differs, and question 14 (Lugh's hostname) by P13.
+- The open questions in `docs/architecture.md`, "Still open". Question 1 (node identity) is now Dannan's node identity; question 2 (single-use grants) is needed by P6 and P8; question 14 (Lugh's hostname) by P13.
+- Durability of Lugh's writes on Dagda (Dagda's requirements document, section 8 item 1). The maintainer has decided every Dagda write carries a level the caller picks: Ephemeral, Persisted (one node) or Durable (every node of the replication set). Proposed for Lugh: Durable for credential and factor changes, revocations, disables, groups, memberships, policies and the audit chain; Persisted for node-local spaces (sessions, grants, TOTP steps); nothing Ephemeral. `lugh/scope` is every-node, so a Durable write with a node down waits for its deadline and comes back with evidence naming the pending node, though it has landed everywhere reachable. Proposed: Lugh answers success, "applied, n nodes pending", and records the same in the audit log, clearing it when the write's ticket reports the last node; or the maintainer adds "k of N" for credential changes and revocations. Dagda's evidence names each node by Dannan node id with its state.
+- From the stack document: single-node revocation, the node key custody standard, TOTP replay across nodes, the partition bound, uniqueness by name, the trust boundary, Lugh's message type block (proposed 2048-3071), and whether all three projects keep CMake presets.
 
 ## Plan
 
@@ -31,7 +35,7 @@ Each phase ends with a green build, `ctest` passing under the `debug` and `asan`
 | **P5** | Management API. `/api/v1` CRUD, scoped permissions, ETags and the error format. Genesis: root and its one-time password, the only credential. The API opens to sessions and tokens in P6 |
 | **P6** | OAuth 2 and OIDC. Applications (`apps`, `app_access`, role mapping, `private_key_jwt`, exact redirect matching); the SSO session; `acr`/`amr`, `max_age` and step-up; RP-initiated and back-channel logout; authorisation code with PKCE, client credentials, refresh rotation, the sign-in and consent pages, JWT access and ID tokens, JWKS and discovery, introspection, revocation, PAR, DPoP, the device grant. The API then switches to OAuth tokens |
 | **P7** | Dashboard. The React SPA in T.O.M.S's styling, using the Lugh session cookie and a CSRF token against `/api/v1`, served from disk by the static handler, with a strict CSP; installed by `cmake --install` |
-| **P8** | Cluster. Copy Macha's membership and merge, over a TLS 1.3 mTLS transport with per-node certificates; the join handshake that delivers the DEKs; full replication of every extent to every node, with anti-entropy catch-up; the merge rules (tombstones, versioned credentials, issuer-owned single-use grants); multi-node tests |
+| **P8** | The cluster, on the stack. Lugh hosts on Dannan (`dannan::Context`: membership, mTLS transport, node identity, routes for Lugh's message types) and keeps its state in Dagda (head spaces `lugh/scope` and `lugh/secrets`, node-local spaces for sessions, grants and TOTP steps), replacing the interim sealed store and keyring; what the stack document (`../dagda/TODO/2026-11-03-stack.md`) sets out, and the multi-node tests. Lugh's own copy of Macha's membership and merge is not built |
 | **P9** | LDAP. The BER decoder (fuzzed), LDAPS and StartTLS, bind, search with limits, rootDSE, the generated tree |
 | **P10** | C++ library. `lugh_client` with public headers in `include/lugh/` and a CMake package config; `lugh::client::RelyingParty` (code flow, callback, ID token and back-channel logout verification); offline access token verification; client credentials and device flows; an example subproject |
 | **P11** | WebAuthn and passkeys, the `phr` level, and app passwords for LDAP |
