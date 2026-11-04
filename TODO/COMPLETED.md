@@ -77,6 +77,10 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
 - The tests write only inside the build tree, as Dannan's do: `TempDirectory` is Dannan's
   `TempDir` (under `build/test-tmp`) with a `write()` helper, and ctest gives the process
   tests `TMPDIR` there. Before, both used the system temp directory.
+- HMAC-SHA-256 is Dannan's, and Lugh had no caller of its own copy; HMAC-SHA-1, which only
+  TOTP uses, moved into `authn/totp.cpp`. `crypto/hmac` is deleted. Finding: the unit count
+  went from 338 to 335, the HMAC known-answer tests; HMAC-SHA-1 is still checked through
+  RFC 4226's and RFC 6238's vectors.
 
 ## 2026-10-18: P5, the management API (not committed)
 

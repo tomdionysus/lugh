@@ -27,7 +27,6 @@ add_executable(lugh_tests
     core_secret_test.cpp
     crypto_aead_test.cpp
     crypto_argon2_test.cpp
-    crypto_hmac_test.cpp
     directory_records_test.cpp
     directory_test.cpp
     http_client_address_test.cpp

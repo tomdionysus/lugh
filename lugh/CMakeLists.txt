@@ -23,7 +23,6 @@ add_library(lugh STATIC
     authn/policy.cpp
     authn/totp.cpp
     crypto/aead.cpp
-    crypto/hmac.cpp
     directory/directory.cpp
     directory/records.cpp
     http/boost_json.cpp

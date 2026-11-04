@@ -7,16 +7,41 @@
 
 #include "lugh/authn/totp.h"
 
+#include <openssl/core_names.h>
 #include <openssl/crypto.h>
+#include <openssl/evp.h>
 
+#include <array>
 #include <cstdio>
+#include <memory>
 
 #include "lugh/core/encoding.h"
-#include "lugh/crypto/hmac.h"
 
 namespace lugh::authn {
 
 namespace {
+
+// HMAC-SHA-1 (RFC 2104), which every authenticator app computes TOTP with and where it is
+// still sound. TOTP is its only use in the stack, so it lives here; HMAC-SHA-256 is
+// Dannan's. Nothing when HMAC fails.
+std::optional<std::array<unsigned char, 20>> hmac_sha1(std::span<const unsigned char> key, std::span<const unsigned char> data) {
+  if (key.empty()) return std::nullopt;
+  std::unique_ptr<EVP_MAC, decltype(&EVP_MAC_free)> mac(EVP_MAC_fetch(nullptr, "HMAC", nullptr), &EVP_MAC_free);
+  if (!mac) return std::nullopt;
+  std::unique_ptr<EVP_MAC_CTX, decltype(&EVP_MAC_CTX_free)> context(EVP_MAC_CTX_new(mac.get()), &EVP_MAC_CTX_free);
+  if (!context) return std::nullopt;
+
+  // OpenSSL takes the name as char* and does not write through it.
+  char sha1[] = "SHA1";
+  const OSSL_PARAM params[] = {OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST, sha1, 0), OSSL_PARAM_construct_end()};
+  if (EVP_MAC_init(context.get(), key.data(), key.size(), params) != 1) return std::nullopt;
+  if (EVP_MAC_update(context.get(), data.data(), data.size()) != 1) return std::nullopt;
+
+  std::array<unsigned char, 20> out{};
+  std::size_t length = 0;
+  if (EVP_MAC_final(context.get(), out.data(), &length, out.size()) != 1 || length != out.size()) return std::nullopt;
+  return out;
+}
 
 // RFC 3986 percent-encoding of everything but the unreserved characters.
 void append_escaped(std::string& out, std::string_view text) {
@@ -41,13 +66,14 @@ std::optional<std::uint32_t> hotp(std::span<const unsigned char> secret, std::ui
     message[i] = static_cast<unsigned char>(counter);
     counter >>= 8;
   }
-  const auto mac = crypto::hmac(crypto::HmacDigest::sha1, secret, message);
-  if (!mac.ok || mac.value.size() != 20) return std::nullopt;
+  const auto mac = hmac_sha1(secret, message);
+  if (!mac) return std::nullopt;
 
   // RFC 4226, section 5.3: dynamic truncation.
-  const auto offset = mac.value[19] & 0x0f;
-  const std::uint32_t binary = (static_cast<std::uint32_t>(mac.value[offset] & 0x7f) << 24) | (static_cast<std::uint32_t>(mac.value[offset + 1]) << 16) |
-                               (static_cast<std::uint32_t>(mac.value[offset + 2]) << 8) | mac.value[offset + 3];
+  const auto& value = *mac;
+  const auto offset = value[19] & 0x0f;
+  const std::uint32_t binary = (static_cast<std::uint32_t>(value[offset] & 0x7f) << 24) | (static_cast<std::uint32_t>(value[offset + 1]) << 16) |
+                               (static_cast<std::uint32_t>(value[offset + 2]) << 8) | value[offset + 3];
   std::uint32_t modulus = 1;
   for (unsigned i = 0; i < digits; ++i) modulus *= 10;
   return binary % modulus;
