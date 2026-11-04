@@ -10,8 +10,9 @@ management API, a read-only LDAP for software that knows nothing else, and a C++
 that makes a project a relying party in a few lines. Several nodes form one cluster over a
 replicated, sealed store built on Macha's technology.
 
-Design: [docs/architecture.md](docs/architecture.md). Code style and what is lifted from
-blackraven-admin, AthenaSIP and Macha: [docs/code-style.md](docs/code-style.md). What is
+Design: [docs/architecture.md](docs/architecture.md). Conventions, shared with Dannan and
+Dagda: [CONTRIBUTING.md](CONTRIBUTING.md). What was lifted from blackraven-admin,
+AthenaSIP and Macha: [docs/provenance.md](docs/provenance.md). What is
 being worked on: [TODO/ACTIVE.md](TODO/ACTIVE.md); what shipped:
 [TODO/COMPLETED.md](TODO/COMPLETED.md).
 

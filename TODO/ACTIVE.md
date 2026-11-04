@@ -12,7 +12,7 @@ Not next: the keyring's root from Dannan's key custody. The sealed store and `ke
 
 Next, in order:
 1. Callback style throughout (the maintainer: "Lugh goes callback style"): Dannan's shape, one shared state per operation on a strand, the deadline and the caller's executor, completion posted there and never inline. `Task<T>`, `offload` and `AsyncMutex` go.
-2. Conventions: `CONTRIBUTING.md` and `CLAUDE.md` from Dannan's (Layout, Shared code, Errors), `docs/code-style.md` removed; Dannan's warning set (`-Wshadow -Wconversion`); throwing instead of `Result` where Dannan's error rule says so; sanitizers before a release only; presets as the maintainer decides for all three.
+2. Conventions: Dannan's warning set (`-Wshadow -Wconversion`); throwing instead of `Result` where Dannan's error rule says so; sanitizers before a release only; presets as the maintainer decides for all three.
 3. `docs/architecture.md` rewritten around the stack: what Lugh is (the directory and its sign-in) on top of Dannan (network, identity, crypto) and Dagda (the store).
 
 Not yet tried on Linux: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DONTDUMP` are written for Ubuntu 26.04's systemd and kernel, and only the macOS paths have run. Check them on the first node.
