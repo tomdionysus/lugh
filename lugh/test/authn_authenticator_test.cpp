@@ -30,16 +30,32 @@ class AuthenticatorTest : public ::testing::Test {
     return step;
   }
   Step password(const std::string& login, const std::string& password, const std::string& source = kSource) {
-    return keep(run(auth.password(login, text_secret(password), source)));
+    return keep(wait_for<lugh::authn::Step>(
+        [&](lugh::Executor executor, auto done) { auth->password(login, text_secret(password), source, kTestDeadline, executor, done); }));
   }
-  Step totp(std::string_view code) { return keep(run(auth.totp(sign_in, std::string(code), kSource))); }
-  Step recovery(const Secret& code) { return keep(run(auth.recovery(sign_in, copy_of(code), kSource))); }
-  Step redeem(const Secret& token, const std::string& password) { return keep(run(auth.redeem(copy_of(token), text_secret(password), kSource))); }
-  lugh::Outcome<TotpSetup> enrol_begin() { return run(auth.enrol_begin(sign_in, kSource)); }
-  Step enrol_confirm(const std::string& factor_id, const std::string& code) { return keep(run(auth.enrol_confirm(sign_in, factor_id, code, kSource))); }
+  Step totp(std::string_view code) {
+    return keep(wait_for<lugh::authn::Step>(
+        [&](lugh::Executor executor, auto done) { auth->totp(sign_in, std::string(code), kSource, kTestDeadline, executor, done); }));
+  }
+  Step recovery(const Secret& code) {
+    return keep(wait_for<lugh::authn::Step>(
+        [&](lugh::Executor executor, auto done) { auth->recovery(sign_in, copy_of(code), kSource, kTestDeadline, executor, done); }));
+  }
+  Step redeem(const Secret& token, const std::string& password) {
+    return keep(wait_for<lugh::authn::Step>(
+        [&](lugh::Executor executor, auto done) { auth->redeem(copy_of(token), text_secret(password), kSource, kTestDeadline, executor, done); }));
+  }
+  lugh::Outcome<TotpSetup> enrol_begin() {
+    return wait_for<lugh::Outcome<lugh::authn::TotpSetup>>(
+        [&](lugh::Executor executor, auto done) { auth->enrol_begin(sign_in, kSource, kTestDeadline, executor, done); });
+  }
+  Step enrol_confirm(const std::string& factor_id, const std::string& code) {
+    return keep(wait_for<lugh::authn::Step>(
+        [&](lugh::Executor executor, auto done) { auth->enrol_confirm(sign_in, factor_id, code, kSource, kTestDeadline, executor, done); }));
+  }
 
   AuthnRig rig;
-  Authenticator& auth = *rig.authenticator;
+  std::shared_ptr<Authenticator>& auth = rig.authenticator;
   SignIn sign_in;
 };
 
@@ -195,10 +211,12 @@ TEST_F(AuthenticatorTest, ARefusalIsAuditedAsAnonymous) {
 TEST_F(AuthenticatorTest, AStolenPasswordCannotEnrol) {
   // A person who set a password through a link and stopped there.
   const auto alice = rig.person("alice");
-  run(auth.redeem(wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
-                    rig.links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
-                  }).value,
-                  text_secret(kPassword), kSource));
+  wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+    auth->redeem(wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+                   rig.links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+                 }).value,
+                 text_secret(kPassword), kSource, kTestDeadline, executor, done);
+  });
   EXPECT_EQ(password("alice", kPassword).kind, Kind::refused);
   EXPECT_EQ(enrol_begin().fault, Fault::refused);
 }
@@ -254,18 +272,30 @@ TEST_F(AuthenticatorTest, TheLastFactorStaysWhilePolicyNeedsIt) {
   std::string recovery;
   for (const auto& factor : factors) (factor.kind == FactorKind::totp ? totp : recovery) = factor.id;
 
-  EXPECT_EQ(run(auth.remove_factor(rig.admin, alice.id, totp)).fault, Fault::refused);
-  EXPECT_TRUE(run(auth.remove_factor(rig.admin, alice.id, recovery)).ok());
-  EXPECT_EQ(run(auth.remove_factor(rig.admin, alice.id, "nothing")).fault, Fault::not_found);
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              auth->remove_factor(rig.admin, alice.id, totp, kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
+  EXPECT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                auth->remove_factor(rig.admin, alice.id, recovery, kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              auth->remove_factor(rig.admin, alice.id, "nothing", kTestDeadline, executor, done);
+            }).fault,
+            Fault::not_found);
 
   wait_for<lugh::Outcome<lugh::Nothing>>(
       [&](lugh::Executor executor, auto done) { rig.policies->global_set(rig.admin, Assurance::pwd, kTestDeadline, executor, done); });
-  EXPECT_TRUE(run(auth.remove_factor(rig.admin, alice.id, totp)).ok());
+  EXPECT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                auth->remove_factor(rig.admin, alice.id, totp, kTestDeadline, executor, done);
+              }).ok());
 }
 
 TEST_F(AuthenticatorTest, AResetMeansEnrollingAgain) {
   const auto alice = rig.enrolled("alice");
-  ASSERT_TRUE(run(auth.reset_factors(rig.admin, alice.id)).ok());
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                auth->reset_factors(rig.admin, alice.id, kTestDeadline, executor, done);
+              }).ok());
   EXPECT_FALSE(read_value<std::optional<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
                  rig.directory->user(alice.id, kTestDeadline, executor, done);
                })->enrolled);

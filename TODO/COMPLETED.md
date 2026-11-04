@@ -172,6 +172,14 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
 - Callback style, genesis: one chain of steps (no one there yet, root, administrators, the
   membership, the password, the first sign-in, the audit entry), each holding copies of
   what it needs, so the `Genesis` built for the call may go at once. 353.
+- Callback style, the authenticator: every sign-in step, enrolment, removing a factor and
+  the reset. The rules are as they were (back-off before any hashing; the same work for a
+  known and an unknown name; the link spent only after the password is accepted; every
+  refusal audited), the steps now one chain each. One change of behaviour: a read that
+  could not happen part way through a sign-in used to throw out of the coroutine; it is now
+  answered `Step::Kind::failed`, the kind that was always meant for it. Every authn
+  component and the directory and audit log are now callback style; the routes, router
+  and node still reach them through the bridge. 353, in the debug, ASan and TSan builds.
 
 ## 2026-10-18: P5, the management API (not committed)
 

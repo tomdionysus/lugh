@@ -138,7 +138,9 @@ TEST_F(UserRoutesTest, TheFirstAdministratorEnrols) {
   EXPECT_EQ(issued.body.at("expires_at"), "2026-10-21T00:00:00Z");
   auto token = lugh::text_secret(std::string(issued.body.at("token").as_string()));
 
-  const auto redeemed = run(rig.authenticator->redeem(std::move(token), lugh::text_secret("correct horse battery"), "192.0.2.1"));
+  const auto redeemed = wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+    rig.authenticator->redeem(std::move(token), lugh::text_secret("correct horse battery"), "192.0.2.1", kTestDeadline, executor, done);
+  });
   ASSERT_EQ(redeemed.kind, lugh::authn::Step::Kind::next);
   EXPECT_EQ(redeemed.sign_in.user_id, id);
   EXPECT_EQ(rig.post("/api/v1/users/nobody/enrolment", "").status, 404u);

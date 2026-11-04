@@ -83,14 +83,18 @@ TEST_F(GenesisTest, EachGenesisAPasswordOfItsOwn) {
 
 TEST_F(GenesisTest, RootsFirstSignInIsEnrolment) {
   const auto password = genesis().value;
-  auto& auth = *rig.authenticator;
-  const auto first = run(auth.password("root", copy_of(password), kSource));
+  auto& auth = rig.authenticator;
+  const auto first = wait_for<lugh::authn::Step>(
+      [&](lugh::Executor executor, auto done) { auth->password("root", copy_of(password), kSource, kTestDeadline, executor, done); });
   ASSERT_EQ(first.kind, Kind::next);
   EXPECT_EQ(first.sign_in.stage, Stage::enrolment);
 
-  const auto setup = run(auth.enrol_begin(first.sign_in, kSource));
+  const auto setup = wait_for<lugh::Outcome<lugh::authn::TotpSetup>>(
+      [&](lugh::Executor executor, auto done) { auth->enrol_begin(first.sign_in, kSource, kTestDeadline, executor, done); });
   ASSERT_TRUE(setup.ok());
-  const auto done = run(auth.enrol_confirm(first.sign_in, setup.value.factor_id, rig.code_for(setup.value.secret), kSource));
+  const auto done = wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+    auth->enrol_confirm(first.sign_in, setup.value.factor_id, rig.code_for(setup.value.secret), kSource, kTestDeadline, executor, done);
+  });
   ASSERT_EQ(done.kind, Kind::next);
   EXPECT_EQ(done.sign_in.stage, Stage::complete);
   EXPECT_EQ(done.sign_in.reached, Assurance::mfa);
@@ -101,28 +105,41 @@ TEST_F(GenesisTest, RootsFirstSignInIsEnrolment) {
 
   // From then on, as anyone: the password, then a code.
   rig.advance(std::chrono::seconds(30));
-  const auto again = run(auth.password("root", copy_of(password), kSource));
+  const auto again = wait_for<lugh::authn::Step>(
+      [&](lugh::Executor executor, auto done) { auth->password("root", copy_of(password), kSource, kTestDeadline, executor, done); });
   ASSERT_EQ(again.kind, Kind::next);
   EXPECT_EQ(again.sign_in.stage, Stage::second_factor);
 }
 
 TEST_F(GenesisTest, TheFirstSignInHappensOnce) {
   const auto password = genesis().value;
-  auto& auth = *rig.authenticator;
-  const auto first = run(auth.password("root", copy_of(password), kSource));
-  const auto setup = run(auth.enrol_begin(first.sign_in, kSource)).value;
-  run(auth.enrol_confirm(first.sign_in, setup.factor_id, rig.code_for(setup.secret), kSource));
+  auto& auth = rig.authenticator;
+  const auto first = wait_for<lugh::authn::Step>(
+      [&](lugh::Executor executor, auto done) { auth->password("root", copy_of(password), kSource, kTestDeadline, executor, done); });
+  const auto setup = wait_for<lugh::Outcome<lugh::authn::TotpSetup>>([&](lugh::Executor executor, auto done) {
+                       auth->enrol_begin(first.sign_in, kSource, kTestDeadline, executor, done);
+                     }).value;
+  wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+    auth->enrol_confirm(first.sign_in, setup.factor_id, rig.code_for(setup.secret), kSource, kTestDeadline, executor, done);
+  });
 
   // Reset, root's password alone no longer opens enrolment: a new link must.
   const auto root = *read_value<std::optional<lugh::directory::User>>(
       [&](lugh::Executor executor, auto done) { rig.directory->user_by_name("root", kTestDeadline, executor, done); });
-  ASSERT_TRUE(run(auth.reset_factors(rig.admin, root.id)).ok());
-  EXPECT_EQ(run(auth.password("root", copy_of(password), kSource)).kind, Kind::refused);
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                auth->reset_factors(rig.admin, root.id, kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_EQ(wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+              auth->password("root", copy_of(password), kSource, kTestDeadline, executor, done);
+            }).kind,
+            Kind::refused);
 }
 
 TEST_F(GenesisTest, AWrongPasswordIsStillWrong) {
   genesis();
-  const auto step = run(rig.authenticator->password("root", text_secret("not the generated one"), kSource));
+  const auto step = wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+    rig.authenticator->password("root", text_secret("not the generated one"), kSource, kTestDeadline, executor, done);
+  });
   EXPECT_EQ(step.kind, Kind::refused);
   EXPECT_EQ(step.sign_in.stage, Stage::ended);
 }

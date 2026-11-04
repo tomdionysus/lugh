@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -23,6 +24,7 @@
 #include "lugh/authn/factors.h"
 #include "lugh/authn/passwords.h"
 #include "lugh/authn/policy.h"
+#include "lugh/core/completion.h"
 #include "lugh/core/outcome.h"
 #include "lugh/core/secret.h"
 #include "lugh/core/task.h"
@@ -92,10 +94,11 @@ struct Step {
 
 // Signing in: a password, then a second factor, as the user's policy requires; or, from an
 // enrolment link, a new password, then a second factor enrolled. Every step is audited, and
-// failures back off per account and per source address. Every step is a coroutine: the
-// hashing runs on the hashing pool and the records on the store, and neither holds the
-// caller's thread.
-class Authenticator {
+// failures back off per account and per source address. Every step takes Dannan's shape
+// (core/completion.h): the hashing runs on the hashing pool and the records on the store,
+// and the caller is answered on its own executor, `failed` when a read could not happen or
+// the deadline passed. Made with std::make_shared.
+class Authenticator : public std::enable_shared_from_this<Authenticator> {
  public:
   struct Settings {
     Backoff::Rules account{};
@@ -115,35 +118,37 @@ class Authenticator {
 
   // A name or an address, and a password. On `next`, the sign-in is at the second factor,
   // at enrolment (root's first), or complete.
-  Task<Step> password(std::string login, Secret password, std::string source);
+  void password(std::string login, Secret password, std::string source, Deadline deadline, Executor executor, Done<Step> done);
 
-  Task<Step> totp(SignIn sign_in, std::string code, std::string source);
-  Task<Step> recovery(SignIn sign_in, Secret code, std::string source);
+  void totp(SignIn sign_in, std::string code, std::string source, Deadline deadline, Executor executor, Done<Step> done);
+  void recovery(SignIn sign_in, Secret code, std::string source, Deadline deadline, Executor executor, Done<Step> done);
 
   // An enrolment link and the password to set. On `next`, the sign-in is at enrolment. The
   // link is spent only once the password has been accepted, so a refused password leaves
   // it working.
-  Task<Step> redeem(Secret token, Secret password, std::string source);
+  void redeem(Secret token, Secret password, std::string source, Deadline deadline, Executor executor, Done<Step> done);
 
   // At enrolment: a TOTP secret to show, then a code from it. On `next` the user is
   // enrolled, signed in, and given their recovery codes.
-  Task<Outcome<TotpSetup>> enrol_begin(SignIn sign_in, std::string source);
-  Task<Step> enrol_confirm(SignIn sign_in, std::string factor_id, std::string code, std::string source);
+  void enrol_begin(SignIn sign_in, std::string source, Deadline deadline, Executor executor, Done<Outcome<TotpSetup>> done);
+  void enrol_confirm(SignIn sign_in, std::string factor_id, std::string code, std::string source, Deadline deadline, Executor executor, Done<Step> done);
 
   // Removes a factor, refusing the user's last while their policy requires one.
-  Task<Outcome<>> remove_factor(audit::Actor actor, std::string user_id, std::string factor_id);
+  void remove_factor(audit::Actor actor, std::string user_id, std::string factor_id, Deadline deadline, Executor executor, Done<Outcome<>> done);
 
   // An administrator's reset for a user who has lost every factor: they all go, and the user
   // must enrol again through a new link. P6 adds revoking every session and token.
-  Task<Outcome<>> reset_factors(audit::Actor actor, std::string user_id);
+  void reset_factors(audit::Actor actor, std::string user_id, Deadline deadline, Executor executor, Done<Outcome<>> done);
 
  private:
+  using Then = std::function<void()>;
+
   bool _live(SignIn& sign_in, SignIn::Stage stage) const;
   std::optional<std::chrono::seconds> _waiting(const std::string& account, const std::string& address) const;
   void _failed(const std::string& account, const std::string& address);
-  Task<Step> _code_refused(SignIn sign_in, std::string source, std::string action);
-  Task<Step> _complete(SignIn sign_in, std::string source);
-  Task<void> _audit(std::string action, std::string actor, std::string subject, std::string source, std::string detail = {});
+  void _code_refused(SignIn sign_in, std::string source, std::string action, Executor executor, Done<Step> done);
+  void _complete(SignIn sign_in, std::string source, Executor executor, Done<Step> done);
+  void _record(std::string action, std::string actor, std::string subject, std::string source, std::string detail, Executor executor, Then then);
 
   dannan::status::ScopedLogger _logger;
   const dannan::contract::TimeSource& _time;

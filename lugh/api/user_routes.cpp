@@ -224,7 +224,9 @@ Task<void> UserRoutes::_remove_factor(http::RouteContext context) {
     context.done();
     co_return;
   }
-  const auto removed = co_await _authenticator->remove_factor(actor_of(context), id, key);
+  const auto removed = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+    _authenticator->remove_factor(actor_of(context), id, key, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!removed.ok()) {
     write_fault(context.response, removed);
     context.done();
@@ -239,7 +241,9 @@ Task<void> UserRoutes::_reset_factors(http::RouteContext context) {
     context.done();
     co_return;
   }
-  const auto reset = co_await _authenticator->reset_factors(actor_of(context), context.parameter("id"));
+  const auto reset = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+    _authenticator->reset_factors(actor_of(context), context.parameter("id"), kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!reset.ok()) {
     write_fault(context.response, reset);
     context.done();

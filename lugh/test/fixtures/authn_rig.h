@@ -99,11 +99,16 @@ class AuthnRig {
     const auto token =
         wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) { links->issue(admin, user.id, kTestDeadline, executor, done); });
     EXPECT_TRUE(token.ok()) << token.message;
-    const auto redeemed = run(authenticator->redeem(copy_of(token.value), lugh::text_secret(password), "192.0.2.1"));
+    const auto redeemed = wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+      authenticator->redeem(copy_of(token.value), lugh::text_secret(password), "192.0.2.1", kTestDeadline, executor, done);
+    });
     EXPECT_EQ(redeemed.kind, lugh::authn::Step::Kind::next);
-    auto setup = run(authenticator->enrol_begin(redeemed.sign_in, "192.0.2.1"));
+    auto setup = wait_for<lugh::Outcome<lugh::authn::TotpSetup>>(
+        [&](lugh::Executor executor, auto done) { authenticator->enrol_begin(redeemed.sign_in, "192.0.2.1", kTestDeadline, executor, done); });
     EXPECT_TRUE(setup.ok()) << setup.message;
-    auto done = run(authenticator->enrol_confirm(redeemed.sign_in, setup.value.factor_id, code_for(setup.value.secret), "192.0.2.1"));
+    auto done = wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+      authenticator->enrol_confirm(redeemed.sign_in, setup.value.factor_id, code_for(setup.value.secret), "192.0.2.1", kTestDeadline, executor, done);
+    });
     EXPECT_EQ(done.kind, lugh::authn::Step::Kind::next);
     secret = copy_of(setup.value.secret);
     recovery = std::move(done.recovery_codes);
