@@ -40,13 +40,14 @@ them.
 ## Building and testing
 
 ```
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DLUGH_BUILD_TESTING=ON \
-  -DLUGH_WARNINGS_AS_ERRORS=ON -DCMAKE_PREFIX_PATH="/opt/local/libexec/boost/1.88;/opt/local" \
-  -DOPENSSL_ROOT_DIR=/opt/local
-cmake --build build -j8
+cmake --preset debug && cmake --build build -j8
 ./build/lugh_tests
 ctest --test-dir build
 ```
+
+Lugh keeps CMake presets, the stack's one exception (the maintainer, 2026-11-04: "because
+of auth"): `debug` (into `build/`), `release`, `asan`, `tsan` and `fuzz`, each into
+`build-<preset>/` except `debug`. They carry the MacPorts paths.
 
 Dannan is fetched from `../dannan` at the commit `LUGH_DANNAN_COMMIT` names, into
 the build tree; building Lugh never touches the sibling checkout.
@@ -55,10 +56,19 @@ Run `lugh_tests` for the unit suite. `ctest` runs it too, beside what only a
 whole process shows: the shutdown, `init` and API tests in `test/process/`,
 which drive the real `lugh-node`, and the IoC check. Everything runs on a
 developer machine (MacPorts for every dependency on the laptop); there is no
-hosted CI. Sanitizers (`-DLUGH_SANITIZE=address` or `thread`, which instrument
-Dannan too) run before a release, or to hunt a bug that cannot be pinned any
-other way. `-DLUGH_BUILD_FUZZING=ON` builds the fuzz targets under a clang that
+hosted CI. `-DLUGH_BUILD_FUZZING=ON` builds the fuzz targets under a clang that
 has libFuzzer.
+
+Sanitizers run routinely in Lugh: every phase ends with `lugh_tests` and
+`ctest` passing under AddressSanitizer with UndefinedBehaviorSanitizer
+(`--preset asan`) and ThreadSanitizer (`--preset tsan`), both of which
+instrument Dannan too.
+This is Lugh's one stated exception to the stack's rule of sanitizers before a
+release: Lugh holds every credential (the maintainer, 2026-11-04). Under ASan the test
+binary turns off container-overflow detection (`lugh/test/sanitizer_options.cpp`):
+GoogleTest from MacPorts is not instrumented, and where its copy of libc++'s
+container code meets the instrumented one ASan reports an overflow that is not
+one.
 
 Tests write only inside the build tree: Dannan's `TempDir` (`build/test-tmp`),
 and `TMPDIR` there for the process tests. Time is stepped (Dannan's
@@ -106,8 +116,7 @@ CLAUDE.md, CONTRIBUTING.md   the rules (CLAUDE.md is gitignored globally)
 
 Lugh's own beside these: `test/process/`, the tests that drive the real
 `lugh-node`; `config/`, the shipped configuration; `deploy/`, the systemd unit
-and host preparation. Lugh still has `CMakePresets.json` while the maintainer decides
-presets for all three.
+and host preparation; and `CMakePresets.json`, which Dannan and Dagda do not have.
 
 A file pair holds one component: a class and what serves only it. Names are
 `snake_case` files, `PascalCase` types, `_member`s, namespaces

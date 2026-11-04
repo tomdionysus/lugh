@@ -97,6 +97,15 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   is pinned to bd2f720. Finding: a write now makes the directories its file needs, where
   Lugh's refused; the test says so. At Lugh's request Dannan makes them 0700, one level at
   a time, as Lugh's own did (Dannan 7f02e58, Lugh's pin), and the test checks it.
+- The rules follow the maintainer's decisions of 2026-11-04: Lugh keeps its presets (the `fuzz`
+  preset's option is fixed: `LUGH_BUILD_FUZZING`, not the old `LUGH_FUZZ`) and runs the
+  sanitizers routinely, its two exceptions to the stack. The stale `build-asan` and
+  `build-tsan` trees from the old layout were deleted and built afresh. Under ASan and UBSan
+  and under TSan, `lugh_tests` (335) and `ctest` (5) pass. Finding: ASan stopped the test
+  binary as GoogleTest registered its tests, with a false container overflow where
+  MacPorts' uninstrumented GoogleTest meets libc++'s annotated containers; the ASan test
+  binary now turns container-overflow detection off (`lugh/test/sanitizer_options.cpp`),
+  every other check on.
 
 ## 2026-10-18: P5, the management API (not committed)
 

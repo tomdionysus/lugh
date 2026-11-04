@@ -48,7 +48,7 @@
       "inherits": "base",
       "displayName": "libFuzzer targets, with ASan and UBSan; needs a clang with libFuzzer",
       "cacheVariables": {
-        "LUGH_FUZZ": "ON",
+        "LUGH_BUILD_FUZZING": "ON",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
     }

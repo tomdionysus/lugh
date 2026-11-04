@@ -9,17 +9,34 @@ What is being worked on now and what comes next. When an item ships, move it to 
 Not next: the keyring's root from Dannan's key custody. The sealed store and `keys/` are frozen until Dagda carries Lugh's spaces and are deleted then (the maintainer: "Keep the store until Dagda"; the stack document's table), when Lugh's keys come from Dagda's domains under Dannan's custody through the Context (`derive_local`, `derive_key`). Rewiring them now would be work on code that is going. Until then they are changed only as far as the rest of the alignment needs.
 
 Next, in order:
-1. Callback style throughout (the maintainer: "Lugh goes callback style"): Dannan's shape, one shared state per operation on a strand, the deadline and the caller's executor, completion posted there and never inline. `Task<T>`, `offload` and `AsyncMutex` go.
-2. Conventions: Dannan's warning set (`-Wshadow -Wconversion`); throwing instead of `Result` where Dannan's error rule says so; sanitizers before a release only; presets as the maintainer decides for all three.
-3. `docs/architecture.md` rewritten around the stack: what Lugh is (the directory and its sign-in) on top of Dannan (network, identity, crypto) and Dagda (the store).
+1. Process tests in GoogleTest, and no Python anywhere (the maintainer, 2026-11-04, for all the projects): `test/process/{shutdown,init,api}_test.py` become GoogleTest tests that start the real `lugh-node`, and the IoC check (`tools/lugh_ioc_check.py`) moves out of Python too.
+2. Callback style (the maintainer: "Lugh goes callback style"; Dannan's shape: one shared state per operation on a strand, the deadline and the caller's executor, completion posted there and never inline) for the directory, authn, API, HTTP and node layers. The frozen sealed store, keyring, `Files` and `Console` keep their coroutines behind a thin adapter until Dagda replaces them (the maintainer, 2026-11-04). `Task<T>`, `offload` and `AsyncMutex` go with the last of their users.
+3. Errors as `CONTRIBUTING.md` says (throw what could not happen), with the callback change.
+4. `docs/architecture.md` rewritten around the stack.
 
 Not yet tried on Linux: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DONTDUMP` are written for Ubuntu 26.04's systemd and kernel, and only the macOS paths have run. Check them on the first node.
 
 ## Waiting on the maintainer
 
-- The open questions in `docs/architecture.md`, "Still open". Question 1 (node identity) is now Dannan's node identity; question 2 (single-use grants) is needed by P6 and P8; question 14 (Lugh's hostname) by P13.
-- Durability of Lugh's writes on Dagda (Dagda's requirements document, section 8 item 1). The maintainer has decided every Dagda write carries a level the caller picks: Ephemeral, Persisted (one node) or Durable (every node of the replication set). Proposed for Lugh: Durable for credential and factor changes, revocations, disables, groups, memberships, policies and the audit chain; Persisted for node-local spaces (sessions, grants, TOTP steps); nothing Ephemeral. `lugh/scope` is every-node, so a Durable write with a node down waits for its deadline and comes back with evidence naming the pending node, though it has landed everywhere reachable. Proposed: Lugh answers success, "applied, n nodes pending", and records the same in the audit log, clearing it when the write's ticket reports the last node; or the maintainer adds "k of N" for credential changes and revocations. Dagda's evidence names each node by Dannan node id with its state.
-- From the stack document: single-node revocation, the node key custody standard, TOTP replay across nodes, the partition bound, uniqueness by name, the trust boundary, Lugh's message type block (proposed 2048-3071), and whether all three projects keep CMake presets.
+- The open questions in `docs/architecture.md`, "Still open": question 2 (single-use grants) is needed by P6 and P8, question 14 (Lugh's hostname) by P13.
+
+## Decided (the maintainer, 2026-11-04)
+
+From this session and the stack document's "Decided" section (`../dagda/TODO/2026-11-03-stack.md`):
+
+- **Callback style** leaves the frozen store, keyring, files and console code alone, behind an adapter, until Dagda.
+- **Durability on Dagda**: four levels, Ephemeral, Persisted (one node), Replicated (k nodes, k per space, default 2) and Durable (every available replica, dead nodes skipped). Credential and factor changes and revocations are Replicated. Where a write leaves nodes pending, Lugh answers success, "applied, n nodes pending", records the same in the audit log, and clears it when the write's ticket reports the last node.
+- **Presets**: Lugh keeps its CMake presets, the stack's one exception, "because of auth".
+- **Sanitizers** run routinely in Lugh (ASan with UBSan, and TSan, at the end of every phase), its exception to the stack's before-a-release rule.
+- **No Python** in any project; process tests are GoogleTest.
+- **Sessions are replicated** across Lugh nodes, with `lugh/secrets` (Lugh nodes only), so a session works at any Lugh node; the space is Lugh's design. Single-use grants and TOTP steps stay node-local or a lease.
+- **Lugh's domains**: `lugh/scope` (every node a member) and `lugh/secrets` (Lugh nodes). Merge keeps tombstones forever; ETags are Lugh's version checked inside Dagda's `mutate_local`.
+- **The scope seam is Dannan's**: Dannan declares `contract::ScopeSource` and `Identity::verify`, and Lugh installs the source.
+- **Message types**: Dannan's core types are 1 to 511; Lugh registers its own from 512, with no per-project block.
+- **One process per node**: `lugh-node` is a Dannan node, as its own user. Node revocation is CA-signed, in Dannan's step 10.
+- **HTTP stays Lugh's**; token verification does not move to Dannan; Lir's authentication is pluggable, and a Lugh plugin there depends on Lugh.
+- **Accepted limits**: the partition bound and the trust boundary.
+- **Dannan 0.2.0** will be a tag with install and export targets (`find_package(dannan 0.2 CONFIG)`, `dannan::dannan`); Lugh pins it once it is cut, in place of the commit.
 
 ## Plan
 

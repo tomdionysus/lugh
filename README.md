@@ -41,8 +41,8 @@ cmake --preset debug && cmake --build build -j8
 ```
 
 Warnings are errors and hardening is on, by default. `--preset asan`, `--preset tsan` and
-`--preset fuzz` (which needs a clang with libFuzzer: on a Mac, Homebrew's) are part of
-finishing a phase, not something kept for releases.
+`--preset fuzz` (which needs a clang with libFuzzer) are part of finishing a phase, not
+something kept for releases.
 
 ## Run
 
