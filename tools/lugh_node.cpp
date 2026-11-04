@@ -24,6 +24,7 @@
 
 #include "dannan/identity/secure_memory.h"
 #include "dannan/status/log.h"
+#include "lugh/api/app_password_routes.h"
 #include "lugh/api/app_routes.h"
 #include "lugh/api/audit_routes.h"
 #include "lugh/api/group_routes.h"
@@ -145,6 +146,7 @@ struct Services {
   std::shared_ptr<scopes::Grants> grants;
   std::shared_ptr<tokens::SigningKeys> keys;
   std::shared_ptr<session::Sessions> sessions;
+  std::shared_ptr<authn::AppPasswords> app_passwords;
 };
 
 // The cluster's birth, once its first keyring is saved: the store under it, then root,
@@ -260,6 +262,8 @@ Task<Result<Services>> start(Ports ports, Config config) {
   services.factors = std::make_shared<authn::Factors>(ports.log, store, ports.wall, services.audit, ports.hashing);
   services.directory->dependent_add(passwords);
   services.directory->dependent_add(services.factors);
+  services.app_passwords = std::make_shared<authn::AppPasswords>(store, ports.wall, services.directory, services.audit, ports.hashing);
+  services.directory->dependent_add(services.app_passwords);
   services.policies = std::make_shared<authn::Policies>(store, services.directory, services.audit);
   services.links = std::make_shared<authn::EnrolmentLinks>(store, ports.wall, services.directory, services.audit);
   apps::Apps::Settings app_settings;
@@ -379,6 +383,8 @@ int run(const cli::Options& options) {
   key_routes.register_routes(*router);
   api::MeRoutes me_routes(services.directory, services.sessions);
   me_routes.register_routes(*router);
+  api::AppPasswordRoutes app_password_routes(services.app_passwords);
+  app_password_routes.register_routes(*router);
   auto pre_sessions = std::make_shared<session::PreSessions>(time, authn::Authenticator::Settings{}.lifetime);
   signin::Pages pages(services.authenticator, services.directory, services.sessions, pre_sessions);
   pages.register_routes(*router);

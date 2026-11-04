@@ -8,6 +8,7 @@
 # One binary, lugh_tests, flat: <subsystem>_<thing>_test.cpp, with header-only fixtures
 # in lugh/test/fixtures/, included as "lugh/test/fixtures/x.h".
 add_executable(lugh_tests
+    api_app_password_routes_test.cpp
     api_app_routes_test.cpp
     api_audit_routes_test.cpp
     api_concurrency_test.cpp
@@ -19,6 +20,7 @@ add_executable(lugh_tests
     apps_app_test.cpp
     apps_test.cpp
     audit_log_test.cpp
+    authn_app_passwords_test.cpp
     authn_authenticator_test.cpp
     authn_backoff_test.cpp
     authn_enrolment_links_test.cpp

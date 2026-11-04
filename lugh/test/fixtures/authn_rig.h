@@ -14,6 +14,7 @@
 #include "dannan/test/fixtures/stepped_time.h"
 #include "lugh/apps/apps.h"
 #include "lugh/audit/audit_log.h"
+#include "lugh/authn/app_passwords.h"
 #include "lugh/authn/authenticator.h"
 #include "lugh/authn/totp.h"
 #include "lugh/core/encoding.h"
@@ -61,6 +62,8 @@ class AuthnRig {
     factors = std::make_shared<lugh::authn::Factors>(logger, store, wall, audit, test_pool(), kTestArgon2);
     directory->dependent_add(passwords);
     directory->dependent_add(factors);
+    app_passwords = std::make_shared<lugh::authn::AppPasswords>(store, wall, directory, audit, test_pool(), kTestArgon2);
+    directory->dependent_add(app_passwords);
     policies = std::make_shared<lugh::authn::Policies>(store, directory, audit);
     links = std::make_shared<lugh::authn::EnrolmentLinks>(store, wall, directory, audit);
     lugh::apps::Apps::Settings app_settings;
@@ -141,6 +144,7 @@ class AuthnRig {
   std::shared_ptr<lugh::directory::Directory> directory;
   std::shared_ptr<lugh::authn::Passwords> passwords;
   std::shared_ptr<lugh::authn::Factors> factors;
+  std::shared_ptr<lugh::authn::AppPasswords> app_passwords;
   std::shared_ptr<lugh::authn::Policies> policies;
   std::shared_ptr<lugh::authn::EnrolmentLinks> links;
   std::shared_ptr<lugh::apps::Apps> apps;

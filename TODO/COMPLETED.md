@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O6 (LDAP's L2), app passwords
+
+- `lugh/authn/app_passwords.h`: app passwords in the sealed `app_passwords` table, keyed `<user>/<instance>`. 160 random bits as 32 base32 characters, shown once in lower-case groups of four, typed any case with or without dashes; the first four characters select the record, so a guess costs one Argon2id hash, and a miss costs the same. Each carries a name, a scope set (`lugh:directory.read` unless its creator says otherwise, the maintainer), and optionally the networks it may be used from; it is revoked alone, stops working when its user is disabled, and goes with its user. At most 32 per user. Every change audited.
+- The routes: an administrator's for any user under `lugh:credentials.write`, and the caller's own under `/api/v1/me/app-passwords`, never with a scope the caller does not hold.
+- Not yet: using one. The LDAP bind (L4) checks it with the sign-in's back-off and cuts its scopes to what its owner's groups grant at that moment.
+- Tests: 435 to 443, green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: P6 step O5, sessions and the sign-in pages
 
 - `lugh/session/`: the Lugh session (`Sessions`), in the sealed `sessions` table keyed by the SHA-256 of a 256-bit handle, held in memory so a request resolves without waiting; 24 hours idle, 30 days at most (the maintainer); a CSRF token per session; ended by signing out, by expiry, and when its user is disabled or removed. `refresh()`, run by the node every minute, reads each session's user and scopes again and saves when it was last seen. The sign-in in progress (`PreSessions`) is in memory on its node, under a visitor cookie that every form's CSRF token is made from with a per-process key; nothing is held for a visitor until a password is accepted, and past 10,000 the oldest is dropped.

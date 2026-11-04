@@ -81,6 +81,10 @@ the client reads again. Policies are settings written whole with `PUT`, and memb
 | `PATCH /api/v1/users/{id}` | directory.write | `{name?, email?, display_name?, given_name?, family_name?, disabled?}`, with `If-Match` |
 | `DELETE /api/v1/users/{id}` | directory.write | With `If-Match`: the user, their memberships, password and factors. Final |
 | `GET /api/v1/users/{id}/groups` | directory.read | Their groups |
+| `GET /api/v1/users/{id}/app-passwords` | directory.read | Their app passwords: `id`, `name`, `scopes`, `networks`, `created_at`; never the password |
+| `POST /api/v1/users/{id}/app-passwords` | credentials.write | `{name, scopes?, networks?}`: a new app password, `201` with `password` shown this once. `scopes` defaults to `lugh:directory.read`; at most 32 per user |
+| `DELETE /api/v1/users/{id}/app-passwords/{app_password}` | credentials.write | Revokes it alone |
+| `GET`, `POST /api/v1/me/app-passwords`, `DELETE /api/v1/me/app-passwords/{app_password}` | any caller | The same for the caller's own, never with a scope the caller does not hold |
 | `GET /api/v1/users/{id}/factors` | directory.read | Their factors: `id`, `kind`, `confirmed`, `created_at`, and `remaining` for recovery codes |
 | `DELETE /api/v1/users/{id}/factors/{factor}` | credentials.write | One factor; `409 refused` for the last while policy needs one |
 | `POST /api/v1/users/{id}/factors/reset` | credentials.write | Every factor gone and the user not enrolled, for one who lost them all |

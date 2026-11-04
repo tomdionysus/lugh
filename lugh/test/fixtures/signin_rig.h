@@ -12,6 +12,7 @@
 #include <string>
 
 #include "dannan/encoding/percent.h"
+#include "lugh/api/app_password_routes.h"
 #include "lugh/api/me_routes.h"
 #include "lugh/api/user_routes.h"
 #include "lugh/session/pre_sessions.h"
@@ -62,20 +63,34 @@ class SigninRig : public AuthnRig {
     me->register_routes(*router);
     users = std::make_unique<lugh::api::UserRoutes>(directory, factors, authenticator, links);
     users->register_routes(*router);
+    own_app_passwords = std::make_unique<lugh::api::AppPasswordRoutes>(app_passwords);
+    own_app_passwords->register_routes(*router);
   }
 
   // One request as a browser makes it, with its cookies; Set-Cookie answers kept.
   Page request(lugh::http::verb method, const std::string& target, const std::map<std::string, std::string>& form = {},
                std::vector<std::pair<std::string, std::string>> headers = {}) {
-    std::string cookie_header;
-    for (const auto& [name, value] : jar) cookie_header += (cookie_header.empty() ? "" : "; ") + name + "=" + value;
-    if (!cookie_header.empty()) headers.emplace_back("Cookie", cookie_header);
     std::string body;
     for (const auto& [name, value] : form) {
       body += (body.empty() ? "" : "&") + dannan::encoding::percent_encode(name, dannan::encoding::PercentSet::form()) + "=" +
               dannan::encoding::percent_encode(value, dannan::encoding::PercentSet::form());
     }
     if (!form.empty()) headers.emplace_back("Content-Type", "application/x-www-form-urlencoded");
+    return send(method, target, body, std::move(headers));
+  }
+
+  // A JSON body to the API, with the session's cookie and its CSRF token, as the dashboard
+  // will send it.
+  Page json(lugh::http::verb method, const std::string& target, const std::string& body) {
+    const auto about = boost::json::parse(get("/api/v1/me").body);
+    const auto token = std::string(about.at("session").at("csrf_token").as_string());
+    return send(method, target, body, {{"Content-Type", "application/json"}, {"X-CSRF-Token", token}});
+  }
+
+  Page send(lugh::http::verb method, const std::string& target, const std::string& body, std::vector<std::pair<std::string, std::string>> headers) {
+    std::string cookie_header;
+    for (const auto& [name, value] : jar) cookie_header += (cookie_header.empty() ? "" : "; ") + name + "=" + value;
+    if (!cookie_header.empty()) headers.emplace_back("Cookie", cookie_header);
 
     const char* prefix = target.rfind("/api", 0) == 0 ? "/api" : (target.rfind("/signout", 0) == 0 ? "/signout" : "/signin");
     const auto result = call(io, router->middleware(prefix), method, target, "192.0.2.80", body, headers);
@@ -117,5 +132,6 @@ class SigninRig : public AuthnRig {
   std::unique_ptr<lugh::signin::Pages> pages;
   std::unique_ptr<lugh::api::MeRoutes> me;
   std::unique_ptr<lugh::api::UserRoutes> users;
+  std::unique_ptr<lugh::api::AppPasswordRoutes> own_app_passwords;
   std::map<std::string, std::string> jar;
 };
