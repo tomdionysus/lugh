@@ -49,7 +49,7 @@ find_package(OpenSSL 3.0 REQUIRED)
 # carries them (the maintainer, 2026-11-03).
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_COMMIT "bd2f720c7d3a4a0248c329c27730ad2e270205b2")
+set(LUGH_DANNAN_COMMIT "7f02e5813a561df7d0c61e0e4d4867b39287e688")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)

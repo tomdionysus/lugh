@@ -95,8 +95,8 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   two inits racing exactly one makes the keyring, and Dannan's own key custody had the
   same race, now closed). Lugh's temporary, sync, rename and link code is deleted. Dannan
   is pinned to bd2f720. Finding: a write now makes the directories its file needs, where
-  Lugh's refused; the test says so. Dannan makes them with the process umask, where Lugh
-  made its own 0700; asked of Dannan whether its should be owner-only.
+  Lugh's refused; the test says so. At Lugh's request Dannan makes them 0700, one level at
+  a time, as Lugh's own did (Dannan 7f02e58, Lugh's pin), and the test checks it.
 
 ## 2026-10-18: P5, the management API (not committed)
 

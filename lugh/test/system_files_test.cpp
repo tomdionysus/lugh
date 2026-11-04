@@ -148,11 +148,15 @@ TEST(SystemFiles, AppendDoesNotFollowSymlinks) {
   EXPECT_EQ(run(files.read(target.string(), 100)).value, bytes("content"));
 }
 
-// Dannan's durable writes make the directories a file needs.
-TEST(SystemFiles, AWriteMakesTheDirectoriesItNeeds) {
+// Dannan's durable writes make the directories a file needs, owner-only, as the file is.
+TEST(SystemFiles, AWriteMakesTheDirectoriesItNeedsOwnerOnly) {
   TempDirectory dir;
   SystemFiles files(test_pool());
-  const auto path = (dir.path() / "missing" / "keyring").string();
+  const auto path = (dir.path() / "missing" / "deeper" / "keyring").string();
   ASSERT_TRUE(run(files.write(path, bytes("x"), false)).ok);
   EXPECT_EQ(run(files.read(path, 100)).value, bytes("x"));
+  for (const auto& made : {dir.path() / "missing", dir.path() / "missing" / "deeper"}) {
+    const auto permissions = std::filesystem::status(made).permissions();
+    EXPECT_EQ(permissions & std::filesystem::perms::all, std::filesystem::perms::owner_all) << made;
+  }
 }
