@@ -591,3 +591,72 @@ TEST_F(OAuthFlowTest, TlsClientAuthAndCertificateBoundTokens) {
   other_certificate.emplace_back("Authorization", "Bearer " + access);
   EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, other_certificate).status, 401u);
 }
+
+// RFC 8628: the TV asks, its user approves on a phone, the TV polls for its tokens.
+TEST_F(OAuthFlowTest, TheDeviceGrant) {
+  lugh::apps::App draft;
+  draft.name = "TV";
+  draft.kind = lugh::apps::Kind::native;
+  draft.grants = lugh::apps::kDeviceCode | lugh::apps::kRefreshToken;
+  draft.scopes = {"openid", "profile"};
+  draft.first_party = true;
+  const auto made = wait_for<lugh::Outcome<lugh::apps::Apps::Made>>(
+      [&](lugh::Executor executor, auto done) { rig.apps->create(rig.admin, draft, kTestDeadline, executor, done); });
+  ASSERT_TRUE(made.ok()) << made.message;
+  const auto id = made.value.app.client_id;
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::apps::App>>([&](lugh::Executor executor, auto done) {
+                rig.apps->access_set(rig.admin, id, staff.id, true, kTestDeadline, executor, done);
+              }).ok());
+
+  const auto asked = rig.post("/oauth2/device", {{"client_id", id}, {"scope", "openid profile"}});
+  ASSERT_EQ(asked.status, 200u) << asked.body;
+  const auto codes = boost::json::parse(asked.body);
+  const auto device_code = std::string(codes.at("device_code").as_string());
+  const auto user_code = std::string(codes.at("user_code").as_string());
+  EXPECT_EQ(codes.at("verification_uri"), boost::json::value(std::string(SigninRig::kIssuer) + "/signin/device"));
+  EXPECT_EQ(codes.at("interval"), 5);
+  const auto poll = [&] {
+    return boost::json::parse(
+        rig.post("/oauth2/token", {{"grant_type", "urn:ietf:params:oauth:grant-type:device_code"}, {"device_code", device_code}, {"client_id", id}}).body);
+  };
+  EXPECT_EQ(poll().at("error"), "authorization_pending");
+
+  // The user, on another device: signs in on the way, carrying the code.
+  const auto first = rig.get("/signin/device?user_code=" + user_code);
+  ASSERT_EQ(first.status, 303u);
+  const auto form = rig.get(first.location());
+  const auto resume = form.between("name=\"continue\" value=\"", "\"");
+  ASSERT_EQ(resume.rfind("device-", 0), 0u);
+  rig.post("/signin", {{"csrf", form.csrf()}, {"login", "alice"}, {"password", kPassword}, {"continue", resume}});
+  const auto factor = rig.get("/signin/factor");
+  const auto back = rig.post("/signin/factor", {{"csrf", factor.csrf()}, {"code", rig.code_for(rig.secret)}});
+  ASSERT_EQ(back.location().rfind("/signin/device?user_code=", 0), 0u) << back.location();
+  const auto approval = rig.get(back.location());
+  ASSERT_EQ(approval.status, 200u) << approval.body;
+  EXPECT_TRUE(approval.says("Connect TV?"));
+  EXPECT_TRUE(approval.says(user_code));
+  const auto allowed = rig.post("/signin/device", {{"csrf", approval.csrf()}, {"user_code", user_code}, {"decision", "allow"}});
+  EXPECT_TRUE(allowed.says("Your device is signed in"));
+
+  rig.advance(std::chrono::seconds(10));
+  const auto tokens = poll();
+  ASSERT_TRUE(tokens.as_object().contains("access_token")) << boost::json::serialize(tokens);
+  EXPECT_TRUE(tokens.as_object().contains("id_token"));
+  EXPECT_TRUE(tokens.as_object().contains("refresh_token"));
+  EXPECT_EQ(claims_of(std::string(tokens.at("access_token").as_string())).at("sub"), boost::json::value(alice.id));
+  // Answered once.
+  rig.advance(std::chrono::seconds(10));
+  EXPECT_EQ(poll().at("error"), "invalid_grant");
+
+  // A code typed wrong is said so; a denied one ends with access_denied.
+  EXPECT_TRUE(rig.get("/signin/device?user_code=BCDF-GHJK").says("not one waiting"));
+  const auto second = boost::json::parse(rig.post("/oauth2/device", {{"client_id", id}}).body);
+  const auto page = rig.get("/signin/device?user_code=" + std::string(second.at("user_code").as_string()));
+  rig.post("/signin/device", {{"csrf", page.csrf()}, {"user_code", std::string(second.at("user_code").as_string())}, {"decision", "deny"}});
+  EXPECT_EQ(boost::json::parse(rig.post("/oauth2/token", {{"grant_type", "urn:ietf:params:oauth:grant-type:device_code"},
+                                                          {"device_code", std::string(second.at("device_code").as_string())},
+                                                          {"client_id", id}})
+                                   .body)
+                .at("error"),
+            "access_denied");
+}

@@ -60,7 +60,12 @@ std::string resume_of(const std::string& text) {
 
 // Where a finished sign-in goes: back to the authorisation request waiting on it, or to the
 // signed-in page.
-std::string done_target(const std::string& resume) { return resume.empty() ? "/signin/done" : "/oauth2/authorize/resume?id=" + resume; }
+std::string done_target(const std::string& resume) {
+  if (resume.empty()) return "/signin/done";
+  // A device's user signing in on the way to approving it (RFC 8628).
+  if (resume.rfind("device-", 0) == 0) return "/signin/device?user_code=" + resume.substr(7);
+  return "/oauth2/authorize/resume?id=" + resume;
+}
 
 std::string password_form(const std::string& csrf, const std::string& warning, const std::string& login, const std::string& resume = "") {
   const auto carried = resume.empty() ? std::string() : "<input type=\"hidden\" name=\"continue\" value=\"" + escape(resume) + "\">\n";

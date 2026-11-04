@@ -15,6 +15,7 @@
 #include "lugh/http/router.h"
 #include "lugh/oauth/client_auth.h"
 #include "lugh/oauth/consents.h"
+#include "lugh/oauth/device_grants.h"
 #include "lugh/oauth/dpop.h"
 #include "lugh/oauth/expiring.h"
 #include "lugh/oauth/issuer.h"
@@ -45,7 +46,10 @@ struct Pushed {
 //   GET  /oauth2/consent            what a third-party application asks for, to allow or deny
 //   POST /oauth2/consent
 //   POST /oauth2/par                a pushed request (RFC 9126)
-//   POST /oauth2/token              authorization_code with PKCE, refresh_token, client_credentials
+//   POST /oauth2/device             a device's request for a user code (RFC 8628)
+//   GET, POST /signin/device        its user, signed in, approving or denying it
+//   POST /oauth2/token              authorization_code with PKCE, refresh_token, the device
+//                                   code, client_credentials
 //   POST /oauth2/revoke             a refresh token's family, or an access token (RFC 7009)
 //   POST /oauth2/introspect         whether a token is active, and its claims (RFC 7662)
 //   GET, POST /oauth2/userinfo      the person's claims, for an access token with openid
@@ -64,6 +68,7 @@ class FlowRoutes {
     std::shared_ptr<ClientAuthenticator> clients;
     std::shared_ptr<RefreshTokens> refresh;
     std::shared_ptr<DpopChecker> dpop;
+    std::shared_ptr<DeviceGrants> devices;
     const dannan::contract::TimeSource* time = nullptr;
     const dannan::contract::WallClock* wall = nullptr;
   };

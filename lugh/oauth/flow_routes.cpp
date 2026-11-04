@@ -296,6 +296,40 @@ void token(const std::shared_ptr<Shared>& shared, RouteContext context) {
                     false, cnf);
               });
         }
+        if (grant_type == "urn:ietf:params:oauth:grant-type:device_code") {
+          if (!(app.grants & apps::kDeviceCode)) return token_error(context, http::status::bad_request, "unauthorized_client", "not this client's grant");
+          auto polled = shared->parts.devices->poll(value_of("device_code"), app.client_id);
+          switch (polled.state) {
+            case DeviceGrants::Poll::pending:
+              return token_error(context, http::status::bad_request, "authorization_pending", "the user has not answered yet");
+            case DeviceGrants::Poll::slow_down:
+              return token_error(context, http::status::bad_request, "slow_down", "poll less often");
+            case DeviceGrants::Poll::denied:
+              return token_error(context, http::status::bad_request, "access_denied", "the user did not allow it");
+            case DeviceGrants::Poll::expired:
+              return token_error(context, http::status::bad_request, "expired_token", "the code expired before the user answered");
+            case DeviceGrants::Poll::unknown:
+              return token_error(context, http::status::bad_request, "invalid_grant", "the device code is not good");
+            case DeviceGrants::Poll::approved:
+              break;
+          }
+          return shared->parts.issuer->for_person(
+              app, *polled.grant, kStepDeadline, context.executor,
+              [shared, context, app, grant = *polled.grant, jkt](Outcome<Issued> issued) {
+                if (issued.fault == Fault::refused) return token_error(context, http::status::bad_request, "invalid_grant", issued.message);
+                if (!issued.ok()) return token_error(context, http::status::internal_server_error, "server_error", "no tokens could be made");
+                if (!(app.grants & apps::kRefreshToken)) return token_answer(context, issued.value);
+                shared->parts.refresh->issue(app, grant, issued.value.scopes, jkt.value_or(""), kStepDeadline, context.executor,
+                                             [context, issued = issued.value](Outcome<std::string> refresh) mutable {
+                                               if (!refresh.ok())
+                                                 return token_error(context, http::status::internal_server_error, "server_error",
+                                                                    "no refresh token could be made");
+                                               issued.refresh_token = refresh.value;
+                                               token_answer(context, issued);
+                                             });
+              },
+              true, cnf);
+        }
         if (grant_type == "client_credentials") {
           if (!(app.grants & apps::kClientCredentials) || app.auth == apps::ClientAuth::none)
             return token_error(context, http::status::bad_request, "unauthorized_client", "not this client's grant");
@@ -306,7 +340,8 @@ void token(const std::shared_ptr<Shared>& shared, RouteContext context) {
           if (!issued.ok()) return token_error(context, http::status::internal_server_error, "server_error", "no token could be made");
           return token_answer(context, issued.value);
         }
-        token_error(context, http::status::bad_request, "unsupported_grant_type", "grant_type is authorization_code, refresh_token or client_credentials");
+        token_error(context, http::status::bad_request, "unsupported_grant_type",
+                    "grant_type is authorization_code, refresh_token, the device code or client_credentials");
       });
 }
 
@@ -383,6 +418,130 @@ void introspect(const std::shared_ptr<Shared>& shared, RouteContext context) {
     http::write_json(context.response, http::status::ok, body);
     context.done();
   });
+}
+
+// RFC 8628 section 3.1: a device's request, answered with the codes and where its user goes.
+void device(const std::shared_ptr<Shared>& shared, RouteContext context) {
+  const auto form = http::parse_form(context.body());
+  if (!form) return token_error(context, http::status::bad_request, "invalid_request", "the body is a form, one value per name");
+  shared->parts.clients->authenticate(*context.request, *form, kStepDeadline, context.executor, [shared, context, form = *form](Outcome<apps::App> client) {
+    if (!client.ok()) {
+      if (client.fault == Fault::refused) return token_error(context, http::status::unauthorized, "invalid_client", client.message);
+      return token_error(context, http::status::internal_server_error, "server_error", "the client could not be checked");
+    }
+    const auto& app = client.value;
+    if (!(app.grants & apps::kDeviceCode)) return token_error(context, http::status::bad_request, "unauthorized_client", "not this client's grant");
+    const auto asked = scopes::split(form.count("scope") ? form.at("scope") : "");
+    if (!asked) return token_error(context, http::status::bad_request, "invalid_scope", "scope is a space-separated list of scopes");
+    for (const auto& scope : *asked) {
+      if (!has(app.scopes, scope)) return token_error(context, http::status::bad_request, "invalid_scope", "this application may not ask for " + scope);
+    }
+    const auto started = shared->parts.devices->start(app.client_id, scopes::united(*asked));
+    const auto where = shared->parts.issuer->issuer() + "/signin/device";
+    http::write_json(context.response, http::status::ok,
+                     boost::json::object{{"device_code", started.device_code},
+                                         {"user_code", started.user_code},
+                                         {"verification_uri", where},
+                                         {"verification_uri_complete", where + "?user_code=" + started.user_code},
+                                         {"expires_in", DeviceGrants::kLifetime.count()},
+                                         {"interval", DeviceGrants::kInterval.count()}});
+    context.response->set(http::field::pragma, "no-cache");
+    context.done();
+  });
+}
+
+std::string device_entry_page(const std::string& warning) {
+  return signin::page("Connect a device", (warning.empty() ? std::string() : "<p class=\"notice\" role=\"alert\">" + signin::escape(warning) + "</p>\n") +
+                                              "<p>Type the code your device shows.</p>\n"
+                                              "<form method=\"get\" action=\"/signin/device\">\n"
+                                              "<label for=\"user_code\">Code</label>\n"
+                                              "<input id=\"user_code\" name=\"user_code\" type=\"text\" autocomplete=\"off\" autocapitalize=\"characters\" "
+                                              "spellcheck=\"false\" required>\n"
+                                              "<button type=\"submit\">Continue</button>\n</form>\n");
+}
+
+std::string device_approval_page(const apps::App& app, const std::vector<std::string>& scopes, const std::string& code, const std::string& csrf) {
+  std::string list;
+  for (const auto& scope : scopes) list += "<li>" + signin::escape(meaning(scope)) + "</li>\n";
+  const auto hidden = "<input type=\"hidden\" name=\"csrf\" value=\"" + signin::escape(csrf) + "\">\n<input type=\"hidden\" name=\"user_code\" value=\"" +
+                      signin::escape(code) + "\">\n";
+  return signin::page("Connect " + app.name + "?",
+                      "<p>Your device showing <strong class=\"secret\">" + signin::escape(code) + "</strong> asks to sign in to <strong>" +
+                          signin::escape(app.name) + "</strong> as you, and to:</p>\n<ul>\n" + list +
+                          "</ul>\n<p class=\"muted\">Only allow it if you are setting up that device now.</p>\n" +
+                          "<form method=\"post\" action=\"/signin/device\">\n" + hidden +
+                          "<input type=\"hidden\" name=\"decision\" value=\"allow\">\n<button type=\"submit\">Allow</button>\n</form>\n"
+                          "<form class=\"alternative\" method=\"post\" action=\"/signin/device\">\n" +
+                          hidden + "<input type=\"hidden\" name=\"decision\" value=\"deny\">\n<button type=\"submit\">Deny</button>\n</form>\n");
+}
+
+void device_page(const std::shared_ptr<Shared>& shared, RouteContext context) {
+  const auto typed = context.query.count("user_code") ? context.query.at("user_code") : std::string();
+  const auto code = DeviceGrants::normal(typed);
+  const auto session = session_of(*shared, context);
+  if (!session) {
+    // Back here once signed in, with the code carried.
+    signin::write_redirect(context.response, "/signin?continue=device-" + code.value_or(""));
+    return context.done();
+  }
+  if (typed.empty()) {
+    signin::write_page(context.response, http::status::ok, device_entry_page(""));
+    return context.done();
+  }
+  const auto waiting = code ? shared->parts.devices->find(*code) : std::nullopt;
+  if (!waiting) {
+    signin::write_page(context.response, http::status::ok, device_entry_page("That code is not one waiting. Check it on your device."));
+    return context.done();
+  }
+  shared->parts.apps->app(waiting->client_id, kStepDeadline, context.executor, [context, waiting, code, session](Outcome<std::optional<apps::App>> app) {
+    if (!app.ok() || !app.value) return error_page(context, "The application could not be read.");
+    const auto shown = code->substr(0, 4) + "-" + code->substr(4);
+    signin::write_page(context.response, http::status::ok, device_approval_page(*app.value, waiting->scopes, shown, session::Sessions::csrf_token(*session)));
+    context.done();
+  });
+}
+
+void device_answer(const std::shared_ptr<Shared>& shared, RouteContext context) {
+  const auto form = http::parse_form(context.body());
+  const auto session = session_of(*shared, context);
+  if (!form || !session || !session::Sessions::csrf_ok(*session, form->count("csrf") ? form->at("csrf") : ""))
+    return error_page(context, "That answer did not come from Lugh's own page.");
+  const auto code = form->count("user_code") ? form->at("user_code") : std::string();
+  const auto done_page = [context](const std::string& title, const std::string& text) {
+    signin::write_page(context.response, http::status::ok, signin::page(title, "<p>" + signin::escape(text) + "</p>\n"));
+    context.done();
+  };
+  if (!form->count("decision") || form->at("decision") != "allow") {
+    shared->parts.devices->deny(code);
+    return done_page("Not connected", "The device was not allowed. You can close this page.");
+  }
+  const auto waiting = shared->parts.devices->find(code);
+  if (!waiting) return done_page("Not connected", "That code is no longer waiting. Start again on your device.");
+  shared->parts.apps->app(
+      waiting->client_id, kStepDeadline, context.executor, [shared, context, session, code, done_page](Outcome<std::optional<apps::App>> app) {
+        if (!app.ok() || !app.value) return error_page(context, "The application could not be read.");
+        const auto required = authn::assurance_from_acr(app.value->acr).value_or(authn::Assurance::pwd);
+        if (session->acr < required) return done_page("Not connected", "This application needs a stronger sign-in than this one.");
+        shared->parts.directory->groups_of(session->user_id, kStepDeadline, context.executor,
+                                           [shared, context, session, code, app = *app.value, done_page](Outcome<std::vector<std::string>> groups) {
+                                             if (!groups.ok()) return error_page(context, "Your groups could not be read.");
+                                             const bool allowed = std::any_of(app.access.begin(), app.access.end(),
+                                                                              [&](const std::string& group) { return has(groups.value, group); });
+                                             if (!allowed) {
+                                               shared->parts.devices->deny(code);
+                                               return done_page("Not connected", "You are not allowed to use this application.");
+                                             }
+                                             CodeGrant grant;
+                                             grant.user_id = session->user_id;
+                                             grant.sid = session->sid;
+                                             grant.acr = session->acr;
+                                             grant.amr = session->amr;
+                                             grant.auth_time = session->auth_time;
+                                             if (!shared->parts.devices->approve(code, grant))
+                                               return done_page("Not connected", "That code is no longer waiting.");
+                                             done_page("Connected", "Your device is signed in. You can close this page.");
+                                           });
+      });
 }
 
 void par(const std::shared_ptr<Shared>& shared, RouteContext context) {
@@ -490,6 +649,9 @@ void FlowRoutes::register_routes(http::Router& router) {
                                   });
   });
   router.add_open(verb::post, "/oauth2/par", [shared](RouteContext context) { par(shared, std::move(context)); });
+  router.add_open(verb::post, "/oauth2/device", [shared](RouteContext context) { device(shared, std::move(context)); });
+  router.add_open(verb::get, "/signin/device", [shared](RouteContext context) { device_page(shared, std::move(context)); });
+  router.add_open(verb::post, "/signin/device", [shared](RouteContext context) { device_answer(shared, std::move(context)); });
   router.add_open(verb::post, "/oauth2/token", [shared](RouteContext context) { token(shared, std::move(context)); });
   router.add_open(verb::post, "/oauth2/revoke", [shared](RouteContext context) { revoke(shared, std::move(context)); });
   router.add_open(verb::post, "/oauth2/introspect", [shared](RouteContext context) { introspect(shared, std::move(context)); });

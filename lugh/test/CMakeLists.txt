@@ -48,6 +48,7 @@ add_executable(lugh_tests
     keys_keyring_manager_test.cpp
     keys_keyring_test.cpp
     network_cidr_test.cpp
+    oauth_device_grants_test.cpp
     oauth_dpop_test.cpp
     oauth_flow_test.cpp
     oauth_metadata_routes_test.cpp

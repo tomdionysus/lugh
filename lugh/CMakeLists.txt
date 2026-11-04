@@ -50,6 +50,7 @@ add_library(lugh STATIC
     node/config.cpp
     oauth/client_auth.cpp
     oauth/consents.cpp
+    oauth/device_grants.cpp
     oauth/dpop.cpp
     oauth/flow_routes.cpp
     oauth/issuer.cpp

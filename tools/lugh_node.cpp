@@ -50,6 +50,7 @@
 #include "lugh/node/config.h"
 #include "lugh/oauth/client_auth.h"
 #include "lugh/oauth/consents.h"
+#include "lugh/oauth/device_grants.h"
 #include "lugh/oauth/dpop.h"
 #include "lugh/oauth/flow_routes.h"
 #include "lugh/oauth/issuer.h"
@@ -411,8 +412,9 @@ int run(const cli::Options& options) {
   if (token_issuer) {
     auto clients = std::make_shared<oauth::ClientAuthenticator>(services.apps, ports.hashing, wall, time, config.issuer);
     auto refresh = std::make_shared<oauth::RefreshTokens>(services.store, wall, services.sessions, services.audit);
-    flow_routes = std::make_unique<oauth::FlowRoutes>(
-        oauth::FlowRoutes::Parts{services.apps, services.directory, services.sessions, services.consents, token_issuer, clients, refresh, dpop, &time, &wall});
+    flow_routes =
+        std::make_unique<oauth::FlowRoutes>(oauth::FlowRoutes::Parts{services.apps, services.directory, services.sessions, services.consents, token_issuer,
+                                                                     clients, refresh, dpop, std::make_shared<oauth::DeviceGrants>(time), &time, &wall});
     flow_routes->register_routes(*router);
   }
 

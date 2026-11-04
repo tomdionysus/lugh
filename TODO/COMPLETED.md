@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O9, the device grant
+
+- `lugh/oauth/device_grants.h` (RFC 8628): a device's request answered with a device code and a user code, eight letters from twenty consonants drawn by rejection so each is as likely, shown `XXXX-XXXX` and taken any case with or without the dash. Held in memory on the node for ten minutes; approved or denied once; the approval answered to the device's poll once. Polling sooner than the interval is `slow_down`, and the interval grows by five seconds.
+- `/oauth2/device`, and the token endpoint's device_code grant with its errors (authorization_pending, slow_down, access_denied, expired_token), with a refresh token where the application has that grant.
+- `/signin/device`: the code typed or carried in from `verification_uri_complete`; a user not signed in goes through the sign-in pages and back with the code; the approval page names the application and what it asks for; approval only for the application's groups and at its least `acr`.
+- Tests: 475 to 479 (user codes, polling and slow_down, denial and expiry, and the whole flow from the TV's request to its tokens), green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: P6 step O8b, mTLS
 
 - `TlsContext` gains a client-certificate mode: asked for, never required, never ending a handshake; the chain's check against `tls.client_ca`, when set, kept for the routes. `HttpServer` reads the certificate after the handshake on the mTLS listener and hands its thumbprint (x5t#S256), subject (RFC 2253) and whether it chained to the CA to the routes in `Lugh-Client-Cert-*` headers (`lugh/http/client_certificate.h`), which it removes from every request it reads, on every listener, before it sets its own.
