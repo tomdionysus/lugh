@@ -24,6 +24,7 @@ add_executable(lugh_tests
     authn_totp_test.cpp
     core_async_test.cpp
     core_encoding_test.cpp
+    core_completion_test.cpp
     core_secret_test.cpp
     crypto_aead_test.cpp
     crypto_argon2_test.cpp

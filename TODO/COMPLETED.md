@@ -127,6 +127,11 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   and every request and wait has a deadline. `test/process/` and the ctest entries are gone;
   `ctest` runs `lugh_tests` alone. Seven tests where there were three scripts: 339 to 346,
   passing in the debug, ASan and TSan builds.
+- Callback style, first piece: `lugh/core/completion.h`, the one place that keeps Dannan's
+  promise for an operation's answer (posted to the caller's executor exactly once, the
+  answer or the deadline's, never inline), with five tests, run twenty times under TSan
+  with no report. `Executor` moved there from `core/task.h`. The design for the rest is in
+  `TODO/ACTIVE.md`. 346 to 351.
 
 ## 2026-10-18: P5, the management API (not committed)
 

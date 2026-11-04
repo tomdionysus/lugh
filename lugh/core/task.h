@@ -14,6 +14,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "lugh/core/completion.h"
+
 namespace lugh {
 
 // What every operation that may wait answers: a C++20 coroutine on Boost.Asio. Nothing in
@@ -21,8 +23,6 @@ namespace lugh {
 // it suspends, and resumes on its own executor when the answer is in.
 template <typename T = void>
 using Task = boost::asio::awaitable<T>;
-
-using Executor = boost::asio::any_io_executor;
 
 // Runs `work`, which blocks (a system call on a file, Argon2id), on `where`, a pool kept for
 // such work, and resumes the caller on its own executor with the answer. The caller holds
