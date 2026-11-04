@@ -40,7 +40,8 @@ TEST_F(UserRoutesTest, AReaderCannotWrite) {
 }
 
 TEST_F(UserRoutesTest, CreateThenRead) {
-  const auto made = rig.post("/api/v1/users", R"({"name":"Alice","email":"Alice@Example.com","display_name":"Alice Smith"})");
+  const auto made =
+      rig.post("/api/v1/users", R"({"name":"Alice","email":"Alice@Example.com","display_name":"Alice Smith","given_name":"Alice","family_name":"Smith"})");
   ASSERT_EQ(made.status, 201u) << made.response->body();
   const auto id = std::string(made.body.at("id").as_string());
   EXPECT_EQ(made.header(field::location), "/api/v1/users/" + id);
@@ -49,11 +50,20 @@ TEST_F(UserRoutesTest, CreateThenRead) {
   EXPECT_EQ(made.body.at("email"), "alice@example.com");
   EXPECT_EQ(made.body.at("kind"), "person");
   EXPECT_EQ(made.body.at("enrolled"), false);
+  EXPECT_EQ(made.body.at("given_name"), "Alice");
+  EXPECT_EQ(made.body.at("family_name"), "Smith");
+  EXPECT_FALSE(made.body.as_object().contains("posix_number"));
   EXPECT_EQ(made.body.at("created_at"), "2026-10-18T00:00:00Z");
 
   const auto read = rig.get("/api/v1/users/" + id);
   EXPECT_EQ(read.status, 200u);
   EXPECT_EQ(read.body.at("display_name"), "Alice Smith");
+
+  const auto renamed = rig.request(verb::patch, "/api/v1/users/" + id, R"({"family_name":"Jones","given_name":""})", {{field::if_match, "\"1\""}});
+  ASSERT_EQ(renamed.status, 200u) << renamed.response->body();
+  EXPECT_EQ(renamed.body.at("family_name"), "Jones");
+  EXPECT_EQ(renamed.body.at("given_name"), "");
+  EXPECT_EQ(rig.request(verb::patch, "/api/v1/users/" + id, R"({"given_name":7})", {{field::if_match, "*"}}).status, 400u);
   EXPECT_EQ(read.header(field::etag), "\"1\"");
   EXPECT_EQ(read.header(field::cache_control), "no-store");
 

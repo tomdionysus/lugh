@@ -176,7 +176,7 @@ TEST_F(AuthenticatorTest, RefusalsAllLookTheSame) {
       [&](lugh::Executor executor, auto done) { rig.directory->disable_user(rig.admin, bob.id, true, std::nullopt, kTestDeadline, executor, done); });
   rig.person("carol");
   wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-    rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", ""}, kTestDeadline, executor, done);
+    rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", "", "", ""}, kTestDeadline, executor, done);
   });
 
   for (const auto& [login, pass] : std::vector<std::pair<std::string, std::string>>{

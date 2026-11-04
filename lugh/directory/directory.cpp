@@ -73,6 +73,7 @@ void Directory::dependent_add(std::shared_ptr<Dependent> dependent) { _dependent
 namespace {
 
 constexpr const char* kChangeLate = "the directory did not answer within the deadline; the change may yet be made";
+constexpr const char* kNamePartRule = "a given or family name is printable UTF-8, at most 128 bytes";
 constexpr const char* kReadLate = "the directory was not read within the deadline";
 // What the audit log is given to record a change the directory has made.
 constexpr Deadline kAuditDeadline = std::chrono::seconds(30);
@@ -95,6 +96,8 @@ void Directory::create_user(audit::Actor actor, NewUser fresh, Deadline deadline
   }
   if (!printable(fresh.display_name, kMostDisplayBytes))
     return answer->finish(Answer::failure(Fault::invalid, "a display name is printable UTF-8, at most 128 bytes"));
+  if (!printable(fresh.given_name, kMostDisplayBytes) || !printable(fresh.family_name, kMostDisplayBytes))
+    return answer->finish(Answer::failure(Fault::invalid, kNamePartRule));
 
   auto self = shared_from_this();
   _free(kUsers, "name", *name, "the name " + *name + " is taken", executor, refusing(answer), [=]() mutable {
@@ -108,6 +111,8 @@ void Directory::create_user(audit::Actor actor, NewUser fresh, Deadline deadline
       user.name = *name;
       user.email = email;
       user.display_name = fresh.display_name;
+      user.given_name = fresh.given_name;
+      user.family_name = fresh.family_name;
       user.created = user.updated = (self->_wall.unix_ms() / 1000);
       self->_put_user(actor, std::move(user), 0, "user.create", fresh.kind == Kind::service ? "service" : "person", executor,
                       [answer](Answer made) { answer->finish(std::move(made)); });
@@ -189,6 +194,8 @@ void Directory::update_user(audit::Actor actor, std::string id, UserChange chang
     }
     if (change.display_name && !printable(*change.display_name, kMostDisplayBytes))
       return answer->finish(Answer::failure(Fault::invalid, "a display name is printable UTF-8, at most 128 bytes"));
+    if ((change.given_name && !printable(*change.given_name, kMostDisplayBytes)) || (change.family_name && !printable(*change.family_name, kMostDisplayBytes)))
+      return answer->finish(Answer::failure(Fault::invalid, kNamePartRule));
 
     const auto new_name = name && *name != found->name ? *name : std::string();
     const auto new_email = email && *email != found->email ? *email : std::string();
@@ -206,6 +213,14 @@ void Directory::update_user(audit::Actor actor, std::string id, UserChange chang
         if (change.display_name && *change.display_name != found->display_name) {
           changed.push_back("display name");
           found->display_name = *change.display_name;
+        }
+        if (change.given_name && *change.given_name != found->given_name) {
+          changed.push_back("given name");
+          found->given_name = *change.given_name;
+        }
+        if (change.family_name && *change.family_name != found->family_name) {
+          changed.push_back("family name");
+          found->family_name = *change.family_name;
         }
         if (changed.empty()) return answer->finish(Answer::success(std::move(*found)));
         found->updated = (self->_wall.unix_ms() / 1000);

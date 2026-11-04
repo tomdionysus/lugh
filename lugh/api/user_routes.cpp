@@ -79,10 +79,11 @@ void UserRoutes::_list(http::RouteContext context) const {
 }
 
 void UserRoutes::_create(http::RouteContext context) {
-  const auto body = body_object(context, {"kind", "name", "email", "display_name"});
-  std::optional<std::string> kind, name, email, display;
+  const auto body = body_object(context, {"kind", "name", "email", "display_name", "given_name", "family_name"});
+  std::optional<std::string> kind, name, email, display, given, family;
   if (!body || !string_member(context, *body, "kind", kind) || !string_member(context, *body, "name", name) || !string_member(context, *body, "email", email) ||
-      !string_member(context, *body, "display_name", display))
+      !string_member(context, *body, "display_name", display) || !string_member(context, *body, "given_name", given) ||
+      !string_member(context, *body, "family_name", family))
     return context.done();
   if (kind && *kind != "person" && *kind != "service") {
     http::write_error(context.response, http::status::bad_request, "invalid", "kind is person or service");
@@ -98,6 +99,8 @@ void UserRoutes::_create(http::RouteContext context) {
   fresh.name = *name;
   fresh.email = email.value_or("");
   fresh.display_name = display.value_or("");
+  fresh.given_name = given.value_or("");
+  fresh.family_name = family.value_or("");
   _directory->create_user(actor_of(context), std::move(fresh), kRouteDeadline, context.executor, [context](Outcome<directory::User> made) {
     if (!made.ok()) return answer_fault(context, made);
     write_user(context, http::status::created, made.value);
@@ -118,11 +121,12 @@ void UserRoutes::_get(http::RouteContext context) const {
 void UserRoutes::_update(http::RouteContext context) {
   const auto precondition = if_match(context);
   if (!precondition.ok) return context.done();
-  const auto body = body_object(context, {"name", "email", "display_name", "disabled"});
+  const auto body = body_object(context, {"name", "email", "display_name", "given_name", "family_name", "disabled"});
   directory::UserChange change;
   std::optional<bool> disabled;
   if (!body || !string_member(context, *body, "name", change.name) || !string_member(context, *body, "email", change.email) ||
-      !string_member(context, *body, "display_name", change.display_name) || !bool_member(context, *body, "disabled", disabled))
+      !string_member(context, *body, "display_name", change.display_name) || !string_member(context, *body, "given_name", change.given_name) ||
+      !string_member(context, *body, "family_name", change.family_name) || !bool_member(context, *body, "disabled", disabled))
     return context.done();
 
   const auto id = context.parameter("id");

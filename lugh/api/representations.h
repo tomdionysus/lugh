@@ -30,6 +30,9 @@ inline boost::json::object user_json(const directory::User& user) {
   out["name"] = user.name;
   out["email"] = user.email;
   out["display_name"] = user.display_name;
+  out["given_name"] = user.given_name;
+  out["family_name"] = user.family_name;
+  if (user.posix_number) out["posix_number"] = *user.posix_number;
   out["enrolled"] = user.enrolled;
   out["disabled"] = user.disabled;
   out["created_at"] = timestamp(user.created);
@@ -42,6 +45,7 @@ inline boost::json::object group_json(const directory::Group& group) {
   out["id"] = group.id;
   out["name"] = group.name;
   out["description"] = group.description;
+  if (group.posix_number) out["posix_number"] = *group.posix_number;
   out["created_at"] = timestamp(group.created);
   out["updated_at"] = timestamp(group.updated);
   return out;

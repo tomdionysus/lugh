@@ -99,7 +99,7 @@ TEST_F(PasswordsTest, TheStoredRecordIsAHash) {
 
 TEST_F(PasswordsTest, AServiceHasNoPassword) {
   const auto service = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-                         rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", ""}, kTestDeadline, executor, done);
+                         rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", "", "", ""}, kTestDeadline, executor, done);
                        }).value;
   EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
               passwords->set(rig.admin, service, text_secret("correct horse battery"), kTestDeadline, executor, done);

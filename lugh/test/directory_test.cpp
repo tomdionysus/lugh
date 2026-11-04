@@ -40,7 +40,7 @@ class DirectoryTest : public ::testing::Test {
 
 TEST_F(DirectoryTest, APersonStartsNotEnrolled) {
   const auto made = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-    directory->create_user(admin, {Kind::person, "Alice", "Alice@Example.com", "Alice Smith"}, kTestDeadline, executor, done);
+    directory->create_user(admin, {Kind::person, "Alice", "Alice@Example.com", "Alice Smith", "", ""}, kTestDeadline, executor, done);
   });
   ASSERT_TRUE(made.ok()) << made.message;
   EXPECT_EQ(made.value.id.size(), 32u);
@@ -76,7 +76,7 @@ TEST_F(DirectoryTest, APersonStartsNotEnrolled) {
 
 TEST_F(DirectoryTest, AServiceIsEnrolledAndNeedsNoAddress) {
   const auto made = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-    directory->create_user(admin, {Kind::service, "backup", "", "Nightly backup"}, kTestDeadline, executor, done);
+    directory->create_user(admin, {Kind::service, "backup", "", "Nightly backup", "", ""}, kTestDeadline, executor, done);
   });
   ASSERT_TRUE(made.ok()) << made.message;
   EXPECT_TRUE(made.value.enrolled);
@@ -85,15 +85,15 @@ TEST_F(DirectoryTest, AServiceIsEnrolledAndNeedsNoAddress) {
 
 TEST_F(DirectoryTest, WhatCannotBeStoredIsRefused) {
   EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-              directory->create_user(admin, {Kind::person, "al ice", "a@example.com", ""}, kTestDeadline, executor, done);
+              directory->create_user(admin, {Kind::person, "al ice", "a@example.com", "", "", ""}, kTestDeadline, executor, done);
             }).fault,
             Fault::invalid);
   EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-              directory->create_user(admin, {Kind::person, "alice", "not an address", ""}, kTestDeadline, executor, done);
+              directory->create_user(admin, {Kind::person, "alice", "not an address", "", "", ""}, kTestDeadline, executor, done);
             }).fault,
             Fault::invalid);
   EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-              directory->create_user(admin, {Kind::person, "alice", "a@example.com", "bell\x07"}, kTestDeadline, executor, done);
+              directory->create_user(admin, {Kind::person, "alice", "a@example.com", "bell\x07", "", ""}, kTestDeadline, executor, done);
             }).fault,
             Fault::invalid);
   EXPECT_TRUE(
@@ -102,18 +102,57 @@ TEST_F(DirectoryTest, WhatCannotBeStoredIsRefused) {
 
 TEST_F(DirectoryTest, NamesAndAddressesAreUniqueWhateverTheCase) {
   ASSERT_TRUE(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-                directory->create_user(admin, {Kind::person, "alice", "alice@example.com", ""}, kTestDeadline, executor, done);
+                directory->create_user(admin, {Kind::person, "alice", "alice@example.com", "", "", ""}, kTestDeadline, executor, done);
               }).ok());
   EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-              directory->create_user(admin, {Kind::person, "ALICE", "other@example.com", ""}, kTestDeadline, executor, done);
+              directory->create_user(admin, {Kind::person, "ALICE", "other@example.com", "", "", ""}, kTestDeadline, executor, done);
             }).fault,
             Fault::duplicate);
   EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-              directory->create_user(admin, {Kind::person, "alice2", "ALICE@example.com", ""}, kTestDeadline, executor, done);
+              directory->create_user(admin, {Kind::person, "alice2", "ALICE@example.com", "", "", ""}, kTestDeadline, executor, done);
             }).fault,
             Fault::duplicate);
   EXPECT_EQ(read_value<std::vector<lugh::directory::User>>([&](lugh::Executor executor, auto done) { directory->users(kTestDeadline, executor, done); }).size(),
             1u);
+}
+
+TEST_F(DirectoryTest, NamePartsAreOptionalAndChecked) {
+  const auto alice = rig.person("alice");
+  EXPECT_TRUE(alice.given_name.empty());
+  EXPECT_TRUE(alice.family_name.empty());
+
+  const auto named = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+    directory->update_user(admin, alice.id, {std::nullopt, std::nullopt, std::nullopt, "Alice", "Smith"}, alice.version, kTestDeadline, executor, done);
+  });
+  ASSERT_TRUE(named.ok()) << named.message;
+  EXPECT_EQ(named.value.given_name, "Alice");
+  EXPECT_EQ(named.value.family_name, "Smith");
+  EXPECT_EQ(named.value.version, 2u);
+  const auto read =
+      read_value<std::optional<lugh::directory::User>>([&](lugh::Executor executor, auto done) { directory->user(alice.id, kTestDeadline, executor, done); });
+  ASSERT_TRUE(read);
+  EXPECT_EQ(read->family_name, "Smith");
+
+  // Setting the same again changes nothing, so the version stays.
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+              directory->update_user(admin, alice.id, {std::nullopt, std::nullopt, std::nullopt, "Alice", std::nullopt}, std::nullopt, kTestDeadline, executor,
+                                     done);
+            }).value.version,
+            2u);
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+              directory->update_user(admin, alice.id, {std::nullopt, std::nullopt, std::nullopt, std::nullopt, "tab\there"}, std::nullopt, kTestDeadline,
+                                     executor, done);
+            }).fault,
+            Fault::invalid);
+
+  lugh::directory::NewUser fresh;
+  fresh.name = "bob";
+  fresh.email = "bob@example.com";
+  fresh.given_name = std::string(129, 'b');
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+              directory->create_user(admin, fresh, kTestDeadline, executor, done);
+            }).fault,
+            Fault::invalid);
 }
 
 TEST_F(DirectoryTest, UpdatesAreChangedFieldsOnlyAndCheckTheVersion) {
@@ -121,7 +160,7 @@ TEST_F(DirectoryTest, UpdatesAreChangedFieldsOnlyAndCheckTheVersion) {
   rig.person("bob");
 
   const auto renamed = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-    directory->update_user(admin, alice.id, {"Alicia", std::nullopt, std::nullopt}, alice.version, kTestDeadline, executor, done);
+    directory->update_user(admin, alice.id, {"Alicia", std::nullopt, std::nullopt, std::nullopt, std::nullopt}, alice.version, kTestDeadline, executor, done);
   });
   ASSERT_TRUE(renamed.ok()) << renamed.message;
   EXPECT_EQ(renamed.value.name, "alicia");
@@ -132,15 +171,18 @@ TEST_F(DirectoryTest, UpdatesAreChangedFieldsOnlyAndCheckTheVersion) {
 
   // A writer holding the old version loses.
   EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-              directory->update_user(admin, alice.id, {std::nullopt, std::nullopt, "A"}, alice.version, kTestDeadline, executor, done);
+              directory->update_user(admin, alice.id, {std::nullopt, std::nullopt, "A", std::nullopt, std::nullopt}, alice.version, kTestDeadline, executor,
+                                     done);
             }).fault,
             Fault::conflict);
   EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-              directory->update_user(admin, alice.id, {"bob", std::nullopt, std::nullopt}, std::nullopt, kTestDeadline, executor, done);
+              directory->update_user(admin, alice.id, {"bob", std::nullopt, std::nullopt, std::nullopt, std::nullopt}, std::nullopt, kTestDeadline, executor,
+                                     done);
             }).fault,
             Fault::duplicate);
   EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-              directory->update_user(admin, alice.id, {std::nullopt, "not an address", std::nullopt}, std::nullopt, kTestDeadline, executor, done);
+              directory->update_user(admin, alice.id, {std::nullopt, "not an address", std::nullopt, std::nullopt, std::nullopt}, std::nullopt, kTestDeadline,
+                                     executor, done);
             }).fault,
             Fault::invalid);
   EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
@@ -150,7 +192,8 @@ TEST_F(DirectoryTest, UpdatesAreChangedFieldsOnlyAndCheckTheVersion) {
 
   // Nothing changed is no write.
   EXPECT_EQ(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-              directory->update_user(admin, alice.id, {"alicia", std::nullopt, std::nullopt}, std::nullopt, kTestDeadline, executor, done);
+              directory->update_user(admin, alice.id, {"alicia", std::nullopt, std::nullopt, std::nullopt, std::nullopt}, std::nullopt, kTestDeadline, executor,
+                                     done);
             }).value.version,
             2u);
 }
@@ -359,8 +402,9 @@ TEST_F(DirectoryTest, PastTheDeadlineIsAFailureNeverAbsence) {
   EXPECT_EQ(read.fault, Fault::failed);
   EXPECT_NE(read.message.find("deadline"), std::string::npos) << read.message;
 
-  const auto made = wait_for<lugh::Outcome<lugh::directory::User>>(
-      [&](lugh::Executor executor, auto done) { slow->create_user(admin, {Kind::person, "alice", "", ""}, std::chrono::milliseconds(20), executor, done); });
+  const auto made = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+    slow->create_user(admin, {Kind::person, "alice", "", "", "", ""}, std::chrono::milliseconds(20), executor, done);
+  });
   EXPECT_EQ(made.fault, Fault::failed);
   EXPECT_NE(made.message.find("may yet be made"), std::string::npos) << made.message;
 }

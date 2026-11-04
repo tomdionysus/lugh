@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O1, the name parts and the POSIX number
+
+- `User` gains `given_name` and `family_name` (optional, printable, at most 128 bytes) for OIDC's `profile` claims and LDAP's `givenName` and `sn`, and `posix_number`; `Group` gains `posix_number`. Nothing allocates a number yet; LDAP's L-steps do (`TODO/2026-11-04-ldap.md`).
+- The user and group records move to format 2. Format 1, which the frozen store holds, is still read, as having no name parts and no number, and never written.
+- The API takes and shows `given_name` and `family_name` on create and `PATCH`, and shows `posix_number` once there is one (`docs/api.md`).
+- Tests: 353 to 356 (the new record format, format 1 still read, the POSIX flag checked; the directory's name parts; the API's), green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-03: Aligning with Dannan and Dagda (feature/dannan-alignment, in progress)
 
 The maintainer, 2026-11-03: Lugh uses Dannan as its network and Dagda as its datastore, no code is

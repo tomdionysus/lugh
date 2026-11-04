@@ -66,9 +66,9 @@ the client reads again. Policies are settings written whole with `PUT`, and memb
 | Method and path | Scope | Does |
 |---|---|---|
 | `GET /api/v1/users` | directory.read | Every user; `?name=` or `?email=` for one |
-| `POST /api/v1/users` | directory.write | `{kind?, name, email, display_name?}`: `201`, `Location`, `ETag`. A person needs an address and starts not enrolled; a `service` needs neither |
-| `GET /api/v1/users/{id}` | directory.read | One user |
-| `PATCH /api/v1/users/{id}` | directory.write | `{name?, email?, display_name?, disabled?}`, with `If-Match` |
+| `POST /api/v1/users` | directory.write | `{kind?, name, email, display_name?, given_name?, family_name?}`: `201`, `Location`, `ETag`. A person needs an address and starts not enrolled; a `service` needs neither. `given_name` and `family_name` are the OIDC claims and LDAP's `givenName` and `sn`; neither is required, since not every name has two parts |
+| `GET /api/v1/users/{id}` | directory.read | One user. `posix_number` appears once LDAP has allocated one |
+| `PATCH /api/v1/users/{id}` | directory.write | `{name?, email?, display_name?, given_name?, family_name?, disabled?}`, with `If-Match` |
 | `DELETE /api/v1/users/{id}` | directory.write | With `If-Match`: the user, their memberships, password and factors. Final |
 | `GET /api/v1/users/{id}/groups` | directory.read | Their groups |
 | `GET /api/v1/users/{id}/factors` | directory.read | Their factors: `id`, `kind`, `confirmed`, `created_at`, and `remaining` for recovery codes |

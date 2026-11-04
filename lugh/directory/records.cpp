@@ -13,9 +13,24 @@ namespace lugh::directory {
 
 namespace {
 
-constexpr std::uint8_t kFormat = 1;
+// Format 1 had no name parts and no POSIX number; it is still read, since the frozen store
+// holds records in it, and never written again.
+constexpr std::uint8_t kFormat1 = 1;
+constexpr std::uint8_t kFormat = 2;
 constexpr std::uint8_t kEnrolled = 0x01;
 constexpr std::uint8_t kDisabled = 0x02;
+
+void write_posix(SecureWriter& writer, const std::optional<std::uint32_t>& number) {
+  writer.u8(number ? 1 : 0);
+  writer.u32(number.value_or(0));
+}
+
+std::optional<std::optional<std::uint32_t>> read_posix(dannan::net::Reader& reader) {
+  const auto present = reader.u8();
+  const auto number = reader.u32();
+  if (present > 1 || (present == 0 && number != 0)) return std::nullopt;
+  return present ? std::optional<std::uint32_t>(number) : std::nullopt;
+}
 
 char lower(char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; }
 
@@ -116,6 +131,9 @@ SecureBuffer encode(const User& user) {
     writer.string(user.name);
     writer.string(user.email);
     writer.string(user.display_name);
+    writer.string(user.given_name);
+    writer.string(user.family_name);
+    write_posix(writer, user.posix_number);
     writer.u64(user.created);
     writer.u64(user.updated);
   });
@@ -123,7 +141,8 @@ SecureBuffer encode(const User& user) {
 
 std::optional<User> decode_user(std::span<const unsigned char> value) {
   return decode_whole<User>(value, [](dannan::net::Reader& reader) -> std::optional<User> {
-    if (reader.u8() != kFormat) return std::nullopt;
+    const auto format = reader.u8();
+    if (format != kFormat1 && format != kFormat) return std::nullopt;
     const auto kind = reader.u8();
     const auto flags = reader.u8();
     if (kind != static_cast<std::uint8_t>(Kind::person) && kind != static_cast<std::uint8_t>(Kind::service)) return std::nullopt;
@@ -136,6 +155,13 @@ std::optional<User> decode_user(std::span<const unsigned char> value) {
     user.name = reader.string(kMostFieldBytes);
     user.email = reader.string(kMostFieldBytes);
     user.display_name = reader.string(kMostFieldBytes);
+    if (format == kFormat) {
+      user.given_name = reader.string(kMostFieldBytes);
+      user.family_name = reader.string(kMostFieldBytes);
+      const auto posix = read_posix(reader);
+      if (!posix) return std::nullopt;
+      user.posix_number = *posix;
+    }
     user.created = reader.u64();
     user.updated = reader.u64();
     return user;
@@ -146,6 +172,7 @@ SecureBuffer encode(const Group& group) {
   return encoded([&](SecureWriter& writer) {
     writer.string(group.name);
     writer.string(group.description);
+    write_posix(writer, group.posix_number);
     writer.u64(group.created);
     writer.u64(group.updated);
   });
@@ -153,10 +180,16 @@ SecureBuffer encode(const Group& group) {
 
 std::optional<Group> decode_group(std::span<const unsigned char> value) {
   return decode_whole<Group>(value, [](dannan::net::Reader& reader) -> std::optional<Group> {
-    if (reader.u8() != kFormat) return std::nullopt;
+    const auto format = reader.u8();
+    if (format != kFormat1 && format != kFormat) return std::nullopt;
     Group group;
     group.name = reader.string(kMostFieldBytes);
     group.description = reader.string(kMostFieldBytes);
+    if (format == kFormat) {
+      const auto posix = read_posix(reader);
+      if (!posix) return std::nullopt;
+      group.posix_number = *posix;
+    }
     group.created = reader.u64();
     group.updated = reader.u64();
     return group;

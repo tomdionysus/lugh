@@ -38,6 +38,13 @@ struct User {
   // Lower case. Unique when present; root has none, nor need a service.
   std::string email;
   std::string display_name;
+  // Optional, for OIDC's given_name and family_name claims and LDAP's givenName and sn
+  // (TODO/2026-11-04-oauth.md, O1). Not every name has two parts, so neither is required.
+  std::string given_name;
+  std::string family_name;
+  // The uidNumber LDAP shows, allocated once from a configured range and never reused
+  // (TODO/2026-11-04-ldap.md); nothing until the range is configured.
+  std::optional<std::uint32_t> posix_number;
   // Seconds since the epoch.
   std::uint64_t created = 0;
   std::uint64_t updated = 0;
@@ -49,6 +56,8 @@ struct Group {
 
   std::string name;
   std::string description;
+  // The gidNumber, as User::posix_number.
+  std::optional<std::uint32_t> posix_number;
   std::uint64_t created = 0;
   std::uint64_t updated = 0;
 };

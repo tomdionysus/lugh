@@ -32,7 +32,7 @@ void Genesis::run(Deadline deadline, Executor executor, Done<Outcome<Secret>> do
     directory->groups(kStep, executor, [=](Outcome<std::vector<directory::Group>> groups) {
       if (!groups.ok()) return answer->finish(Answer::from(groups));
       if (!groups.value.empty()) return answer->finish(Answer::failure(Fault::refused, "this cluster has had its genesis"));
-      directory->create_user(actor, {directory::Kind::person, kRoot, "", "Root"}, kStep, executor, [=](Outcome<directory::User> root) {
+      directory->create_user(actor, {directory::Kind::person, kRoot, "", "Root", "", ""}, kStep, executor, [=](Outcome<directory::User> root) {
         if (!root.ok()) return answer->finish(Answer::from(root));
         directory->create_group(actor, kAdministrators, "Administer Lugh itself", kStep, executor, [=](Outcome<directory::Group> administrators) {
           if (!administrators.ok()) return answer->finish(Answer::from(administrators));

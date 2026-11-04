@@ -65,7 +65,7 @@ class AuthnRig {
 
   lugh::directory::User person(const std::string& name) {
     auto made = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-      directory->create_user(admin, {lugh::directory::Kind::person, name, name + "@example.com", name}, kTestDeadline, executor, done);
+      directory->create_user(admin, {lugh::directory::Kind::person, name, name + "@example.com", name, "", ""}, kTestDeadline, executor, done);
     });
     EXPECT_TRUE(made.ok()) << made.message;
     return made.value;

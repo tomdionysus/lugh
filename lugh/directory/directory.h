@@ -41,6 +41,8 @@ struct NewUser {
   std::string name;
   std::string email;
   std::string display_name;
+  std::string given_name;
+  std::string family_name;
 };
 
 // What to change; what is absent stays as it is.
@@ -48,6 +50,8 @@ struct UserChange {
   std::optional<std::string> name;
   std::optional<std::string> email;
   std::optional<std::string> display_name;
+  std::optional<std::string> given_name;
+  std::optional<std::string> family_name;
 };
 
 struct GroupChange {

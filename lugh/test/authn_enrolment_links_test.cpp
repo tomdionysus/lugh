@@ -97,7 +97,7 @@ TEST_F(EnrolmentLinksTest, ANewLinkEndsTheOld) {
 
 TEST_F(EnrolmentLinksTest, OnlyForAPersonWhoIsNotEnrolled) {
   const auto service = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
-                         rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", ""}, kTestDeadline, executor, done);
+                         rig.directory->create_user(rig.admin, {lugh::directory::Kind::service, "backup", "", "", "", ""}, kTestDeadline, executor, done);
                        }).value;
   EXPECT_EQ(wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
               links->issue(rig.admin, service.id, kTestDeadline, executor, done);

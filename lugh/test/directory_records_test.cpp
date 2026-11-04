@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "lugh/core/codec.h"
 #include "lugh/directory/records.h"
 
 using namespace lugh::directory;
@@ -60,6 +61,9 @@ TEST(Records, UserRoundTrips) {
   user.name = "backup";
   user.email = "";
   user.display_name = "Backup \xe2\x80\x94 nightly";
+  user.given_name = "Night";
+  user.family_name = "Backup";
+  user.posix_number = 10042;
   user.created = 1;
   user.updated = 2;
 
@@ -70,8 +74,69 @@ TEST(Records, UserRoundTrips) {
   EXPECT_TRUE(decoded->disabled);
   EXPECT_EQ(decoded->name, "backup");
   EXPECT_EQ(decoded->display_name, user.display_name);
+  EXPECT_EQ(decoded->given_name, "Night");
+  EXPECT_EQ(decoded->family_name, "Backup");
+  EXPECT_EQ(decoded->posix_number, 10042u);
   EXPECT_EQ(decoded->created, 1u);
   EXPECT_EQ(decoded->updated, 2u);
+
+  User unnumbered;
+  unnumbered.name = "alice";
+  const auto plain = decode_user(encode(unnumbered));
+  ASSERT_TRUE(plain);
+  EXPECT_FALSE(plain->posix_number);
+  EXPECT_TRUE(plain->given_name.empty());
+}
+
+// The frozen store holds users and groups written before the name parts and the POSIX
+// number existed; they are read as having neither.
+TEST(Records, FormatOneIsStillRead) {
+  lugh::SecureWriter writer;
+  writer.u8(1);
+  writer.u8(1);     // person
+  writer.u8(0x01);  // enrolled
+  writer.string("alice");
+  writer.string("alice@example.com");
+  writer.string("Alice Smith");
+  writer.u64(3);
+  writer.u64(4);
+  const auto user = decode_user(writer.take());
+  ASSERT_TRUE(user);
+  EXPECT_EQ(user->name, "alice");
+  EXPECT_EQ(user->display_name, "Alice Smith");
+  EXPECT_TRUE(user->given_name.empty());
+  EXPECT_TRUE(user->family_name.empty());
+  EXPECT_FALSE(user->posix_number);
+  EXPECT_EQ(user->updated, 4u);
+
+  lugh::SecureWriter old_group;
+  old_group.u8(1);
+  old_group.string("admins");
+  old_group.string("Run the place");
+  old_group.u64(5);
+  old_group.u64(6);
+  const auto group = decode_group(old_group.take());
+  ASSERT_TRUE(group);
+  EXPECT_EQ(group->name, "admins");
+  EXPECT_FALSE(group->posix_number);
+  EXPECT_EQ(group->updated, 6u);
+}
+
+// A POSIX number is present or absent, never "absent with a value".
+TEST(Records, PosixNumberFlagIsChecked) {
+  User user;
+  user.name = "alice";
+  auto bytes = encode(user);
+  // Format, kind, flags, then three strings (u32 length each, "alice" and two empty), then
+  // the flag byte and the u32 number.
+  const std::size_t flag = 3 + (4 + 5) + 4 + 4;
+  ASSERT_EQ(bytes[flag], 0);
+  auto wrong = bytes;
+  wrong[flag + 4] = 7;
+  EXPECT_FALSE(decode_user(wrong));
+  auto two = bytes;
+  two[flag] = 2;
+  EXPECT_FALSE(decode_user(two));
 }
 
 TEST(Records, DecodingRefusesWhatEncodingWouldNotMake) {
@@ -93,7 +158,7 @@ TEST(Records, DecodingRefusesWhatEncodingWouldNotMake) {
   EXPECT_FALSE(decode_user(flags));
 
   auto format = bytes;
-  format[0] = 2;
+  format[0] = 3;
   EXPECT_FALSE(decode_user(format));
 }
 
