@@ -60,7 +60,7 @@ One C++20 binary, `lugh-node`, built from the static library `lugh` and the comp
 | `lugh/http/` | Boost.Beast server over Asio with OpenSSL, TLS 1.3 only. Router, rate limiter, security headers, request size and time limits, the static file handler for the dashboard. HTTP stays each hosted system's own (the maintainer, 2026-11-04) |
 | `lugh/oauth/` | Authorisation, token, introspection, revocation, PAR, device and userinfo endpoints; discovery and JWKS (P6) |
 | `lugh/api/` | The management API, `/api/v1/...` |
-| `lugh/ldap/` | LDAPv3 listener: a bounded BER decoder, bind, search, rootDSE, unbind. Nothing else (P9) |
+| `lugh/ldap/` | LDAPv3 listener, a second front end on the directory: a bounded BER decoder, bind, search, compare, add, modify, delete, rename, Password Modify, rootDSE. Nothing that would make it a general LDAP server (P9, `TODO/2026-11-04-ldap.md`) |
 | `lugh/authn/` | Credential verification and the sign-in state machine (password, then second factor), lockout, rate limits, password policy, TOTP and its HMAC-SHA-1 |
 | `lugh/directory/` | Users, groups, applications, attributes, membership, the mapping to LDAP DNs and OIDC claims |
 | `lugh/tokens/` | Signing keys and their rotation, JWT encoding and verification, opaque token handles (P6). Token verification stays Lugh's; other systems verify through a Lugh plugin (the maintainer, 2026-11-04) |
@@ -326,7 +326,7 @@ As built (P5), `/api/v1` covers users, groups, memberships, factors, enrolment l
 
 | Item | Scope |
 |---|---|
-| Operations | `BindRequest` (simple, over TLS only), `SearchRequest`, `UnbindRequest`, `ExtendedRequest` for StartTLS and "Who am I?". Everything else gets `unwillingToPerform` |
+| Operations | `BindRequest` (simple, over TLS only), `SearchRequest`, `CompareRequest`, `AddRequest`, `ModifyRequest`, `DeleteRequest`, `ModifyDNRequest` (a rename, never a move), `AbandonRequest`, `UnbindRequest`, `ExtendedRequest` for StartTLS, "Who am I?" and Password Modify (a user's own, bound with the main password). The paged-results and Assertion controls. Everything else gets `unwillingToPerform`. Writes are mapped onto the directory's own fields and need the API's scopes; the design is `TODO/2026-11-04-ldap.md` (the maintainer, 2026-11-04) |
 | Tree | Fixed and generated from the directory: `dc=<domain>` with `ou=people` and `ou=groups`. Entries use `inetOrgPerson`, `posixAccount` and `groupOfNames` attributes, including `memberOf`. `posixAccount` needs `uidNumber`, `gidNumber` and `homeDirectory`, so Lugh allocates each user and group a stable number from a configured range and never reuses one |
 | Filters | Equality, presence, substring, and/or/not, with bounded depth and size |
 | Limits | Size, time and paging limits on searches |
@@ -379,7 +379,7 @@ The conventions are the stack's, in `CONTRIBUTING.md`: C++20, `.clang-format` (G
 2. **Single-use grants:** node-local or under a Dagda lease (the maintainer, 2026-11-04, "Lugh's design"). Which, for each kind of grant, is still to be designed with P6.
 3. **OIDC:** in scope from the start (proposed), or plain OAuth 2 first?
 4. **The C++ library's embedded mode:** the client side (`RelyingParty`, token verification, flows) is now required for SSO. Is the embedded mode, which holds a replica of the directory in the host process, still wanted? Full replication makes it simpler, but it puts every sealed credential into that process.
-5. **LDAP:** read-only bind and search (proposed), or are password changes over LDAP (the Password Modify extended operation) needed? Is TLS 1.2 needed for old LDAP clients?
+5. ~~**LDAP:** read-only bind and search, or writes?~~ Writable, mapped onto Lugh's model, with Password Modify for a user's own password (the maintainer, 2026-11-04, "level 2"; `TODO/2026-11-04-ldap.md`). Still open there: TLS 1.2 for old LDAP clients, and five smaller questions.
 6. **Federation:** should Lugh sign users in through upstream identity providers (Google, Microsoft, another OIDC provider)? It is not planned here.
 7. **Certificates:** ACME for the public TLS certificate, or operator-supplied files only?
 8. **Target platform:** Linux (Ubuntu 26.04, GCC 15) as for blackraven-admin, with macOS for development only?

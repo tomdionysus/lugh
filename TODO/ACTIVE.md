@@ -20,6 +20,7 @@ Not yet tried on Linux: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DON
 ## Waiting on the maintainer
 
 - The open questions in `docs/architecture.md`, "Still open": question 2 (single-use grants) is needed by P6 and P8, question 14 (Lugh's hostname) by P13.
+- The LDAP plan's six questions, `2026-11-04-ldap.md` "For the maintainer": the name fields on `User`, TLS 1.3 only, app passwords brought forward, `ou=services`, `ldap.base_dn`, and where L1 to L5 go relative to P6 and P8.
 
 ## For P8, from Dannan
 
@@ -57,8 +58,8 @@ Each phase ends with a green build, `ctest` passing under the `debug` and `asan`
 | **P6** | OAuth 2 and OIDC. Applications (`apps`, `app_access`, role mapping, `private_key_jwt`, exact redirect matching); the SSO session; `acr`/`amr`, `max_age` and step-up; RP-initiated and back-channel logout; authorisation code with PKCE, client credentials, refresh rotation, the sign-in and consent pages, JWT access and ID tokens, JWKS and discovery, introspection, revocation, PAR, DPoP, the device grant. The API then switches to OAuth tokens |
 | **P7** | Dashboard. The React SPA in T.O.M.S's styling, using the Lugh session cookie and a CSRF token against `/api/v1`, served from disk by the static handler, with a strict CSP; installed by `cmake --install` |
 | **P8** | The cluster, on the stack. Lugh hosts on Dannan (`dannan::Context`: membership, mTLS transport, node identity, routes for Lugh's message types) and keeps its state in Dagda (head spaces `lugh/scope` and `lugh/secrets`, node-local spaces for sessions, grants and TOTP steps), replacing the interim sealed store and keyring; what the stack document (`../dagda/TODO/2026-11-03-stack.md`) sets out, and the multi-node tests. Lugh's own copy of Macha's membership and merge is not built |
-| **P9** | LDAP. The BER decoder (fuzzed), LDAPS and StartTLS, bind, search with limits, rootDSE, the generated tree |
+| **P9** | LDAP, writable, as a second front end on `Directory` (the maintainer, 2026-11-04, "level 2"): steps L1 to L5 in `2026-11-04-ldap.md`. The BER decoder (fuzzed), LDAPS and StartTLS, bind, search with limits and paging, compare, the generated tree, then add, modify, delete, rename, the Assertion control and Password Modify. Takes app passwords from P11 |
 | **P10** | C++ library. `lugh_client` with public headers in `include/lugh/` and a CMake package config; `lugh::client::RelyingParty` (code flow, callback, ID token and back-channel logout verification); offline access token verification; client credentials and device flows; an example subproject |
-| **P11** | WebAuthn and passkeys, the `phr` level, and app passwords for LDAP |
+| **P11** | WebAuthn and passkeys and the `phr` level (app passwords moved to P9's L2) |
 | **P12** | Hardening pass. Fuzzing campaigns, a review of the systemd sandbox, key rotation drills, a threat model document, an external review checklist |
 | **P13** | SSO rollout, each in its own repository: blackraven-admin first (it is the smallest, and needs a `service` caller kind), then T.O.M.S (`IAuthProvider` redirect plus the `hub` service account), AthenaSIP admin, and Macha (a `CredentialValidator`, provisioning by `sub`, the device grant for the TV app). Each keeps a break-glass local account |
