@@ -12,6 +12,7 @@
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/enrolment_links.h"
 #include "lugh/authn/passwords.h"
+#include "lugh/core/completion.h"
 #include "lugh/core/outcome.h"
 #include "lugh/core/secret.h"
 #include "lugh/core/task.h"
@@ -37,8 +38,8 @@ class Genesis {
           std::shared_ptr<audit::AuditLog> audit);
 
   // Root's password. refused when the directory already has anyone in it: genesis happens
-  // once.
-  Task<Outcome<Secret>> run();
+  // once. In Dannan's shape; the steps hold what they need, so the Genesis may go at once.
+  void run(Deadline deadline, Executor executor, Done<Outcome<Secret>> done) const;
 
  private:
   std::shared_ptr<directory::Directory> _directory;

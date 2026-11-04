@@ -151,7 +151,9 @@ Task<int> genesis(Ports ports, keys::Keyring keyring, std::string state_director
   auto passwords = std::make_shared<authn::Passwords>(ports.log, opened.value, ports.wall, audit.value, ports.hashing, crypto::Argon2Costs{},
                                                       authn::PasswordRules{}, authn::BreachedPasswords{});
   auto links = std::make_shared<authn::EnrolmentLinks>(opened.value, ports.wall, directory, audit.value);
-  const auto password = co_await authn::Genesis(directory, passwords, links, audit.value).run();
+  const auto password = co_await awaited<Outcome<Secret>>([&](Executor executor, Done<Outcome<Secret>> done) {
+    authn::Genesis(directory, passwords, links, audit.value).run(kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!password.ok()) co_return failed(password.message);
 
   logger.info("Genesis: root, in administrators");

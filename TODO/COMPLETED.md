@@ -169,6 +169,9 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   Argon2id on the hashing pool. The temporary wrapper that let `forget` run as a coroutine
   is gone. A wrong code, a replay and a lost race stay `refused`; a failed store or a passed
   deadline is `failed`, never a wrong code. 353, in the debug, ASan and TSan builds.
+- Callback style, genesis: one chain of steps (no one there yet, root, administrators, the
+  membership, the password, the first sign-in, the audit entry), each holding copies of
+  what it needs, so the `Genesis` built for the call may go at once. 353.
 
 ## 2026-10-18: P5, the management API (not committed)
 

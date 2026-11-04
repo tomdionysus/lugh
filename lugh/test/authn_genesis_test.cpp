@@ -23,7 +23,10 @@ constexpr const char* kSource = "192.0.2.1";
 
 class GenesisTest : public ::testing::Test {
  protected:
-  lugh::Outcome<Secret> genesis() { return run(Genesis(rig.directory, rig.passwords, rig.links, rig.audit).run()); }
+  lugh::Outcome<Secret> genesis() {
+    return wait_for<lugh::Outcome<Secret>>(
+        [&](lugh::Executor executor, auto done) { Genesis(rig.directory, rig.passwords, rig.links, rig.audit).run(kTestDeadline, executor, done); });
+  }
 
   AuthnRig rig;
 };
@@ -72,7 +75,9 @@ TEST_F(GenesisTest, EachGenesisAPasswordOfItsOwn) {
   const auto first = genesis().value;
   // Another cluster.
   AuthnRig other;
-  const auto second = run(Genesis(other.directory, other.passwords, other.links, other.audit).run()).value;
+  const auto second = wait_for<lugh::Outcome<Secret>>([&](lugh::Executor executor, auto done) {
+                        Genesis(other.directory, other.passwords, other.links, other.audit).run(kTestDeadline, executor, done);
+                      }).value;
   EXPECT_FALSE(first == second);
 }
 
