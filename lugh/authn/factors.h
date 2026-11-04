@@ -18,12 +18,14 @@
 #include "dannan/status/log.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/password_hash.h"
+#include "lugh/core/completion.h"
 #include "lugh/core/outcome.h"
 #include "lugh/core/secret.h"
 #include "lugh/core/task.h"
 #include "lugh/crypto/argon2.h"
 #include "lugh/directory/directory.h"
 #include "lugh/store/store.h"
+#include "lugh/store/store_calls.h"
 
 namespace lugh::authn {
 
@@ -59,7 +61,10 @@ struct TotpSetup {
 // Recovery codes: ten, each sixteen base32 characters (80 bits), shown once and kept as
 // Argon2id hashes. The first four characters select the code's slot, so a guess costs one
 // hash, not ten; they are a quarter of the code, and the hash covers the whole of it.
-class Factors : public directory::Dependent {
+//
+// Every operation takes Dannan's shape (core/completion.h); a read on a failed store or past
+// its deadline is `failed`, never a wrong code or "no factor". Made with std::make_shared.
+class Factors : public directory::Dependent, public std::enable_shared_from_this<Factors> {
  public:
   static constexpr const char* kTable = "factors";
   static constexpr std::size_t kRecoveryCodes = 10;
@@ -72,47 +77,48 @@ class Factors : public directory::Dependent {
   Factors(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
           std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs recovery_params = kRecoveryParams);
 
-  Task<std::vector<FactorInfo>> list(std::string user_id) const;
+  void list(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<std::vector<FactorInfo>>> done) const;
 
   // Whether the user has a confirmed factor of their own. Recovery codes do not count:
   // they stand in for a factor and do not replace one.
-  Task<bool> has_second_factor(std::string user_id) const;
+  void has_second_factor(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<bool>> done) const;
 
   // A new, unconfirmed TOTP secret. Any unconfirmed one before it is removed.
-  Task<Outcome<TotpSetup>> totp_begin(audit::Actor actor, std::string user_id, std::string issuer, std::string account);
+  void totp_begin(audit::Actor actor, std::string user_id, std::string issuer, std::string account, Deadline deadline, Executor executor,
+                  Done<Outcome<TotpSetup>> done);
 
   // Confirms an unconfirmed secret with a code from it. A wrong code leaves it unconfirmed.
-  Task<Outcome<>> totp_confirm(audit::Actor actor, std::string user_id, std::string factor_id, std::string code);
+  void totp_confirm(audit::Actor actor, std::string user_id, std::string factor_id, std::string code, Deadline deadline, Executor executor,
+                    Done<Outcome<>> done);
 
   // Whether the code is right for any of the user's confirmed TOTP factors and not
   // already used. refused for a wrong or replayed code, failed when the store is.
-  Task<Outcome<>> totp_check(std::string user_id, std::string code);
+  void totp_check(std::string user_id, std::string code, Deadline deadline, Executor executor, Done<Outcome<>> done);
 
   // Ten new codes, replacing any before.
-  Task<Outcome<std::vector<Secret>>> recovery_generate(audit::Actor actor, std::string user_id);
+  void recovery_generate(audit::Actor actor, std::string user_id, Deadline deadline, Executor executor, Done<Outcome<std::vector<Secret>>> done);
 
   // Uses one code: the number left afterwards. refused for a wrong or used one.
-  Task<Outcome<std::size_t>> recovery_use(std::string user_id, Secret code);
+  void recovery_use(std::string user_id, Secret code, Deadline deadline, Executor executor, Done<Outcome<std::size_t>> done);
 
-  Task<Outcome<>> remove(audit::Actor actor, std::string user_id, std::string factor_id);
+  void remove(audit::Actor actor, std::string user_id, std::string factor_id, Deadline deadline, Executor executor, Done<Outcome<>> done);
 
   // Every factor the user has, for an administrator's reset and for removal.
   void forget(audit::Actor actor, std::string user_id, Deadline deadline, Executor executor, Done<Status> done) override;
 
  private:
-  Task<Status> _forget(audit::Actor actor, std::string user_id);
   struct Stored {
     std::string key;
     std::uint64_t version = 0;
     SecureBuffer value;
   };
 
-  Task<std::vector<Stored>> _records(std::string user_id, std::optional<FactorKind> kind) const;
+  void _records(std::string user_id, std::optional<FactorKind> kind, Executor executor, Done<Outcome<std::vector<Stored>>> done) const;
   std::optional<std::string> _new_key(std::string_view user_id, FactorKind kind);
-  Task<void> _audit(const audit::Actor& actor, std::string action, std::string user_id, std::string detail);
+  void _record(const audit::Actor& actor, std::string action, std::string user_id, std::string detail, Executor executor, std::function<void()> then) const;
 
   dannan::status::ScopedLogger _logger;
-  std::shared_ptr<store::Store> _store;
+  store::StoreCalls _calls;
   const dannan::contract::WallClock& _wall;
   std::shared_ptr<audit::AuditLog> _audit_log;
   Executor _hashing;

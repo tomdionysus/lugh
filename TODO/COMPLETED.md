@@ -165,6 +165,10 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   refusal (the callers act on it), so `peek`, `link` and `spend` keep their `Outcome` through
   the bridge; only a store failure or a passed deadline is `failed`. 353, in the debug, ASan
   and TSan builds.
+- Callback style, the factors: all nine operations, TOTP and recovery codes, with the codes'
+  Argon2id on the hashing pool. The temporary wrapper that let `forget` run as a coroutine
+  is gone. A wrong code, a replay and a lost race stay `refused`; a failed store or a passed
+  deadline is `failed`, never a wrong code. 353, in the debug, ASan and TSan builds.
 
 ## 2026-10-18: P5, the management API (not committed)
 

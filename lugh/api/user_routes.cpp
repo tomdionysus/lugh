@@ -204,7 +204,10 @@ Task<void> UserRoutes::_factors(http::RouteContext context) const {
     co_return;
   }
   boost::json::array factors;
-  for (const auto& factor : co_await _factor_store->list(id)) factors.push_back(factor_json(factor));
+  for (const auto& factor : co_await awaited_value<std::vector<authn::FactorInfo>>([&](Executor executor, Done<Outcome<std::vector<authn::FactorInfo>>> done) {
+         _factor_store->list(id, kTransitionDeadline, std::move(executor), std::move(done));
+       }))
+    factors.push_back(factor_json(factor));
   boost::json::object body;
   body["factors"] = std::move(factors);
   http::write_json(context.response, http::status::ok, body);

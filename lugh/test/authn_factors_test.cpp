@@ -25,77 +25,129 @@ class FactorsTest : public ::testing::Test {
 
   // A confirmed TOTP factor: its setup.
   TotpSetup confirmed_totp() {
-    auto setup = run(factors.totp_begin(rig.admin, alice.id, "Lugh", "alice"));
+    auto setup = wait_for<lugh::Outcome<lugh::authn::TotpSetup>>(
+        [&](lugh::Executor executor, auto done) { factors->totp_begin(rig.admin, alice.id, "Lugh", "alice", kTestDeadline, executor, done); });
     EXPECT_TRUE(setup.ok()) << setup.message;
-    EXPECT_TRUE(run(factors.totp_confirm(rig.admin, alice.id, setup.value.factor_id, rig.code_for(setup.value.secret))).ok());
+    EXPECT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                  factors->totp_confirm(rig.admin, alice.id, setup.value.factor_id, rig.code_for(setup.value.secret), kTestDeadline, executor, done);
+                }).ok());
     rig.advance(std::chrono::seconds(30));
     return std::move(setup.value);
   }
 
   AuthnRig rig;
-  Factors& factors = *rig.factors;
+  std::shared_ptr<Factors>& factors = rig.factors;
   lugh::directory::User alice;
 };
 
 }  // namespace
 
 TEST_F(FactorsTest, ATotpSecretCountsOnlyOnceConfirmed) {
-  auto setup = run(factors.totp_begin(rig.admin, alice.id, "Lugh", "alice"));
+  auto setup = wait_for<lugh::Outcome<lugh::authn::TotpSetup>>(
+      [&](lugh::Executor executor, auto done) { factors->totp_begin(rig.admin, alice.id, "Lugh", "alice", kTestDeadline, executor, done); });
   ASSERT_TRUE(setup.ok());
   EXPECT_EQ(setup.value.secret.size(), 32u);
   EXPECT_EQ(lugh::secret_text(setup.value.uri).rfind("otpauth://totp/Lugh:alice?secret=", 0), 0u);
-  EXPECT_FALSE(run(factors.has_second_factor(alice.id)));
-  ASSERT_EQ(run(factors.list(alice.id)).size(), 1u);
-  EXPECT_FALSE(run(factors.list(alice.id))[0].confirmed);
+  EXPECT_FALSE(read_value<bool>([&](lugh::Executor executor, auto done) { factors->has_second_factor(alice.id, kTestDeadline, executor, done); }));
+  ASSERT_EQ(read_value<std::vector<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) {
+              factors->list(alice.id, kTestDeadline, executor, done);
+            }).size(),
+            1u);
+  EXPECT_FALSE(
+      read_value<std::vector<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) { factors->list(alice.id, kTestDeadline, executor, done); })[0]
+          .confirmed);
 
-  EXPECT_EQ(run(factors.totp_confirm(rig.admin, alice.id, setup.value.factor_id, "000000")).fault, Fault::refused);
-  EXPECT_FALSE(run(factors.has_second_factor(alice.id)));
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              factors->totp_confirm(rig.admin, alice.id, setup.value.factor_id, "000000", kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
+  EXPECT_FALSE(read_value<bool>([&](lugh::Executor executor, auto done) { factors->has_second_factor(alice.id, kTestDeadline, executor, done); }));
 
-  ASSERT_TRUE(run(factors.totp_confirm(rig.admin, alice.id, setup.value.factor_id, rig.code_for(setup.value.secret))).ok());
-  EXPECT_TRUE(run(factors.has_second_factor(alice.id)));
-  EXPECT_EQ(run(factors.totp_confirm(rig.admin, alice.id, setup.value.factor_id, rig.code_for(setup.value.secret))).fault, Fault::refused);
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                factors->totp_confirm(rig.admin, alice.id, setup.value.factor_id, rig.code_for(setup.value.secret), kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_TRUE(read_value<bool>([&](lugh::Executor executor, auto done) { factors->has_second_factor(alice.id, kTestDeadline, executor, done); }));
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              factors->totp_confirm(rig.admin, alice.id, setup.value.factor_id, rig.code_for(setup.value.secret), kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
   EXPECT_TRUE(rig.audited("factor.totp.begin"));
   EXPECT_TRUE(rig.audited("factor.totp.confirm"));
 }
 
 TEST_F(FactorsTest, BeginningAgainReplacesAnUnconfirmedSecret) {
-  const auto first = run(factors.totp_begin(rig.admin, alice.id, "Lugh", "alice")).value;
-  const auto second = run(factors.totp_begin(rig.admin, alice.id, "Lugh", "alice")).value;
+  const auto first = wait_for<lugh::Outcome<lugh::authn::TotpSetup>>([&](lugh::Executor executor, auto done) {
+                       factors->totp_begin(rig.admin, alice.id, "Lugh", "alice", kTestDeadline, executor, done);
+                     }).value;
+  const auto second = wait_for<lugh::Outcome<lugh::authn::TotpSetup>>([&](lugh::Executor executor, auto done) {
+                        factors->totp_begin(rig.admin, alice.id, "Lugh", "alice", kTestDeadline, executor, done);
+                      }).value;
   EXPECT_NE(first.factor_id, second.factor_id);
-  ASSERT_EQ(run(factors.list(alice.id)).size(), 1u);
-  EXPECT_EQ(run(factors.totp_confirm(rig.admin, alice.id, first.factor_id, rig.code_for(first.secret))).fault, Fault::not_found);
+  ASSERT_EQ(read_value<std::vector<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) {
+              factors->list(alice.id, kTestDeadline, executor, done);
+            }).size(),
+            1u);
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              factors->totp_confirm(rig.admin, alice.id, first.factor_id, rig.code_for(first.secret), kTestDeadline, executor, done);
+            }).fault,
+            Fault::not_found);
 }
 
 TEST_F(FactorsTest, ACodeWorksOnce) {
   const auto setup = confirmed_totp();
   const auto code = rig.code_for(setup.secret);
-  ASSERT_TRUE(run(factors.totp_check(alice.id, code)).ok());
-  EXPECT_EQ(run(factors.totp_check(alice.id, code)).fault, Fault::refused);
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                factors->totp_check(alice.id, code, kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              factors->totp_check(alice.id, code, kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
 
   // Nor does the code before it, once a later one has been used.
   rig.advance(std::chrono::seconds(30));
-  EXPECT_EQ(run(factors.totp_check(alice.id, rig.code_for(setup.secret, -1))).fault, Fault::refused);
-  EXPECT_TRUE(run(factors.totp_check(alice.id, rig.code_for(setup.secret))).ok());
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              factors->totp_check(alice.id, rig.code_for(setup.secret, -1), kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
+  EXPECT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                factors->totp_check(alice.id, rig.code_for(setup.secret), kTestDeadline, executor, done);
+              }).ok());
 }
 
 TEST_F(FactorsTest, TheUsedStepSurvivesARestart) {
   const auto setup = confirmed_totp();
   const auto code = rig.code_for(setup.secret);
-  ASSERT_TRUE(run(factors.totp_check(alice.id, code)).ok());
-  Factors again(rig.logger, rig.store, rig.wall, rig.audit, test_pool(), kTestArgon2);
-  EXPECT_EQ(run(again.totp_check(alice.id, code)).fault, Fault::refused);
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                factors->totp_check(alice.id, code, kTestDeadline, executor, done);
+              }).ok());
+  auto again = std::make_shared<Factors>(rig.logger, rig.store, rig.wall, rig.audit, test_pool(), kTestArgon2);
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              again->totp_check(alice.id, code, kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
 }
 
 TEST_F(FactorsTest, ACodeIsOnlyForItsOwner) {
   const auto setup = confirmed_totp();
   const auto bob = rig.person("bob");
-  EXPECT_EQ(run(factors.totp_check(bob.id, rig.code_for(setup.secret))).fault, Fault::refused);
-  EXPECT_EQ(run(factors.totp_confirm(rig.admin, bob.id, setup.factor_id, rig.code_for(setup.secret))).fault, Fault::not_found);
-  EXPECT_EQ(run(factors.remove(rig.admin, bob.id, setup.factor_id)).fault, Fault::not_found);
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              factors->totp_check(bob.id, rig.code_for(setup.secret), kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              factors->totp_confirm(rig.admin, bob.id, setup.factor_id, rig.code_for(setup.secret), kTestDeadline, executor, done);
+            }).fault,
+            Fault::not_found);
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              factors->remove(rig.admin, bob.id, setup.factor_id, kTestDeadline, executor, done);
+            }).fault,
+            Fault::not_found);
 }
 
 TEST_F(FactorsTest, RecoveryCodes) {
-  const auto codes = run(factors.recovery_generate(rig.admin, alice.id));
+  const auto codes = wait_for<lugh::Outcome<std::vector<lugh::Secret>>>(
+      [&](lugh::Executor executor, auto done) { factors->recovery_generate(rig.admin, alice.id, kTestDeadline, executor, done); });
   ASSERT_TRUE(codes.ok());
   ASSERT_EQ(codes.value.size(), Factors::kRecoveryCodes);
 
@@ -108,12 +160,16 @@ TEST_F(FactorsTest, RecoveryCodes) {
   }
   EXPECT_EQ(distinct.size(), Factors::kRecoveryCodes);
   // Codes stand in for a factor; they are not one.
-  EXPECT_FALSE(run(factors.has_second_factor(alice.id)));
+  EXPECT_FALSE(read_value<bool>([&](lugh::Executor executor, auto done) { factors->has_second_factor(alice.id, kTestDeadline, executor, done); }));
 
-  const auto used = run(factors.recovery_use(alice.id, copy_of(codes.value[3])));
+  const auto used = wait_for<lugh::Outcome<std::size_t>>(
+      [&](lugh::Executor executor, auto done) { factors->recovery_use(alice.id, copy_of(codes.value[3]), kTestDeadline, executor, done); });
   ASSERT_TRUE(used.ok());
   EXPECT_EQ(used.value, 9u);
-  EXPECT_EQ(run(factors.recovery_use(alice.id, copy_of(codes.value[3]))).fault, Fault::refused);
+  EXPECT_EQ(wait_for<lugh::Outcome<std::size_t>>([&](lugh::Executor executor, auto done) {
+              factors->recovery_use(alice.id, copy_of(codes.value[3]), kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
 
   // As typed: upper case, no dashes, spaces.
   std::string typed;
@@ -121,31 +177,67 @@ TEST_F(FactorsTest, RecoveryCodes) {
     if (c != '-') typed.push_back(static_cast<char>(std::toupper(c)));
   }
   typed.insert(8, " ");
-  EXPECT_EQ(run(factors.recovery_use(alice.id, lugh::text_secret(typed))).value, 8u);
-  EXPECT_EQ(run(factors.list(alice.id)).at(0).remaining, 8u);
+  EXPECT_EQ(wait_for<lugh::Outcome<std::size_t>>([&](lugh::Executor executor, auto done) {
+              factors->recovery_use(alice.id, lugh::text_secret(typed), kTestDeadline, executor, done);
+            }).value,
+            8u);
+  EXPECT_EQ(
+      read_value<std::vector<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) { factors->list(alice.id, kTestDeadline, executor, done); })
+          .at(0)
+          .remaining,
+      8u);
 }
 
 TEST_F(FactorsTest, AWrongRecoveryCodeIsRefused) {
-  const auto codes = run(factors.recovery_generate(rig.admin, alice.id)).value;
+  const auto codes = wait_for<lugh::Outcome<std::vector<lugh::Secret>>>([&](lugh::Executor executor, auto done) {
+                       factors->recovery_generate(rig.admin, alice.id, kTestDeadline, executor, done);
+                     }).value;
   // The right slot, the wrong rest.
   std::string wrong(lugh::secret_text(codes[0]));
   wrong.back() = wrong.back() == 'a' ? 'b' : 'a';
-  EXPECT_EQ(run(factors.recovery_use(alice.id, lugh::text_secret(wrong))).fault, Fault::refused);
-  EXPECT_EQ(run(factors.recovery_use(alice.id, lugh::text_secret("not a code"))).fault, Fault::refused);
-  EXPECT_EQ(run(factors.recovery_use(alice.id, lugh::text_secret(""))).fault, Fault::refused);
-  EXPECT_EQ(run(factors.list(alice.id)).at(0).remaining, 10u);
+  EXPECT_EQ(wait_for<lugh::Outcome<std::size_t>>([&](lugh::Executor executor, auto done) {
+              factors->recovery_use(alice.id, lugh::text_secret(wrong), kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
+  EXPECT_EQ(wait_for<lugh::Outcome<std::size_t>>([&](lugh::Executor executor, auto done) {
+              factors->recovery_use(alice.id, lugh::text_secret("not a code"), kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
+  EXPECT_EQ(wait_for<lugh::Outcome<std::size_t>>([&](lugh::Executor executor, auto done) {
+              factors->recovery_use(alice.id, lugh::text_secret(""), kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
+  EXPECT_EQ(
+      read_value<std::vector<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) { factors->list(alice.id, kTestDeadline, executor, done); })
+          .at(0)
+          .remaining,
+      10u);
 }
 
 TEST_F(FactorsTest, NewRecoveryCodesReplaceTheOld) {
-  const auto old = run(factors.recovery_generate(rig.admin, alice.id)).value;
-  const auto fresh = run(factors.recovery_generate(rig.admin, alice.id)).value;
-  EXPECT_EQ(run(factors.recovery_use(alice.id, copy_of(old[0]))).fault, Fault::refused);
-  EXPECT_TRUE(run(factors.recovery_use(alice.id, copy_of(fresh[0]))).ok());
-  EXPECT_EQ(run(factors.list(alice.id)).size(), 1u);
+  const auto old = wait_for<lugh::Outcome<std::vector<lugh::Secret>>>([&](lugh::Executor executor, auto done) {
+                     factors->recovery_generate(rig.admin, alice.id, kTestDeadline, executor, done);
+                   }).value;
+  const auto fresh = wait_for<lugh::Outcome<std::vector<lugh::Secret>>>([&](lugh::Executor executor, auto done) {
+                       factors->recovery_generate(rig.admin, alice.id, kTestDeadline, executor, done);
+                     }).value;
+  EXPECT_EQ(wait_for<lugh::Outcome<std::size_t>>([&](lugh::Executor executor, auto done) {
+              factors->recovery_use(alice.id, copy_of(old[0]), kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
+  EXPECT_TRUE(wait_for<lugh::Outcome<std::size_t>>([&](lugh::Executor executor, auto done) {
+                factors->recovery_use(alice.id, copy_of(fresh[0]), kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_EQ(read_value<std::vector<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) {
+              factors->list(alice.id, kTestDeadline, executor, done);
+            }).size(),
+            1u);
 }
 
 TEST_F(FactorsTest, TheStoredRecordsHoldNoCode) {
-  const auto codes = run(factors.recovery_generate(rig.admin, alice.id)).value;
+  const auto codes = wait_for<lugh::Outcome<std::vector<lugh::Secret>>>([&](lugh::Executor executor, auto done) {
+                       factors->recovery_generate(rig.admin, alice.id, kTestDeadline, executor, done);
+                     }).value;
   for (const auto& record : rig.store->list_now(Factors::kTable)) {
     const std::string value(record.value.begin(), record.value.end());
     for (const auto& code : codes) {
@@ -160,16 +252,27 @@ TEST_F(FactorsTest, TheStoredRecordsHoldNoCode) {
 
 TEST_F(FactorsTest, RemoveAndForget) {
   const auto setup = confirmed_totp();
-  run(factors.recovery_generate(rig.admin, alice.id));
-  ASSERT_EQ(run(factors.list(alice.id)).size(), 2u);
+  wait_for<lugh::Outcome<std::vector<lugh::Secret>>>(
+      [&](lugh::Executor executor, auto done) { factors->recovery_generate(rig.admin, alice.id, kTestDeadline, executor, done); });
+  ASSERT_EQ(read_value<std::vector<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) {
+              factors->list(alice.id, kTestDeadline, executor, done);
+            }).size(),
+            2u);
 
-  ASSERT_TRUE(run(factors.remove(rig.admin, alice.id, setup.factor_id)).ok());
-  EXPECT_FALSE(run(factors.has_second_factor(alice.id)));
-  EXPECT_EQ(run(factors.remove(rig.admin, alice.id, setup.factor_id)).fault, Fault::not_found);
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                factors->remove(rig.admin, alice.id, setup.factor_id, kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_FALSE(read_value<bool>([&](lugh::Executor executor, auto done) { factors->has_second_factor(alice.id, kTestDeadline, executor, done); }));
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              factors->remove(rig.admin, alice.id, setup.factor_id, kTestDeadline, executor, done);
+            }).fault,
+            Fault::not_found);
 
   confirmed_totp();
-  ASSERT_TRUE(wait_for<lugh::Status>([&](lugh::Executor executor, auto done) { factors.forget(rig.admin, alice.id, kTestDeadline, executor, done); }).ok);
-  EXPECT_TRUE(run(factors.list(alice.id)).empty());
+  ASSERT_TRUE(wait_for<lugh::Status>([&](lugh::Executor executor, auto done) { factors->forget(rig.admin, alice.id, kTestDeadline, executor, done); }).ok);
+  EXPECT_TRUE(read_value<std::vector<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) {
+                factors->list(alice.id, kTestDeadline, executor, done);
+              }).empty());
   EXPECT_TRUE(rig.audited("factor.reset"));
 }
 

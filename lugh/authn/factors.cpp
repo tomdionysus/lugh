@@ -11,9 +11,9 @@
 
 #include "dannan/identity/crypto.h"
 #include "lugh/authn/totp.h"
-#include "lugh/core/awaited.h"
 #include "lugh/core/codec.h"
 #include "lugh/core/encoding.h"
+#include "lugh/core/steps.h"
 
 namespace lugh::authn {
 
@@ -137,232 +137,312 @@ std::optional<Secret> normal_recovery_code(std::string_view code) {
 Factors::Factors(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
                  std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs recovery_params)
     : _logger(std::move(log), "factors"),
-      _store(std::move(store)),
+      _calls(std::move(store)),
       _wall(wall),
       _audit_log(std::move(audit)),
       _hashing(std::move(hashing)),
       _recovery_params(recovery_params) {}
 
-Task<std::vector<FactorInfo>> Factors::list(std::string user_id) const {
-  std::vector<FactorInfo> out;
-  for (const auto& stored : co_await _records(std::move(user_id), std::nullopt)) {
-    FactorInfo info;
-    info.id = stored.key;
-    if (const auto totp = decode_totp(stored.value)) {
-      info.kind = FactorKind::totp;
-      info.confirmed = totp->confirmed;
-      info.created = totp->created;
-    } else if (const auto recovery = decode_recovery(stored.value)) {
-      info.kind = FactorKind::recovery;
-      info.confirmed = true;
-      info.created = recovery->created;
-      for (const auto& slot : recovery->slots) info.remaining += slot.used ? 0 : 1;
-    } else {
-      continue;
-    }
-    out.push_back(std::move(info));
-  }
-  co_return out;
-}
+namespace {
 
-Task<bool> Factors::has_second_factor(std::string user_id) const {
-  for (const auto& stored : co_await _records(std::move(user_id), FactorKind::totp)) {
-    const auto totp = decode_totp(stored.value);
-    if (totp && totp->confirmed) co_return true;
-  }
-  co_return false;
-}
+constexpr const char* kChangeLate = "the factors did not answer within the deadline; the change may yet be made";
+constexpr const char* kReadLate = "the factors were not read within the deadline";
+constexpr const char* kWrongCode = "the code is not right";
+constexpr Deadline kAuditDeadline = std::chrono::seconds(30);
 
-Task<Outcome<TotpSetup>> Factors::totp_begin(audit::Actor actor, std::string user_id, std::string issuer, std::string account) {
-  using Answer = Outcome<TotpSetup>;
-  for (const auto& stored : co_await _records(user_id, FactorKind::totp)) {
-    const auto totp = decode_totp(stored.value);
-    if (totp && !totp->confirmed) co_await _store->remove(kTable, stored.key, stored.version);
-  }
+}  // namespace
 
-  const auto key = _new_key(user_id, FactorKind::totp);
-  if (!key) co_return Answer::failure(Fault::failed, "no randomness for an ID");
-
-  TotpRecord record;
-  record.created = (_wall.unix_ms() / 1000);
-  record.secret = secure_random(kTotpSecretBytes);
-
-  const auto written = co_await _store->put(kTable, *key, encode(record), 0);
-  if (!written.ok()) co_return Answer::failure(directory::fault_of(written.error), written.message);
-  co_await _audit(actor, "factor.totp.begin", user_id, *key);
-
-  TotpSetup setup;
-  setup.factor_id = *key;
-  setup.secret = text_secret(encoding::base32(record.secret));
-  setup.uri = otpauth_uri(issuer, account, record.secret);
-  co_return Answer::success(std::move(setup));
-}
-
-Task<Outcome<>> Factors::totp_confirm(audit::Actor actor, std::string user_id, std::string factor_id, std::string code) {
-  using Answer = Outcome<>;
-  const auto prefix = user_id + "/totp/";
-  if (factor_id.compare(0, prefix.size(), prefix) != 0) co_return Answer::failure(Fault::not_found, "no such factor");
-  const auto stored = co_await _store->get(kTable, factor_id);
-  auto record = stored ? decode_totp(stored->value) : std::nullopt;
-  if (!record) co_return Answer::failure(Fault::not_found, "no such factor");
-  if (record->confirmed) co_return Answer::failure(Fault::refused, "the factor is already confirmed");
-
-  const auto step = totp_match(record->secret, code, (_wall.unix_ms() / 1000), std::nullopt);
-  if (!step) {
-    co_await _audit(actor, "factor.totp.confirm.refused", user_id, factor_id);
-    co_return Answer::failure(Fault::refused, "the code is not right");
-  }
-
-  record->confirmed = true;
-  record->last_step = *step;
-  const auto written = co_await _store->put(kTable, factor_id, encode(*record), stored->version);
-  if (!written.ok()) co_return Answer::failure(directory::fault_of(written.error), written.message);
-  co_await _audit(actor, "factor.totp.confirm", user_id, factor_id);
-  co_return Answer::success();
-}
-
-Task<Outcome<>> Factors::totp_check(std::string user_id, std::string code) {
-  using Answer = Outcome<>;
-  const auto now = (_wall.unix_ms() / 1000);
-  for (const auto& stored : co_await _records(std::move(user_id), FactorKind::totp)) {
-    auto record = decode_totp(stored.value);
-    if (!record || !record->confirmed) continue;
-    const auto step = totp_match(record->secret, code, now, record->last_step);
-    if (!step) continue;
-
-    record->last_step = *step;
-    const auto written = co_await _store->put(kTable, stored.key, encode(*record), stored.version);
-    if (written.ok()) co_return Answer::success();
-    // Another sign-in used a code from this factor between the read and the write.
-    if (written.error == store::StoreError::conflict) co_return Answer::failure(Fault::refused, "the code is not right");
-    co_return Answer::failure(directory::fault_of(written.error), written.message);
-  }
-  co_return Answer::failure(Fault::refused, "the code is not right");
-}
-
-Task<Outcome<std::vector<Secret>>> Factors::recovery_generate(audit::Actor actor, std::string user_id) {
-  using Answer = Outcome<std::vector<Secret>>;
-  const auto old = co_await _records(user_id, FactorKind::recovery);
-
-  // The codes are made here and hashed on the pool, ten at once, in one trip.
-  struct Made {
-    bool ok = false;
-    std::string error;
-    RecoveryRecord record;
-    std::vector<Secret> codes;
-  };
-  auto made = co_await offload(_hashing, [params = _recovery_params, created = (_wall.unix_ms() / 1000)] {
-    Made out;
-    out.record.created = created;
-    while (out.codes.size() < kRecoveryCodes) {
-      const auto raw = secure_random(kRecoveryCodeBytes);
-      auto normal = encoding::base32(raw);
-      const auto selector = normal.substr(0, kSelectorCharacters);
-
-      bool taken = false;
-      for (const auto& slot : out.record.slots) taken = taken || slot.selector == selector;
-      if (!taken) {
-        auto hashed = hash_password(byte_span(normal), params);
-        if (!hashed.ok) {
-          OPENSSL_cleanse(normal.data(), normal.size());
-          out.error = hashed.error;
-          return out;
-        }
-        out.record.slots.push_back(RecoverySlot{selector, false, std::move(hashed.value)});
-        out.codes.push_back(display_code(normal));
+void Factors::list(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<std::vector<FactorInfo>>> done) const {
+  using Answer = Outcome<std::vector<FactorInfo>>;
+  auto answer = answering<std::vector<FactorInfo>>(deadline, executor, std::move(done), kReadLate);
+  _records(std::move(user_id), std::nullopt, executor, [answer](Outcome<std::vector<Stored>> records) {
+    if (!records.ok()) return answer->finish(Answer::from(records));
+    std::vector<FactorInfo> out;
+    for (const auto& stored : records.value) {
+      FactorInfo info;
+      info.id = stored.key;
+      if (const auto totp = decode_totp(stored.value)) {
+        info.kind = FactorKind::totp;
+        info.confirmed = totp->confirmed;
+        info.created = totp->created;
+      } else if (const auto recovery = decode_recovery(stored.value)) {
+        info.kind = FactorKind::recovery;
+        info.confirmed = true;
+        info.created = recovery->created;
+        for (const auto& slot : recovery->slots) info.remaining += slot.used ? 0 : 1;
+      } else {
+        continue;
       }
-      OPENSSL_cleanse(normal.data(), normal.size());
+      out.push_back(std::move(info));
     }
-    out.ok = true;
-    return out;
+    answer->finish(Answer::success(std::move(out)));
   });
-  if (!made.ok) co_return Answer::failure(Fault::failed, made.error);
-
-  const auto key = _new_key(user_id, FactorKind::recovery);
-  if (!key) co_return Answer::failure(Fault::failed, "no randomness for an ID");
-  const auto written = co_await _store->put(kTable, *key, encode(made.record), 0);
-  if (!written.ok()) co_return Answer::failure(directory::fault_of(written.error), written.message);
-
-  // Only once the new set is in: a failure above leaves the old codes working.
-  for (const auto& stored : old) co_await _store->remove(kTable, stored.key, stored.version);
-  co_await _audit(actor, "factor.recovery.generate", user_id, *key);
-  co_return Answer::success(std::move(made.codes));
 }
 
-Task<Outcome<std::size_t>> Factors::recovery_use(std::string user_id, Secret code) {
-  using Answer = Outcome<std::size_t>;
-  auto normal = normal_recovery_code(secret_text(code));
-
-  for (const auto& stored : co_await _records(std::move(user_id), FactorKind::recovery)) {
-    auto record = decode_recovery(stored.value);
-    if (!record) continue;
-
-    // Every slot's selector compared, whichever matches.
-    std::optional<std::size_t> slot;
-    const auto selector = normal ? normal->reveal().first(kSelectorCharacters) : std::span<const unsigned char>{};
-    for (std::size_t i = 0; i < record->slots.size(); ++i) {
-      const bool same = normal && dannan::identity::constant_time_equal(selector, byte_span(record->slots[i].selector));
-      if (same && !record->slots[i].used) slot = i;
+void Factors::has_second_factor(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<bool>> done) const {
+  using Answer = Outcome<bool>;
+  auto answer = answering<bool>(deadline, executor, std::move(done), kReadLate);
+  _records(std::move(user_id), FactorKind::totp, executor, [answer](Outcome<std::vector<Stored>> records) {
+    if (!records.ok()) return answer->finish(Answer::from(records));
+    for (const auto& stored : records.value) {
+      const auto totp = decode_totp(stored.value);
+      if (totp && totp->confirmed) return answer->finish(Answer::success(true));
     }
-    if (!slot) co_return Answer::failure(Fault::refused, "the code is not right");
-
-    const bool right =
-        co_await offload(_hashing, [code = std::move(*normal), hash = record->slots[*slot].hash] { return verify_password(code.reveal(), hash); });
-    if (!right) co_return Answer::failure(Fault::refused, "the code is not right");
-
-    record->slots[*slot].used = true;
-    const auto written = co_await _store->put(kTable, stored.key, encode(*record), stored.version);
-    if (!written.ok()) {
-      if (written.error == store::StoreError::conflict) co_return Answer::failure(Fault::refused, "the code is not right");
-      co_return Answer::failure(directory::fault_of(written.error), written.message);
-    }
-
-    std::size_t remaining = 0;
-    for (const auto& one : record->slots) remaining += one.used ? 0 : 1;
-    co_return Answer::success(remaining);
-  }
-  co_return Answer::failure(Fault::refused, "the code is not right");
+    answer->finish(Answer::success(false));
+  });
 }
 
-Task<Outcome<>> Factors::remove(audit::Actor actor, std::string user_id, std::string factor_id) {
+void Factors::totp_begin(audit::Actor actor, std::string user_id, std::string issuer, std::string account, Deadline deadline, Executor executor,
+                         Done<Outcome<TotpSetup>> done) {
+  using Answer = Outcome<TotpSetup>;
+  auto answer = answering<TotpSetup>(deadline, executor, std::move(done), kChangeLate);
+  auto self = shared_from_this();
+  _records(user_id, FactorKind::totp, executor, [=](Outcome<std::vector<Stored>> records) {
+    if (!records.ok()) return answer->finish(Answer::from(records));
+    auto unconfirmed = std::make_shared<std::vector<Stored>>();
+    for (auto& stored : records.value) {
+      const auto totp = decode_totp(stored.value);
+      if (totp && !totp->confirmed) unconfirmed->push_back(std::move(stored));
+    }
+    in_turn<Stored>(
+        unconfirmed, 0,
+        [=](const Stored& stored, std::function<void()> next) {
+          self->_calls.remove_settled(kTable, stored.key, stored.version, executor, [next](store::Write) { next(); });
+        },
+        [=] {
+          const auto key = self->_new_key(user_id, FactorKind::totp);
+          if (!key) return answer->finish(Answer::failure(Fault::failed, "no randomness for an ID"));
+          auto record = std::make_shared<TotpRecord>();
+          record->created = (self->_wall.unix_ms() / 1000);
+          record->secret = secure_random(kTotpSecretBytes);
+          self->_calls.put_settled(kTable, *key, encode(*record), 0, executor, [=](store::Write written) {
+            if (!written.ok()) return answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
+            self->_record(actor, "factor.totp.begin", user_id, *key, executor, [=] {
+              TotpSetup setup;
+              setup.factor_id = *key;
+              setup.secret = text_secret(encoding::base32(record->secret));
+              setup.uri = otpauth_uri(issuer, account, record->secret);
+              answer->finish(Answer::success(std::move(setup)));
+            });
+          });
+        });
+  });
+}
+
+void Factors::totp_confirm(audit::Actor actor, std::string user_id, std::string factor_id, std::string code, Deadline deadline, Executor executor,
+                           Done<Outcome<>> done) {
   using Answer = Outcome<>;
+  auto answer = answering<Nothing>(deadline, executor, std::move(done), kChangeLate);
+  const auto prefix = user_id + "/totp/";
+  if (factor_id.compare(0, prefix.size(), prefix) != 0) return answer->finish(Answer::failure(Fault::not_found, "no such factor"));
+  auto self = shared_from_this();
+  _calls.get_settled(kTable, factor_id, executor, [=](Outcome<std::optional<store::Record>> stored) {
+    if (!stored.ok()) return answer->finish(Answer::from(stored));
+    auto record = stored.value ? decode_totp(stored.value->value) : std::nullopt;
+    if (!record) return answer->finish(Answer::failure(Fault::not_found, "no such factor"));
+    if (record->confirmed) return answer->finish(Answer::failure(Fault::refused, "the factor is already confirmed"));
+
+    const auto step = totp_match(record->secret, code, (self->_wall.unix_ms() / 1000), std::nullopt);
+    if (!step) {
+      return self->_record(actor, "factor.totp.confirm.refused", user_id, factor_id, executor,
+                           [answer] { answer->finish(Answer::failure(Fault::refused, kWrongCode)); });
+    }
+    record->confirmed = true;
+    record->last_step = *step;
+    self->_calls.put_settled(kTable, factor_id, encode(*record), stored.value->version, executor, [=](store::Write written) {
+      if (!written.ok()) return answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
+      self->_record(actor, "factor.totp.confirm", user_id, factor_id, executor, [answer] { answer->finish(Answer::success()); });
+    });
+  });
+}
+
+void Factors::totp_check(std::string user_id, std::string code, Deadline deadline, Executor executor, Done<Outcome<>> done) {
+  using Answer = Outcome<>;
+  auto answer = answering<Nothing>(deadline, executor, std::move(done), kReadLate);
+  auto self = shared_from_this();
+  _records(std::move(user_id), FactorKind::totp, executor, [=](Outcome<std::vector<Stored>> records) {
+    if (!records.ok()) return answer->finish(Answer::from(records));
+    const auto now = (self->_wall.unix_ms() / 1000);
+    // The first confirmed factor the code is right for, at a step not yet used.
+    for (const auto& stored : records.value) {
+      auto record = decode_totp(stored.value);
+      if (!record || !record->confirmed) continue;
+      const auto step = totp_match(record->secret, code, now, record->last_step);
+      if (!step) continue;
+      record->last_step = *step;
+      return self->_calls.put_settled(kTable, stored.key, encode(*record), stored.version, executor, [answer](store::Write written) {
+        if (written.ok()) return answer->finish(Answer::success());
+        // Another sign-in used a code from this factor between the read and the write.
+        if (written.error == store::StoreError::conflict) return answer->finish(Answer::failure(Fault::refused, kWrongCode));
+        answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
+      });
+    }
+    answer->finish(Answer::failure(Fault::refused, kWrongCode));
+  });
+}
+
+void Factors::recovery_generate(audit::Actor actor, std::string user_id, Deadline deadline, Executor executor, Done<Outcome<std::vector<Secret>>> done) {
+  using Answer = Outcome<std::vector<Secret>>;
+  auto answer = answering<std::vector<Secret>>(deadline, executor, std::move(done), kChangeLate);
+  auto self = shared_from_this();
+  _records(user_id, FactorKind::recovery, executor, [=](Outcome<std::vector<Stored>> old) {
+    if (!old.ok()) return answer->finish(Answer::from(old));
+    auto earlier = std::make_shared<std::vector<Stored>>(std::move(old.value));
+
+    // The codes are made here and hashed on the pool, ten at once, in one trip.
+    struct Made {
+      bool ok = false;
+      std::string error;
+      RecoveryRecord record;
+      std::vector<Secret> codes;
+    };
+    on_pool(
+        self->_hashing,
+        [params = self->_recovery_params, created = (self->_wall.unix_ms() / 1000)] {
+          auto out = std::make_shared<Made>();
+          out->record.created = created;
+          while (out->codes.size() < kRecoveryCodes) {
+            const auto raw = secure_random(kRecoveryCodeBytes);
+            auto normal = encoding::base32(raw);
+            const auto selector = normal.substr(0, kSelectorCharacters);
+
+            bool taken = false;
+            for (const auto& slot : out->record.slots) taken = taken || slot.selector == selector;
+            if (!taken) {
+              auto hashed = hash_password(byte_span(normal), params);
+              if (!hashed.ok) {
+                OPENSSL_cleanse(normal.data(), normal.size());
+                out->error = hashed.error;
+                return out;
+              }
+              out->record.slots.push_back(RecoverySlot{selector, false, std::move(hashed.value)});
+              out->codes.push_back(display_code(normal));
+            }
+            OPENSSL_cleanse(normal.data(), normal.size());
+          }
+          out->ok = true;
+          return out;
+        },
+        executor,
+        [=](std::shared_ptr<Made> made) {
+          if (!made->ok) return answer->finish(Answer::failure(Fault::failed, made->error));
+          const auto key = self->_new_key(user_id, FactorKind::recovery);
+          if (!key) return answer->finish(Answer::failure(Fault::failed, "no randomness for an ID"));
+          self->_calls.put_settled(kTable, *key, encode(made->record), 0, executor, [=](store::Write written) {
+            if (!written.ok()) return answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
+            // Only once the new set is in: a failure above leaves the old codes working.
+            in_turn<Stored>(
+                earlier, 0,
+                [=](const Stored& stored, std::function<void()> next) {
+                  self->_calls.remove_settled(kTable, stored.key, stored.version, executor, [next](store::Write) { next(); });
+                },
+                [=] {
+                  self->_record(actor, "factor.recovery.generate", user_id, *key, executor,
+                                [answer, made] { answer->finish(Answer::success(std::move(made->codes))); });
+                });
+          });
+        });
+  });
+}
+
+void Factors::recovery_use(std::string user_id, Secret code, Deadline deadline, Executor executor, Done<Outcome<std::size_t>> done) {
+  using Answer = Outcome<std::size_t>;
+  auto answer = answering<std::size_t>(deadline, executor, std::move(done), kReadLate);
+  auto normal = normal_recovery_code(secret_text(code));
+  auto held = std::make_shared<std::optional<Secret>>(std::move(normal));
+  auto self = shared_from_this();
+  _records(std::move(user_id), FactorKind::recovery, executor, [=](Outcome<std::vector<Stored>> records) {
+    if (!records.ok()) return answer->finish(Answer::from(records));
+    for (const auto& stored : records.value) {
+      auto record = decode_recovery(stored.value);
+      if (!record) continue;
+
+      // Every slot's selector compared, whichever matches.
+      std::optional<std::size_t> slot;
+      const auto& typed = *held;
+      const auto selector = typed ? typed->reveal().first(kSelectorCharacters) : std::span<const unsigned char>{};
+      for (std::size_t i = 0; i < record->slots.size(); ++i) {
+        const bool same = typed && dannan::identity::constant_time_equal(selector, byte_span(record->slots[i].selector));
+        if (same && !record->slots[i].used) slot = i;
+      }
+      if (!slot) return answer->finish(Answer::failure(Fault::refused, kWrongCode));
+
+      auto kept = std::make_shared<RecoveryRecord>(std::move(*record));
+      const auto key = stored.key;
+      const auto version = stored.version;
+      const auto which = *slot;
+      return on_pool(
+          self->_hashing, [held, hash = kept->slots[which].hash] { return verify_password((*held)->reveal(), hash); }, executor,
+          [=](bool right) {
+            if (!right) return answer->finish(Answer::failure(Fault::refused, kWrongCode));
+            kept->slots[which].used = true;
+            self->_calls.put_settled(kTable, key, encode(*kept), version, executor, [answer, kept](store::Write written) {
+              if (!written.ok()) {
+                if (written.error == store::StoreError::conflict) return answer->finish(Answer::failure(Fault::refused, kWrongCode));
+                return answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
+              }
+              std::size_t remaining = 0;
+              for (const auto& one : kept->slots) remaining += one.used ? 0 : 1;
+              answer->finish(Answer::success(remaining));
+            });
+          });
+    }
+    answer->finish(Answer::failure(Fault::refused, kWrongCode));
+  });
+}
+
+void Factors::remove(audit::Actor actor, std::string user_id, std::string factor_id, Deadline deadline, Executor executor, Done<Outcome<>> done) {
+  using Answer = Outcome<>;
+  auto answer = answering<Nothing>(deadline, executor, std::move(done), kChangeLate);
   const auto prefix = user_id + "/";
-  if (factor_id.compare(0, prefix.size(), prefix) != 0 || !co_await _store->get(kTable, factor_id))
-    co_return Answer::failure(Fault::not_found, "no such factor");
-  const auto removed = co_await _store->remove(kTable, factor_id);
-  if (!removed.ok()) co_return Answer::failure(directory::fault_of(removed.error), removed.message);
-  co_await _audit(actor, "factor.remove", user_id, factor_id);
-  co_return Answer::success();
+  if (factor_id.compare(0, prefix.size(), prefix) != 0) return answer->finish(Answer::failure(Fault::not_found, "no such factor"));
+  auto self = shared_from_this();
+  _calls.get_settled(kTable, factor_id, executor, [=](Outcome<std::optional<store::Record>> stored) {
+    if (!stored.ok()) return answer->finish(Answer::from(stored));
+    if (!stored.value) return answer->finish(Answer::failure(Fault::not_found, "no such factor"));
+    self->_calls.remove_settled(kTable, factor_id, std::nullopt, executor, [=](store::Write removed) {
+      if (!removed.ok()) return answer->finish(Answer::failure(directory::fault_of(removed.error), removed.message));
+      self->_record(actor, "factor.remove", user_id, factor_id, executor, [answer] { answer->finish(Answer::success()); });
+    });
+  });
 }
 
 void Factors::forget(audit::Actor actor, std::string user_id, Deadline deadline, Executor executor, Done<Status> done) {
   auto answer = Completion<Status>::start(deadline, executor, std::move(done),
                                           [] { return Status::failure("the factors did not answer within the deadline; they may yet be removed"); });
-  spawned<Status>(
-      executor, _forget(std::move(actor), std::move(user_id)), [answer](Status forgotten) { answer->finish(std::move(forgotten)); },
-      [](const std::string& why) { return Status::failure(why); });
+  auto self = shared_from_this();
+  _records(user_id, std::nullopt, executor, [=](Outcome<std::vector<Stored>> all) {
+    if (!all.ok()) return answer->finish(Status::failure("cannot read the factors: " + all.message));
+    if (all.value.empty()) return answer->finish(Status::success());
+    const auto count = all.value.size();
+    auto failed = std::make_shared<std::string>();
+    in_turn<Stored>(
+        std::make_shared<std::vector<Stored>>(std::move(all.value)), 0,
+        [=](const Stored& stored, std::function<void()> next) {
+          self->_calls.remove_settled(kTable, stored.key, std::nullopt, executor, [failed, next](store::Write removed) {
+            if (!removed.ok() && removed.error != store::StoreError::removed) *failed = removed.message;
+            next();
+          });
+        },
+        [=] {
+          self->_record(actor, "factor.reset", user_id, std::to_string(count) + " removed", executor,
+                        [answer, failed] { answer->finish(failed->empty() ? Status::success() : Status::failure("cannot remove every factor: " + *failed)); });
+        });
+  });
 }
 
-Task<Status> Factors::_forget(audit::Actor actor, std::string user_id) {
-  const auto all = co_await _records(user_id, std::nullopt);
-  if (all.empty()) co_return Status::success();
-  std::string failed;
-  for (const auto& stored : all) {
-    const auto removed = co_await _store->remove(kTable, stored.key);
-    if (!removed.ok() && removed.error != store::StoreError::removed) failed = removed.message;
-  }
-  co_await _audit(actor, "factor.reset", user_id, std::to_string(all.size()) + " removed");
-  co_return failed.empty() ? Status::success() : Status::failure("cannot remove every factor: " + failed);
-}
-
-Task<std::vector<Factors::Stored>> Factors::_records(std::string user_id, std::optional<FactorKind> kind) const {
+void Factors::_records(std::string user_id, std::optional<FactorKind> kind, Executor executor, Done<Outcome<std::vector<Stored>>> done) const {
+  using Answer = Outcome<std::vector<Stored>>;
   const auto prefix = user_id + "/" + (kind ? std::string(kind_name(*kind)) + "/" : "");
-  std::vector<Stored> out;
-  for (auto& record : co_await _store->list(kTable)) {
-    if (record.key.compare(0, prefix.size(), prefix) != 0) continue;
-    out.push_back(Stored{std::move(record.key), record.version, std::move(record.value)});
-  }
-  co_return out;
+  _calls.list_settled(kTable, std::move(executor), [prefix, done = std::move(done)](Outcome<std::vector<store::Record>> records) {
+    if (!records.ok()) return done(Answer::from(records));
+    std::vector<Stored> out;
+    for (auto& record : records.value) {
+      if (record.key.compare(0, prefix.size(), prefix) != 0) continue;
+      out.push_back(Stored{std::move(record.key), record.version, std::move(record.value)});
+    }
+    done(Answer::success(std::move(out)));
+  });
 }
 
 std::optional<std::string> Factors::_new_key(std::string_view user_id, FactorKind kind) {
@@ -371,11 +451,11 @@ std::optional<std::string> Factors::_new_key(std::string_view user_id, FactorKin
   return std::string(user_id) + "/" + std::string(kind_name(kind)) + "/" + dannan::identity::hex(instance);
 }
 
-Task<void> Factors::_audit(const audit::Actor& actor, std::string action, std::string user_id, std::string detail) {
-  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
-    _audit_log->record(audit::Event{std::move(action), actor.id, std::move(user_id), actor.source, std::move(detail)}, kTransitionDeadline, std::move(executor),
-                       std::move(done));
-  });
+void Factors::_record(const audit::Actor& actor, std::string action, std::string user_id, std::string detail, Executor executor,
+                      std::function<void()> then) const {
+  // A failure is logged by the audit log itself; the change has been made.
+  _audit_log->record(audit::Event{std::move(action), actor.id, std::move(user_id), actor.source, std::move(detail)}, kAuditDeadline, std::move(executor),
+                     [then = std::move(then)](Status) { then(); });
 }
 
 }  // namespace lugh::authn

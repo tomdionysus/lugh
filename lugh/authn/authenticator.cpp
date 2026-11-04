@@ -97,7 +97,8 @@ Task<Step> Authenticator::password(std::string login, Secret password, std::stri
     co_await _audit("signin.password.accepted", user->id, user->id, source, "first sign-in");
     co_return Step::of(Step::Kind::next, std::move(sign_in));
   }
-  const bool has_factor = co_await _factors->has_second_factor(user->id);
+  const bool has_factor = co_await awaited_value<bool>(
+      [&](Executor executor, Done<Outcome<bool>> done) { _factors->has_second_factor(user->id, kTransitionDeadline, std::move(executor), std::move(done)); });
   if (!user->enrolled || (!has_factor && sign_in.required > Assurance::pwd)) {
     // Enrolment starts from a link, never from a password alone, or a stolen password
     // would be enough to enrol the thief's own authenticator.
@@ -117,7 +118,9 @@ Task<Step> Authenticator::totp(SignIn sign_in, std::string code, std::string sou
   const auto address = address_key(source);
   if (const auto wait = _waiting(account, address)) co_return waiting(*wait, std::move(sign_in));
 
-  const auto checked = co_await _factors->totp_check(sign_in.user_id, std::move(code));
+  const auto checked = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+    _factors->totp_check(sign_in.user_id, std::move(code), kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (checked.fault == Fault::failed) co_return Step::of(Step::Kind::failed, std::move(sign_in));
   if (!checked.ok()) {
     _failed(account, address);
@@ -135,7 +138,9 @@ Task<Step> Authenticator::recovery(SignIn sign_in, Secret code, std::string sour
   const auto address = address_key(source);
   if (const auto wait = _waiting(account, address)) co_return waiting(*wait, std::move(sign_in));
 
-  const auto used = co_await _factors->recovery_use(sign_in.user_id, std::move(code));
+  const auto used = co_await awaited<Outcome<std::size_t>>([&](Executor executor, Done<Outcome<std::size_t>> done) {
+    _factors->recovery_use(sign_in.user_id, std::move(code), kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (used.fault == Fault::failed) co_return Step::of(Step::Kind::failed, std::move(sign_in));
   if (!used.ok()) {
     _failed(account, address);
@@ -202,18 +207,25 @@ Task<Outcome<TotpSetup>> Authenticator::enrol_begin(SignIn sign_in, std::string 
     _directory->user(sign_in.user_id, kTransitionDeadline, std::move(executor), std::move(done));
   });
   if (!user) co_return Answer::failure(Fault::not_found, "no such user");
-  co_return co_await _factors->totp_begin(audit::Actor{user->id, std::move(source)}, user->id, _settings.issuer, user->name);
+  co_return co_await awaited<Outcome<TotpSetup>>([&](Executor executor, Done<Outcome<TotpSetup>> done) {
+    _factors->totp_begin(audit::Actor{user->id, std::move(source)}, user->id, _settings.issuer, user->name, kTransitionDeadline, std::move(executor),
+                         std::move(done));
+  });
 }
 
 Task<Step> Authenticator::enrol_confirm(SignIn sign_in, std::string factor_id, std::string code, std::string source) {
   if (!_live(sign_in, SignIn::Stage::enrolment)) co_return Step::of(Step::Kind::ended, std::move(sign_in));
   const audit::Actor actor{sign_in.user_id, source};
 
-  const auto confirmed = co_await _factors->totp_confirm(actor, sign_in.user_id, std::move(factor_id), std::move(code));
+  const auto confirmed = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+    _factors->totp_confirm(actor, sign_in.user_id, std::move(factor_id), std::move(code), kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (confirmed.fault == Fault::failed) co_return Step::of(Step::Kind::failed, std::move(sign_in));
   if (!confirmed.ok()) co_return co_await _code_refused(std::move(sign_in), std::move(source), "enrolment.totp.refused");
 
-  auto codes = co_await _factors->recovery_generate(actor, sign_in.user_id);
+  auto codes = co_await awaited<Outcome<std::vector<Secret>>>([&](Executor executor, Done<Outcome<std::vector<Secret>>> done) {
+    _factors->recovery_generate(actor, sign_in.user_id, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!codes.ok()) co_return Step::of(Step::Kind::failed, std::move(sign_in));
   if (const auto enrolled = co_await awaited<Outcome<directory::User>>([&](Executor executor, Done<Outcome<directory::User>> done) {
         _directory->enrolled_set(actor, sign_in.user_id, true, kTransitionDeadline, std::move(executor), std::move(done));
@@ -233,7 +245,9 @@ Task<Step> Authenticator::enrol_confirm(SignIn sign_in, std::string factor_id, s
 
 Task<Outcome<>> Authenticator::remove_factor(audit::Actor actor, std::string user_id, std::string factor_id) {
   using Answer = Outcome<>;
-  const auto factors = co_await _factors->list(user_id);
+  const auto factors = co_await awaited_value<std::vector<FactorInfo>>([&](Executor executor, Done<Outcome<std::vector<FactorInfo>>> done) {
+    _factors->list(user_id, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   const FactorInfo* target = nullptr;
   std::size_t confirmed_totp = 0;
   for (const auto& factor : factors) {
@@ -248,7 +262,9 @@ Task<Outcome<>> Authenticator::remove_factor(audit::Actor actor, std::string use
               }) > Assurance::pwd) {
     co_return Answer::failure(Fault::refused, "the user's last second factor cannot be removed while their policy requires one");
   }
-  co_return co_await _factors->remove(std::move(actor), std::move(user_id), std::move(factor_id));
+  co_return co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+    _factors->remove(std::move(actor), std::move(user_id), std::move(factor_id), kTransitionDeadline, std::move(executor), std::move(done));
+  });
 }
 
 Task<Outcome<>> Authenticator::reset_factors(audit::Actor actor, std::string user_id) {

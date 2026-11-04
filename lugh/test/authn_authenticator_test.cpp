@@ -248,7 +248,8 @@ TEST_F(AuthenticatorTest, APasswordAloneWhenPolicySaysSo) {
 
 TEST_F(AuthenticatorTest, TheLastFactorStaysWhilePolicyNeedsIt) {
   const auto alice = rig.enrolled("alice");
-  const auto factors = run(rig.factors->list(alice.id));
+  const auto factors =
+      read_value<std::vector<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) { rig.factors->list(alice.id, kTestDeadline, executor, done); });
   std::string totp;
   std::string recovery;
   for (const auto& factor : factors) (factor.kind == FactorKind::totp ? totp : recovery) = factor.id;
@@ -268,7 +269,9 @@ TEST_F(AuthenticatorTest, AResetMeansEnrollingAgain) {
   EXPECT_FALSE(read_value<std::optional<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
                  rig.directory->user(alice.id, kTestDeadline, executor, done);
                })->enrolled);
-  EXPECT_TRUE(run(rig.factors->list(alice.id)).empty());
+  EXPECT_TRUE(read_value<std::vector<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) {
+                rig.factors->list(alice.id, kTestDeadline, executor, done);
+              }).empty());
   EXPECT_EQ(password("alice", kPassword).kind, Kind::refused);
 
   // Back through a new link, with a new password.
