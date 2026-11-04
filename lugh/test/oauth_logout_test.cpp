@@ -200,7 +200,7 @@ TEST_F(LogoutTest, WithoutAHintThePersonIsAsked) {
   const auto answered = rig.post("/oauth2/logout", {{"csrf", asked.csrf()}, {"client_id", client.id}, {"post_logout_redirect_uri", kAfter}, {"state", "st9"}});
   ASSERT_EQ(answered.status, 200u) << answered.body;
   // Leaving from a form's answer is a page: form-action would stop a redirect.
-  EXPECT_TRUE(answered.location().empty());
+  EXPECT_TRUE(answered.header("Location").empty());
   EXPECT_TRUE(answered.says("content=\"0; url=https://client.example.com/bye?state=st9\""));
   EXPECT_TRUE(answered.says("href=\"https://client.example.com/bye?state=st9\""));
   EXPECT_FALSE(signed_in());

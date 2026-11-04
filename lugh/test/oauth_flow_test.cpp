@@ -10,6 +10,7 @@
 #include "dannan/identity/crypto.h"
 #include "lugh/core/encoding.h"
 #include "lugh/scopes/scope.h"
+#include "lugh/signin/html.h"
 #include "lugh/test/fixtures/dpop_proofs.h"
 #include "lugh/test/fixtures/signin_rig.h"
 #include "lugh/tokens/jose.h"
@@ -242,6 +243,52 @@ TEST_F(OAuthFlowTest, ConsentForThirdParties) {
   const auto again = rig.get(rig.get(authorize_target(app.client_id, "&prompt=consent")).location());
   const auto denied = rig.post("/oauth2/consent", {{"csrf", again.csrf()}, {"id", again.between("name=\"id\" value=\"", "\"")}, {"decision", "deny"}});
   EXPECT_EQ(query_value(denied.location(), "error"), "access_denied");
+}
+
+// form-action 'self' follows a form's redirects, so what follows a form leaves Lugh by a page,
+// under the page policy, with the code in it escaped; a plain request still redirects.
+TEST_F(OAuthFlowTest, AfterAFormTheWayBackIsAPage) {
+  const auto [app, secret] = register_web(false);
+  const auto first = rig.get(authorize_target(app.client_id));
+  const auto form = rig.get(first.location());
+  const auto resume = form.between("name=\"continue\" value=\"", "\"");
+  rig.post("/signin", {{"csrf", form.csrf()}, {"login", "alice"}, {"password", kPassword}, {"continue", resume}});
+  const auto factor = rig.get("/signin/factor");
+  const auto done = rig.post("/signin/factor", {{"csrf", factor.csrf()}, {"code", rig.code_for(rig.secret)}});
+  const auto at_consent = rig.get(done.location());
+  ASSERT_EQ(at_consent.status, 303u) << at_consent.body;
+  const auto page = rig.get(at_consent.location());
+
+  const auto allowed = rig.post("/oauth2/consent", {{"csrf", page.csrf()}, {"id", page.between("name=\"id\" value=\"", "\"")}, {"decision", "allow"}});
+  EXPECT_EQ(allowed.status, 200u);
+  EXPECT_TRUE(allowed.leaves());
+  EXPECT_TRUE(allowed.header("Location").empty());
+  EXPECT_EQ(allowed.header("Content-Security-Policy"), lugh::signin::kPagePolicy);
+  EXPECT_EQ(allowed.header("Cache-Control"), "no-store");
+  EXPECT_TRUE(allowed.says("&amp;state=st8"));
+  EXPECT_FALSE(query_value(allowed.location(), "code").empty());
+  EXPECT_EQ(query_value(allowed.location(), "state"), "st8");
+  ASSERT_EQ(redeem(app.client_id, secret, query_value(allowed.location(), "code")).status, 200u);
+
+  // Already allowed, with a session: nothing but links led here.
+  const auto plain = rig.get(authorize_target(app.client_id));
+  EXPECT_EQ(plain.status, 303u);
+  EXPECT_FALSE(plain.leaves());
+}
+
+// After a sign-in the code comes by a page too, and refusals the same way.
+TEST_F(OAuthFlowTest, AfterASignInTheWayBackIsAPage) {
+  const auto [app, secret] = register_web();
+  const auto first = rig.get(authorize_target(app.client_id));
+  const auto form = rig.get(first.location());
+  const auto resume = form.between("name=\"continue\" value=\"", "\"");
+  rig.post("/signin", {{"csrf", form.csrf()}, {"login", "alice"}, {"password", kPassword}, {"continue", resume}});
+  const auto factor = rig.get("/signin/factor");
+  const auto done = rig.post("/signin/factor", {{"csrf", factor.csrf()}, {"code", rig.code_for(rig.secret)}});
+  const auto back = rig.get(done.location());
+  EXPECT_EQ(back.status, 200u) << back.body;
+  EXPECT_TRUE(back.leaves());
+  EXPECT_FALSE(query_value(back.location(), "code").empty());
 }
 
 // A client acting for itself: client credentials, its own scopes, a service caller at the API.

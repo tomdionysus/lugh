@@ -54,14 +54,21 @@ void error_page(const RouteContext& context, const std::string& description) {
   context.done();
 }
 
+// Back to the client. Where a form's answer led here, by the pages' way of leaving, since
+// form-action 'self' follows a form's redirects: a consent answered, or a sign-in resumed.
+void back_to_client(const RouteContext& context, const std::string& location) {
+  const bool after_form = context.request->method() == http::verb::post || context.request->target().starts_with("/oauth2/authorize/resume");
+  after_form ? signin::write_leaving(context.response, location) : signin::write_redirect(context.response, location);
+  context.done();
+}
+
 // An error sent back to the client (RFC 6749 section 4.1.2.1, RFC 9207's iss).
 void error_back(const Shared& shared, const RouteContext& context, const AuthorizationRequest& request, const std::string& error,
                 const std::string& description) {
   std::vector<std::pair<std::string, std::string>> parameters{{"error", error}, {"error_description", description}};
   if (!request.state.empty()) parameters.emplace_back("state", request.state);
   parameters.emplace_back("iss", shared.parts.issuer->issuer());
-  signin::write_redirect(context.response, with_query(request.redirect_uri, parameters));
-  context.done();
+  back_to_client(context, with_query(request.redirect_uri, parameters));
 }
 
 // The code, back to the client.
@@ -76,8 +83,7 @@ void issue_code(const std::shared_ptr<Shared>& shared, const RouteContext& conte
                                      std::vector<std::pair<std::string, std::string>> parameters{{"code", code}};
                                      if (!request.state.empty()) parameters.emplace_back("state", request.state);
                                      parameters.emplace_back("iss", shared->parts.issuer->issuer());
-                                     signin::write_redirect(context.response, with_query(request.redirect_uri, parameters));
-                                     context.done();
+                                     back_to_client(context, with_query(request.redirect_uri, parameters));
                                    });
 }
 

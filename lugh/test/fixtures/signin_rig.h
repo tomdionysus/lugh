@@ -61,7 +61,15 @@ class SigninRig : public AuthnRig {
     std::string body;
     std::shared_ptr<lugh::http::HttpResponse> response;
 
-    std::string location() const { return std::string(response->base()[lugh::http::field::location]); }
+    // Where the browser goes next: by a redirect, or by a page leaving Lugh.
+    std::string location() const {
+      const std::string redirect(response->base()[lugh::http::field::location]);
+      if (!redirect.empty() || !leaves()) return redirect;
+      auto link = between("<a class=\"leaving\" href=\"", "\"");
+      for (auto at = link.find("&amp;"); at != std::string::npos; at = link.find("&amp;", at + 1)) link.replace(at, 5, "&");
+      return link;
+    }
+    bool leaves() const { return says("http-equiv=\"refresh\""); }
     std::string header(const std::string& name) const { return std::string(response->base()[name]); }
     // The value of the form's hidden csrf field: what a browser would post back.
     std::string csrf() const { return between("name=\"csrf\" value=\"", "\""); }

@@ -2,6 +2,11 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: The way back to a client after a form
+
+- `form-action 'self'` also covers where a form's answer redirects to, so a browser that enforces that would have stopped a consent answered, or a sign-in resumed, on its way back to the client. Those now leave by a page (`signin::write_leaving`) that goes on by itself and carries a link. An authorisation request that no form led to still gets a 303. Not yet tried in a real browser.
+- Tests: 514 to 516, green in the debug, ASan and TSan builds, repeated and shuffled.
+
 ## 2026-11-04: P6 step O10b, logout
 
 - `/oauth2/logout` (OIDC RP-Initiated Logout 1.0): an `id_token_hint` of this session's ends it, expired or not; anything less asks the person, on a page whose answer carries the session's CSRF token. A `post_logout_redirect_uri` must be registered exactly by the application the hint or `client_id` names; otherwise it is refused and never followed.

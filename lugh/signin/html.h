@@ -35,7 +35,7 @@ inline constexpr const char* kPagePolicy =
 // `html` as the response: text/html, never cached, under kPagePolicy.
 void write_page(const std::shared_ptr<http::HttpResponse>& response, http::status status, const std::string& html);
 
-// A 303 to `location`, on this server.
+// A 303 to `location`.
 void write_redirect(const std::shared_ptr<http::HttpResponse>& response, std::string_view location);
 
 // On to `location` on another server, from a form's answer: a page that goes there by itself,
