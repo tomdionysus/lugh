@@ -23,10 +23,11 @@
 #include "lugh/core/outcome.h"
 #include "lugh/core/task.h"
 
-// For the change to callback style only, the two ways across: a coroutine not yet converted
-// awaits an operation that has been (awaited), and a converted operation runs a coroutine
-// not yet converted (spawned). Deleted with the last coroutine above the frozen store; the
-// store's own seam (store/store_calls.h) keeps spawned until Dagda.
+// The two ways between coroutines and callbacks, while the frozen store, keyring, files and
+// console are coroutines (until Dagda replaces them): a converted operation runs one of
+// theirs (spawned, used by store/store_calls.h), and the node's start-up, which runs theirs
+// in sequence, awaits a converted one (awaited, awaited_value). Nothing else uses them, and
+// they go with the frozen layers.
 namespace lugh {
 
 // The deadline a coroutine caller in transition gives the operations it awaits: local work,

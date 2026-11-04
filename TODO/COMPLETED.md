@@ -189,6 +189,9 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   deadline a change may yet land. The API fuzz target's handler follows (syntax-checked
   with the library's flags; no libFuzzer here to build it). 353, in the debug, ASan and TSan
   builds.
+- The callback change is done above the frozen layers. The node's start-up stays a
+  coroutine sequence: it runs the frozen keyring, store and files in turn, and converting it
+  now would only trade one bridge for another; it and the bridge go with them.
 
 ## 2026-10-18: P5, the management API (not committed)
 
