@@ -17,6 +17,7 @@
 #include <set>
 #include <thread>
 
+#include "dannan/contract/thread_safety.h"
 #include "lugh/test/fixtures/api_rig.h"
 
 using lugh::http::verb;
@@ -33,11 +34,11 @@ class Responses {
     request.prepare_payload();
     auto response = std::make_shared<lugh::http::HttpResponse>();
     {
-      std::lock_guard<std::mutex> lock(_mutex);
+      dannan::contract::Lock lock(_mutex);
       ++_sent;
     }
     middleware(request, "192.0.2.50", response, [this, response](bool) {
-      std::lock_guard<std::mutex> lock(_mutex);
+      dannan::contract::Lock lock(_mutex);
       _statuses.push_back(response->result_int());
       _threads.insert(std::this_thread::get_id());
       _changed.notify_all();
@@ -45,22 +46,22 @@ class Responses {
   }
 
   std::vector<unsigned> wait() {
-    std::unique_lock<std::mutex> lock(_mutex);
-    _changed.wait_for(lock, std::chrono::seconds(30), [this] { return _statuses.size() == _sent; });
+    dannan::contract::Lock lock(_mutex);
+    _changed.wait_for(lock.native(), std::chrono::seconds(30), [this]() DANNAN_REQUIRES(_mutex) { return _statuses.size() == _sent; });
     return _statuses;
   }
 
   bool answered_elsewhere() const {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     return _threads.count(std::this_thread::get_id()) == 0;
   }
 
  private:
-  mutable std::mutex _mutex;
+  mutable dannan::contract::Mutex _mutex;
   std::condition_variable _changed;
-  std::size_t _sent = 0;
-  std::vector<unsigned> _statuses;
-  std::set<std::thread::id> _threads;
+  std::size_t _sent DANNAN_GUARDED_BY(_mutex) = 0;
+  std::vector<unsigned> _statuses DANNAN_GUARDED_BY(_mutex);
+  std::set<std::thread::id> _threads DANNAN_GUARDED_BY(_mutex);
 };
 
 class Concurrency : public ::testing::Test {

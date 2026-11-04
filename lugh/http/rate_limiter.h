@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "dannan/contract/thread_safety.h"
 #include "dannan/contract/time_source.h"
 
 namespace lugh::http {
@@ -47,7 +48,7 @@ class RateLimiter {
   std::optional<std::chrono::seconds> take(const std::string& key, const Policy& policy, TimePoint now) {
     if (policy.unlimited()) return std::nullopt;
 
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
 
     if (_buckets.size() > _prune_above) _prune(now);
 
@@ -68,7 +69,7 @@ class RateLimiter {
   }
 
   std::size_t size() const {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     return _buckets.size();
   }
 
@@ -87,16 +88,16 @@ class RateLimiter {
     bucket.at = now;
   }
 
-  void _prune(TimePoint now) {
+  void _prune(TimePoint now) DANNAN_REQUIRES(_mutex) {
     for (auto it = _buckets.begin(); it != _buckets.end();) {
       _refill(it->second, now);
       it = it->second.tokens >= it->second.policy.burst ? _buckets.erase(it) : std::next(it);
     }
   }
 
-  mutable std::mutex _mutex;
+  mutable dannan::contract::Mutex _mutex;
   std::size_t _prune_above;
-  std::unordered_map<std::string, Bucket> _buckets;
+  std::unordered_map<std::string, Bucket> _buckets DANNAN_GUARDED_BY(_mutex);
 };
 
 // The limits for each kind of caller. Sign-in limits join these with the sign-in pages.

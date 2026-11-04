@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "dannan/contract/thread_safety.h"
 #include "dannan/contract/time_source.h"
 #include "dannan/identity/crypto.h"
 #include "dannan/status/log.h"
@@ -111,9 +112,9 @@ class AuditLog {
   // gaps and no forks.
   AsyncMutex _appending;
   // Guards the two below for size(), which does not wait.
-  mutable std::mutex _mutex;
-  std::uint64_t _next = 1;
-  Hash _last{};
+  mutable dannan::contract::Mutex _mutex;
+  std::uint64_t _next DANNAN_GUARDED_BY(_mutex) = 1;
+  Hash _last DANNAN_GUARDED_BY(_mutex){};
 };
 
 }  // namespace lugh::audit

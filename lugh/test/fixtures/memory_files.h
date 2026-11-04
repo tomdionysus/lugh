@@ -15,6 +15,7 @@
 #include <set>
 #include <string>
 
+#include "dannan/contract/thread_safety.h"
 #include "lugh/system/files.h"
 
 // Files held in a map, answered at once. `fail_writes` makes every write answer as a full
@@ -32,7 +33,7 @@ class MemoryFiles : public lugh::system::Files {
   }
 
   lugh::Task<lugh::Status> write(std::string path, lugh::Bytes data, bool replace) override {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     if (fail_writes) co_return lugh::Status::failure("cannot write " + path + ": No space left on device");
     if (!replace && _files.count(path) != 0) co_return lugh::Status::failure(path + " exists, and is not replaced");
     _files[path] = std::move(data);
@@ -41,7 +42,7 @@ class MemoryFiles : public lugh::system::Files {
   }
 
   lugh::Task<lugh::Status> append(std::string path, lugh::Bytes data) override {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     const auto found = _files.find(path);
     if (found == _files.end()) co_return lugh::Status::failure("cannot append to " + path + ": No such file or directory");
     if (tear_next_append) {
@@ -58,7 +59,7 @@ class MemoryFiles : public lugh::system::Files {
   }
 
   lugh::Task<lugh::Status> truncate(std::string path, std::uint64_t size) override {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     if (fail_truncate) co_return lugh::Status::failure("cannot truncate " + path + ": Input/output error");
     const auto found = _files.find(path);
     if (found == _files.end()) co_return lugh::Status::failure("cannot truncate " + path + ": No such file or directory");
@@ -67,32 +68,32 @@ class MemoryFiles : public lugh::system::Files {
   }
 
   lugh::Task<lugh::Status> remove(std::string path) override {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     _files.erase(path);
     co_return lugh::Status::success();
   }
 
   lugh::Task<lugh::Status> make_directory(std::string path) override {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     _directories.insert(path);
     co_return lugh::Status::success();
   }
 
   // For the test itself, which is not a coroutine.
   void put(const std::string& path, lugh::Bytes data) {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     _files[path] = std::move(data);
   }
 
   std::optional<lugh::Bytes> get(const std::string& path) const {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     const auto found = _files.find(path);
     if (found == _files.end()) return std::nullopt;
     return found->second;
   }
 
   bool exists_now(const std::string& path) const {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     return _files.count(path) != 0 || _directories.count(path) != 0;
   }
 
@@ -104,14 +105,14 @@ class MemoryFiles : public lugh::system::Files {
 
  private:
   lugh::Result<lugh::Bytes> read_now(const std::string& path, std::size_t most) const {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     const auto found = _files.find(path);
     if (found == _files.end()) return lugh::Result<lugh::Bytes>::failure("cannot read " + path + ": No such file or directory");
     if (found->second.size() > most) return lugh::Result<lugh::Bytes>::failure(path + " is larger than " + std::to_string(most) + " bytes");
     return lugh::Result<lugh::Bytes>::success(found->second);
   }
 
-  mutable std::mutex _mutex;
-  std::map<std::string, lugh::Bytes> _files;
-  std::set<std::string> _directories;
+  mutable dannan::contract::Mutex _mutex;
+  std::map<std::string, lugh::Bytes> _files DANNAN_GUARDED_BY(_mutex);
+  std::set<std::string> _directories DANNAN_GUARDED_BY(_mutex);
 };

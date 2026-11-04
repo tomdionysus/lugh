@@ -66,6 +66,14 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   check refuses a concrete sink outside the composition root. Dannan is pinned to ca8a565.
 - Finding: the unit count went from 347 to 338: the tests of `LoggerScoped` and
   `LoggerStdIO`, whose behaviour is now Dannan's and tested there.
+- Every lock is Dannan's (`dannan/contract/thread_safety.h`): `Mutex` under `Lock`, the
+  state it guards `DANNAN_GUARDED_BY` it and a helper called with it held
+  `DANNAN_REQUIRES` it, in the library and the test fixtures alike, so clang's analysis
+  (`-Werror=thread-safety`) checks every access. A table's state lock in the sealed store
+  is an `IoMutex`, since a record that does not open is logged with it held. Opening a
+  table and loading its keys now take that lock around the state they touch, though
+  nothing else can see the table yet, so the analysis can prove every access. The IoC
+  check refuses a standard lock outside the composition root.
 
 ## 2026-10-18: P5, the management API (not committed)
 

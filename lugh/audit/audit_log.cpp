@@ -63,6 +63,7 @@ Task<Result<std::shared_ptr<AuditLog>>> AuditLog::open(std::shared_ptr<dannan::s
     const auto& last = all.back();
     const auto entry = decode(last.value);
     if (!entry || key(entry->sequence) != last.key) co_return Answer::failure("audit: entry " + last.key + " cannot be read");
+    dannan::contract::Lock lock(opened->_mutex);
     opened->_next = entry->sequence + 1;
     opened->_last = entry->hash;
   }
@@ -74,7 +75,7 @@ Task<Status> AuditLog::record(Event event) {
 
   Entry entry;
   {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     entry.sequence = _next;
     entry.previous = _last;
   }
@@ -93,7 +94,7 @@ Task<Status> AuditLog::record(Event event) {
     co_return Status::failure("the audit log cannot be written: " + written.message);
   }
 
-  std::lock_guard<std::mutex> lock(_mutex);
+  dannan::contract::Lock lock(_mutex);
   _next = entry.sequence + 1;
   _last = entry.hash;
   co_return Status::success();
@@ -112,7 +113,7 @@ Task<std::vector<Entry>> AuditLog::entries(std::uint64_t from, std::size_t most)
 }
 
 std::uint64_t AuditLog::size() const {
-  std::lock_guard<std::mutex> lock(_mutex);
+  dannan::contract::Lock lock(_mutex);
   return _next - 1;
 }
 

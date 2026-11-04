@@ -14,13 +14,15 @@
 #include <deque>
 #include <mutex>
 
+#include "dannan/contract/thread_safety.h"
 #include "lugh/core/task.h"
 
 namespace lugh {
 
 // Mutual exclusion for coroutines: a writer that must wait for another suspends, holding
 // no thread, and is resumed on its own executor when the lock is its. First come, first
-// served. A std::mutex is never held across a co_await; this is what is held instead.
+// served. A Mutex (dannan/contract/thread_safety.h) is never held across a co_await; this
+// is what is held instead.
 class AsyncMutex {
  public:
   // Releases the lock when it goes, on whatever thread that is.
@@ -59,7 +61,7 @@ class AsyncMutex {
     auto executor = co_await boost::asio::this_coro::executor;
     co_await boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(
         [this, executor](auto handler) {
-          std::unique_lock<std::mutex> state(_state);
+          dannan::contract::Lock state(_state);
           if (!_locked) {
             _locked = true;
             state.unlock();
@@ -76,7 +78,7 @@ class AsyncMutex {
   // The lock passes straight to the next waiter, if there is one, so it is never free for
   // a newcomer to take out of turn.
   void _unlock() {
-    std::unique_lock<std::mutex> state(_state);
+    dannan::contract::Lock state(_state);
     if (_waiters.empty()) {
       _locked = false;
       return;
@@ -97,9 +99,9 @@ class AsyncMutex {
     boost::asio::post(executor, [handler = std::move(handler)]() mutable { std::move(handler)(); });
   }
 
-  std::mutex _state;
-  bool _locked = false;
-  std::deque<Waiter> _waiters;
+  dannan::contract::Mutex _state;
+  bool _locked DANNAN_GUARDED_BY(_state) = false;
+  std::deque<Waiter> _waiters DANNAN_GUARDED_BY(_state);
 };
 
 }  // namespace lugh

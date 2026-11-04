@@ -11,6 +11,7 @@
 #include <mutex>
 #include <set>
 
+#include "dannan/contract/thread_safety.h"
 #include "lugh/store/log_format.h"
 #include "lugh/store/store.h"
 
@@ -28,7 +29,7 @@ class MemoryStore : public lugh::store::Store {
   lugh::Task<std::optional<lugh::store::Record>> find(std::string table, std::string index, std::string value) const override {
     std::string key;
     {
-      std::lock_guard<std::mutex> lock(_mutex);
+      dannan::contract::Lock lock(_mutex);
       const auto t = _tables.find(table);
       if (t == _tables.end()) co_return std::nullopt;
       const auto by_index = t->second.indexes.find(index);
@@ -43,7 +44,7 @@ class MemoryStore : public lugh::store::Store {
   lugh::Task<std::vector<lugh::store::Record>> list(std::string table) const override { co_return list_now(table); }
 
   lugh::Task<bool> removed(std::string table, std::string key) const override {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     const auto* found = _entry(table, key);
     co_return found != nullptr && found->removed;
   }
@@ -59,14 +60,14 @@ class MemoryStore : public lugh::store::Store {
 
   // For the test itself, which is not a coroutine: the same, answered directly.
   std::optional<lugh::store::Record> get_now(std::string_view table, std::string_view key) const {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     const auto* found = _entry(table, key);
     if (found == nullptr || found->removed) return std::nullopt;
     return lugh::store::Record{std::string(key), found->version, found->value};
   }
 
   std::vector<lugh::store::Record> list_now(std::string_view table) const {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     std::vector<lugh::store::Record> out;
     const auto t = _tables.find(table);
     if (t == _tables.end()) return out;
@@ -97,7 +98,7 @@ class MemoryStore : public lugh::store::Store {
     std::map<std::string, std::map<std::string, std::string, std::less<>>, std::less<>> indexes;
   };
 
-  const Entry* _entry(std::string_view table, std::string_view key) const {
+  const Entry* _entry(std::string_view table, std::string_view key) const DANNAN_REQUIRES(_mutex) {
     const auto t = _tables.find(table);
     if (t == _tables.end()) return nullptr;
     const auto e = t->second.entries.find(key);
@@ -108,7 +109,7 @@ class MemoryStore : public lugh::store::Store {
                             std::optional<std::uint64_t> expected) {
     using lugh::store::StoreError;
     using lugh::store::Write;
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
 
     const auto t = _tables.find(name);
     if (t == _tables.end()) return Write::failure(StoreError::not_found, "no table");
@@ -153,6 +154,6 @@ class MemoryStore : public lugh::store::Store {
     return Write::success(current + 1);
   }
 
-  mutable std::mutex _mutex;
-  std::map<std::string, Table, std::less<>> _tables;
+  mutable dannan::contract::Mutex _mutex;
+  std::map<std::string, Table, std::less<>> _tables DANNAN_GUARDED_BY(_mutex);
 };

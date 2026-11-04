@@ -15,6 +15,8 @@
 #include <string>
 #include <unordered_map>
 
+#include "dannan/contract/thread_safety.h"
+
 namespace lugh::authn {
 
 // Failed sign-ins, per account and per source address, answered with a growing wait rather
@@ -41,7 +43,7 @@ class Backoff {
 
   // How long until `key` may try again; nothing when it may now.
   std::optional<std::chrono::seconds> wait(const std::string& key, TimePoint now) const {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     const auto found = _keys.find(key);
     if (found == _keys.end() || _forgotten(found->second, now)) return std::nullopt;
     const auto until = found->second.last + _delay(found->second.failures);
@@ -50,7 +52,7 @@ class Backoff {
   }
 
   void failed(const std::string& key, TimePoint now) {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     if (_keys.size() > _prune_above) _prune(now);
     auto& state = _keys[key];
     if (_forgotten(state, now)) state.failures = 0;
@@ -59,12 +61,12 @@ class Backoff {
   }
 
   void succeeded(const std::string& key) {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     _keys.erase(key);
   }
 
   std::size_t size() const {
-    std::lock_guard<std::mutex> lock(_mutex);
+    dannan::contract::Lock lock(_mutex);
     return _keys.size();
   }
 
@@ -83,14 +85,14 @@ class Backoff {
     return std::min(delay, _rules.longest);
   }
 
-  void _prune(TimePoint now) {
+  void _prune(TimePoint now) DANNAN_REQUIRES(_mutex) {
     for (auto it = _keys.begin(); it != _keys.end();) it = _forgotten(it->second, now) ? _keys.erase(it) : std::next(it);
   }
 
   Rules _rules;
   std::size_t _prune_above;
-  mutable std::mutex _mutex;
-  std::unordered_map<std::string, State> _keys;
+  mutable dannan::contract::Mutex _mutex;
+  std::unordered_map<std::string, State> _keys DANNAN_GUARDED_BY(_mutex);
 };
 
 }  // namespace lugh::authn

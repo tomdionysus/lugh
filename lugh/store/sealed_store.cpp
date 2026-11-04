@@ -67,6 +67,7 @@ Task<Status> SealedStore::_load_keys(Table& table) {
   }
 
   const auto* current = _keyring.current(name);
+  dannan::contract::Lock state(table.mutex);
   for (std::uint32_t epoch = 1; epoch <= current->epoch; ++epoch) {
     if (const auto* key = _keyring.find(name, epoch)) table.keys[epoch] = key->key;
   }
@@ -74,7 +75,9 @@ Task<Status> SealedStore::_load_keys(Table& table) {
   co_return Status::success();
 }
 
-// Before open() returns, so nothing else can see the table yet and its locks are not needed.
+// Before open() returns, so nothing else can see the table yet. Its state lock is taken
+// anyway, around each stretch that touches the state and awaits nothing, so the analysis
+// can see every access is under it.
 Task<Status> SealedStore::_open_table(TableSpec spec) {
   auto table = std::make_unique<Table>();
   table->spec = std::move(spec);
@@ -84,7 +87,10 @@ Task<Status> SealedStore::_open_table(TableSpec spec) {
   if (const auto loaded = co_await _load_keys(*table); !loaded.ok) co_return refuse(path, loaded.error);
 
   if (!co_await _files->exists(path)) {
-    const auto header = make_file_header(table->spec.name, table->epoch, table->keys.at(table->epoch));
+    const auto header = [&table] {
+      dannan::contract::Lock state(table->mutex);
+      return make_file_header(table->spec.name, table->epoch, table->keys.at(table->epoch));
+    }();
     if (!header.ok) co_return refuse(path, header.error);
     if (const auto written = co_await _files->write(path, encode_file_header(header.value), false); !written.ok) co_return written;
   }
@@ -92,23 +98,28 @@ Task<Status> SealedStore::_open_table(TableSpec spec) {
   const auto file = co_await _files->read(path, kMostTableFileBytes);
   if (!file.ok) co_return Status::failure(file.error);
 
-  const KeyFor key_for = [&table](std::uint32_t epoch) -> const SecureBuffer* {
-    const auto found = table->keys.find(epoch);
-    return found == table->keys.end() ? nullptr : &found->second;
-  };
-  auto scan = scan_log(file.value, table->spec.name, key_for);
-  if (!scan.ok) co_return refuse(path, scan.error);
-
-  if (scan.value.end == Scan::End::damaged) {
-    co_return refuse(path, "damaged at byte " + std::to_string(scan.value.problem_offset) + " (" + scan.value.problem +
-                               ") with records after it; Lugh will not run on part of a table. Restore it from another node or a backup");
-  }
-
-  table->last_tag = scan.value.header.tag();
-  for (auto& entry : scan.value.entries) {
-    if (const auto applied = _apply(*table, std::move(entry)); !applied.ok) co_return refuse(path, applied.error);
-  }
-  table->length = scan.value.valid_length;
+  // Read, checked and applied under the state lock, with nothing awaited.
+  auto scan = [&]() -> Result<Scan> {
+    const auto fail = [&](const std::string& why) { return Result<Scan>::failure(path + ": " + why); };
+    dannan::contract::Lock state(table->mutex);
+    const KeyFor key_for = [&table](std::uint32_t epoch) DANNAN_REQUIRES(table->mutex) -> const SecureBuffer* {
+      const auto found = table->keys.find(epoch);
+      return found == table->keys.end() ? nullptr : &found->second;
+    };
+    auto scanned = scan_log(file.value, table->spec.name, key_for);
+    if (!scanned.ok) return fail(scanned.error);
+    if (scanned.value.end == Scan::End::damaged) {
+      return fail("damaged at byte " + std::to_string(scanned.value.problem_offset) + " (" + scanned.value.problem +
+                  ") with records after it; Lugh will not run on part of a table. Restore it from another node or a backup");
+    }
+    table->last_tag = scanned.value.header.tag();
+    for (auto& entry : scanned.value.entries) {
+      if (const auto applied = _apply(*table, std::move(entry)); !applied.ok) return fail(applied.error);
+    }
+    table->length = scanned.value.valid_length;
+    return scanned;
+  }();
+  if (!scan.ok) co_return Status::failure(scan.error);
 
   if (scan.value.end == Scan::End::torn) {
     _logger.warn(path + ": cut a torn tail at byte " + std::to_string(scan.value.problem_offset) + " (" + scan.value.problem + ", " +
@@ -179,7 +190,7 @@ Task<std::optional<Record>> SealedStore::get(std::string name, std::string key) 
   const auto* table = _table(name);
   if (table == nullptr) co_return std::nullopt;
 
-  std::lock_guard<std::mutex> lock(table->mutex);
+  dannan::contract::Lock lock(table->mutex);
   const auto found = table->entries.find(key);
   if (found == table->entries.end() || found->second.removed) co_return std::nullopt;
   co_return _open_entry(*table, found->first, found->second);
@@ -189,7 +200,7 @@ Task<std::optional<Record>> SealedStore::find(std::string name, std::string inde
   const auto* table = _table(name);
   if (table == nullptr) co_return std::nullopt;
 
-  std::lock_guard<std::mutex> lock(table->mutex);
+  dannan::contract::Lock lock(table->mutex);
   const auto by_index = table->indexes.find(index);
   if (by_index == table->indexes.end()) co_return std::nullopt;
   const auto key = by_index->second.find(value);
@@ -204,7 +215,7 @@ Task<std::vector<Record>> SealedStore::list(std::string name) const {
   const auto* table = _table(name);
   if (table == nullptr) co_return out;
 
-  std::lock_guard<std::mutex> lock(table->mutex);
+  dannan::contract::Lock lock(table->mutex);
   for (const auto& [key, entry] : table->entries) {
     if (entry.removed) continue;
     if (auto record = _open_entry(*table, key, entry)) out.push_back(std::move(*record));
@@ -216,7 +227,7 @@ Task<bool> SealedStore::removed(std::string name, std::string key) const {
   const auto* table = _table(name);
   if (table == nullptr) co_return false;
 
-  std::lock_guard<std::mutex> lock(table->mutex);
+  dannan::contract::Lock lock(table->mutex);
   const auto found = table->entries.find(key);
   co_return found != table->entries.end() && found->second.removed;
 }
@@ -246,7 +257,7 @@ Task<Write> SealedStore::_write(Table& table, Operation operation, std::string k
   Bytes bytes;
   std::size_t length = 0;
   {
-    std::lock_guard<std::mutex> lock(table.mutex);
+    dannan::contract::Lock lock(table.mutex);
     if (table.broken) co_return Write::failure(StoreError::failed, "table " + name + " refuses writes after one failed part way; restart Lugh");
     if (key.empty() || key.size() > kMostKeyBytes) co_return Write::failure(StoreError::invalid, "a key is 1 to 255 bytes");
     if (value.size() > kMostValueBytes) co_return Write::failure(StoreError::invalid, "a value is at most 256 KiB");
@@ -290,7 +301,7 @@ Task<Write> SealedStore::_write(Table& table, Operation operation, std::string k
 
   if (const auto appended = co_await _files->append(table.path, std::move(bytes)); !appended.ok) {
     if (const auto cut = co_await _files->truncate(table.path, length); !cut.ok) {
-      std::lock_guard<std::mutex> lock(table.mutex);
+      dannan::contract::Lock lock(table.mutex);
       table.broken = true;
       _logger.error(table.path + ": a write failed part way and could not be cut back (" + cut.error + "); the table refuses writes until restart");
     }
@@ -300,7 +311,7 @@ Task<Write> SealedStore::_write(Table& table, Operation operation, std::string k
   // Durable: now memory follows.
   bool compact = false;
   {
-    std::lock_guard<std::mutex> lock(table.mutex);
+    dannan::contract::Lock lock(table.mutex);
     const auto found = table.entries.find(key);
     if (found != table.entries.end()) {
       table.superseded += found->second.frame.size();
@@ -348,7 +359,7 @@ Task<Status> SealedStore::_compact(Table& table) {
   std::size_t was = 0;
   std::uint32_t epoch = 0;
   {
-    std::lock_guard<std::mutex> lock(table.mutex);
+    dannan::contract::Lock lock(table.mutex);
     if (table.broken) co_return Status::failure("table " + name + " is refusing writes");
     epoch = table.epoch;
     was = table.length;
@@ -377,7 +388,7 @@ Task<Status> SealedStore::_compact(Table& table) {
   if (const auto written = co_await _files->write(table.path, std::move(file), true); !written.ok) co_return written;
 
   {
-    std::lock_guard<std::mutex> lock(table.mutex);
+    dannan::contract::Lock lock(table.mutex);
     for (auto& [record, frame] : frames) table.entries.find(record)->second.frame = std::move(frame);
     table.last_tag = previous;
     table.length = size;
@@ -401,7 +412,7 @@ Task<Status> SealedStore::rotate(std::string name) {
     // never a record without its key.
     if (const auto saved = co_await _keyrings->save(_keyring); !saved.ok) co_return saved;
 
-    std::lock_guard<std::mutex> lock(table->mutex);
+    dannan::contract::Lock lock(table->mutex);
     table->keys[rotated.value] = _keyring.find(table->spec.name, rotated.value)->key;
     table->epoch = epoch = rotated.value;
   }
@@ -412,7 +423,7 @@ Task<Status> SealedStore::rotate(std::string name) {
 std::optional<SealedStore::Usage> SealedStore::usage(std::string_view name) const {
   const auto* table = _table(name);
   if (table == nullptr) return std::nullopt;
-  std::lock_guard<std::mutex> lock(table->mutex);
+  dannan::contract::Lock lock(table->mutex);
   return Usage{table->length, table->superseded, table->epoch};
 }
 

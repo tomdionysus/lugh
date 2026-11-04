@@ -42,6 +42,9 @@ PATTERNS = {
     "concrete adapter": r"\bSystem(?:Environment|Files|Console)\b|\b(?:ConsoleSink|JsonSink|console_sink)\b",
     # Dannan's clocks are the process's: only the composition root reaches for them.
     "Dannan clock": r"\b(?:SteadyTimeSource|SystemWallClock|steady_time_source|system_wall_clock)\b",
+    # Every lock is one of Dannan's (dannan/contract/thread_safety.h), so the thread-safety
+    # analysis sees every one.
+    "unchecked lock": r"std::(?:mutex|shared_mutex|recursive_mutex|lock_guard|unique_lock|scoped_lock|shared_lock)\b",
 }
 
 # Exempt from every pattern: the composition root, and the adapters, whose job
@@ -113,7 +116,7 @@ def main():
     if hits:
         print(f"FAIL: {len(hits)} hits; outside the composition root (tools/lugh_node.cpp) and the adapters, nothing may name these")
         return 1
-    print(f"ok: {len(files)} files, nothing outside the composition root (tools/lugh_node.cpp) and the adapters names a clock, the environment, a thread, a process or a file write")
+    print(f"ok: {len(files)} files, nothing outside the composition root (tools/lugh_node.cpp) and the adapters names a clock, the environment, a thread, a process, a file write or an unchecked lock")
     return 0
 
 

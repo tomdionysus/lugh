@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "dannan/contract/thread_safety.h"
 #include "dannan/status/log.h"
 #include "lugh/core/async_mutex.h"
 #include "lugh/core/status.h"
@@ -44,9 +45,9 @@ namespace lugh::store {
 // Each table has two locks. Its write lock is an AsyncMutex, held by one writer (or a
 // compaction, or a rotation) from validation through the synced append to the change in
 // memory, so writers on a table go one at a time and a waiting one holds no thread. Its
-// state lock is a std::mutex, held only for moments in which nothing is awaited: a read
-// takes it to find and open a record, a writer to check and then to apply. A read never
-// waits for a write's disk.
+// state lock (dannan/contract/thread_safety.h) is held only for moments in which nothing is
+// awaited: a read takes it to find and open a record, a writer to check and then to apply.
+// A read never waits for a write's disk.
 class SealedStore : public Store {
  public:
   // Compaction runs once a log is past this and more than half superseded.
@@ -94,16 +95,17 @@ class SealedStore : public Store {
     std::string path;
 
     AsyncMutex write_lock;
-    mutable std::mutex mutex;
-    std::map<std::string, Entry, std::less<>> entries;
+    // Guards the state below. An IoMutex: a record that does not open is logged with it held.
+    mutable dannan::contract::IoMutex mutex;
+    std::map<std::string, Entry, std::less<>> entries DANNAN_GUARDED_BY(mutex);
     // index name -> value -> key
-    std::map<std::string, std::map<std::string, std::string, std::less<>>, std::less<>> indexes;
-    std::map<std::uint32_t, SecureBuffer> keys;
-    std::uint32_t epoch = 0;
-    Bytes last_tag;
-    std::size_t length = 0;
-    std::size_t superseded = 0;
-    bool broken = false;
+    std::map<std::string, std::map<std::string, std::string, std::less<>>, std::less<>> indexes DANNAN_GUARDED_BY(mutex);
+    std::map<std::uint32_t, SecureBuffer> keys DANNAN_GUARDED_BY(mutex);
+    std::uint32_t epoch DANNAN_GUARDED_BY(mutex) = 0;
+    Bytes last_tag DANNAN_GUARDED_BY(mutex);
+    std::size_t length DANNAN_GUARDED_BY(mutex) = 0;
+    std::size_t superseded DANNAN_GUARDED_BY(mutex) = 0;
+    bool broken DANNAN_GUARDED_BY(mutex) = false;
   };
 
   SealedStore(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<system::Files> files, std::shared_ptr<keys::KeyringManager> keyrings,
@@ -111,11 +113,11 @@ class SealedStore : public Store {
 
   Task<Status> _open_table(TableSpec spec);
   Task<Status> _load_keys(Table& table);
-  Status _apply(Table& table, Scan::Entry entry);
+  Status _apply(Table& table, Scan::Entry entry) DANNAN_REQUIRES(table.mutex);
   Task<Write> _write(Table& table, Operation operation, std::string key, SecureBuffer value, std::optional<std::uint64_t> expected);
   // With the table's write lock held.
   Task<Status> _compact(Table& table);
-  std::optional<Record> _open_entry(const Table& table, const std::string& key, const Entry& entry) const;
+  std::optional<Record> _open_entry(const Table& table, const std::string& key, const Entry& entry) const DANNAN_REQUIRES(table.mutex);
   Table* _table(std::string_view name) const;
 
   dannan::status::ScopedLogger _logger;
