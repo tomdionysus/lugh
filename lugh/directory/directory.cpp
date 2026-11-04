@@ -12,6 +12,7 @@
 #include "dannan/identity/crypto.h"
 #include "lugh/core/awaited.h"
 #include "lugh/core/encoding.h"
+#include "lugh/core/steps.h"
 
 namespace lugh::directory {
 
@@ -75,26 +76,6 @@ constexpr const char* kChangeLate = "the directory did not answer within the dea
 constexpr const char* kReadLate = "the directory was not read within the deadline";
 // What the audit log is given to record a change the directory has made.
 constexpr Deadline kAuditDeadline = std::chrono::seconds(30);
-
-template <typename T>
-std::shared_ptr<Completion<Outcome<T>>> answering(Deadline deadline, Executor executor, Done<Outcome<T>> done, const char* late) {
-  return Completion<Outcome<T>>::start(deadline, std::move(executor), std::move(done), [late] { return Outcome<T>::failure(Fault::failed, late); });
-}
-
-// The refusal for an answer of another type.
-template <typename T>
-Done<Outcome<Nothing>> refusing(std::shared_ptr<Completion<Outcome<T>>> answer) {
-  return [answer](Outcome<Nothing> refused) { answer->finish(Outcome<T>::from(refused)); };
-}
-
-// `step` on each item in turn, each given what to call when it is done, then `then`.
-template <typename Item>
-void in_turn(std::shared_ptr<std::vector<Item>> items, std::size_t at, std::function<void(const Item&, std::function<void()>)> step,
-             std::function<void()> then) {
-  if (at >= items->size()) return then();
-  const auto& item = (*items)[at];
-  step(item, [items, at, step, then] { in_turn<Item>(items, at + 1, step, then); });
-}
 
 }  // namespace
 

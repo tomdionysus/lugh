@@ -221,7 +221,8 @@ TEST_F(AuthenticatorTest, ASignInHasALifetime) {
 }
 
 TEST_F(AuthenticatorTest, APasswordAloneWhenPolicySaysSo) {
-  run(rig.policies->global_set(rig.admin, Assurance::pwd));
+  wait_for<lugh::Outcome<lugh::Nothing>>(
+      [&](lugh::Executor executor, auto done) { rig.policies->global_set(rig.admin, Assurance::pwd, kTestDeadline, executor, done); });
   const auto alice = rig.person("alice");
   run(rig.passwords->set(rig.admin, alice, text_secret(kPassword)));
   wait_for<lugh::Outcome<lugh::directory::User>>(
@@ -244,7 +245,8 @@ TEST_F(AuthenticatorTest, TheLastFactorStaysWhilePolicyNeedsIt) {
   EXPECT_TRUE(run(auth.remove_factor(rig.admin, alice.id, recovery)).ok());
   EXPECT_EQ(run(auth.remove_factor(rig.admin, alice.id, "nothing")).fault, Fault::not_found);
 
-  run(rig.policies->global_set(rig.admin, Assurance::pwd));
+  wait_for<lugh::Outcome<lugh::Nothing>>(
+      [&](lugh::Executor executor, auto done) { rig.policies->global_set(rig.admin, Assurance::pwd, kTestDeadline, executor, done); });
   EXPECT_TRUE(run(auth.remove_factor(rig.admin, alice.id, totp)).ok());
 }
 

@@ -9,7 +9,7 @@
 
 #include <algorithm>
 
-#include "lugh/core/awaited.h"
+#include "lugh/core/steps.h"
 
 namespace lugh::authn {
 
@@ -41,49 +41,96 @@ std::optional<Assurance> assurance_from_acr(std::string_view text) {
 }
 
 Policies::Policies(std::shared_ptr<store::Store> store, std::shared_ptr<directory::Directory> directory, std::shared_ptr<audit::AuditLog> audit)
-    : _store(std::move(store)), _directory(std::move(directory)), _audit(std::move(audit)) {}
+    : _calls(std::move(store)), _directory(std::move(directory)), _audit(std::move(audit)) {}
 
-Task<Assurance> Policies::global() const { co_return (co_await _read("global")).value_or(kDefault); }
+namespace {
 
-Task<Outcome<>> Policies::global_set(audit::Actor actor, Assurance level) { co_return co_await _write(std::move(actor), "global", level, "global"); }
+constexpr const char* kReadLate = "the policies were not read within the deadline";
+constexpr const char* kChangeLate = "the policies did not answer within the deadline; the change may yet be made";
+constexpr Deadline kStepDeadline = std::chrono::seconds(30);
 
-Task<std::optional<Assurance>> Policies::group(std::string group_id) const { co_return co_await _read("group/" + group_id); }
+}  // namespace
 
-Task<Outcome<>> Policies::group_set(audit::Actor actor, std::string group_id, std::optional<Assurance> level) {
-  if (!co_await awaited_value<std::optional<directory::Group>>([&](Executor executor, Done<Outcome<std::optional<directory::Group>>> done) {
-        _directory->group(group_id, kTransitionDeadline, std::move(executor), std::move(done));
-      }))
-    co_return Outcome<>::failure(Fault::not_found, "no such group");
-  co_return co_await _write(std::move(actor), "group/" + group_id, level, group_id);
-}
-
-Task<Assurance> Policies::required(std::string user_id) const {
-  auto level = co_await global();
-  for (const auto& group_id : co_await awaited_value<std::vector<std::string>>([&](Executor executor, Done<Outcome<std::vector<std::string>>> done) {
-         _directory->groups_of(std::move(user_id), kTransitionDeadline, std::move(executor), std::move(done));
-       })) {
-    if (const auto own = co_await group(group_id)) level = std::max(level, *own);
-  }
-  co_return level;
-}
-
-Task<std::optional<Assurance>> Policies::_read(std::string key) const {
-  const auto record = co_await _store->get(kTable, std::move(key));
-  if (!record || record->value.size() != 2 || record->value[0] != kFormat) co_return std::nullopt;
-  const auto level = record->value[1];
-  if (level < static_cast<std::uint8_t>(Assurance::pwd) || level > static_cast<std::uint8_t>(Assurance::phr)) co_return std::nullopt;
-  co_return static_cast<Assurance>(level);
-}
-
-Task<Outcome<>> Policies::_write(audit::Actor actor, std::string key, std::optional<Assurance> level, std::string subject) {
-  SecureBuffer value{kFormat, level ? static_cast<std::uint8_t>(*level) : kNone};
-  const auto written = co_await _store->put(kTable, std::move(key), std::move(value));
-  if (!written.ok()) co_return Outcome<>::failure(directory::fault_of(written.error), written.message);
-  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
-    _audit->record(audit::Event{"policy.set", actor.id, std::move(subject), actor.source, level ? std::string(acr(*level)) : "none"}, kTransitionDeadline,
-                   std::move(executor), std::move(done));
+void Policies::global(Deadline deadline, Executor executor, Done<Outcome<Assurance>> done) const {
+  using Answer = Outcome<Assurance>;
+  auto answer = answering<Assurance>(deadline, executor, std::move(done), kReadLate);
+  _read("global", executor, [answer](Outcome<std::optional<Assurance>> level) {
+    if (!level.ok()) return answer->finish(Answer::from(level));
+    answer->finish(Answer::success(level.value.value_or(kDefault)));
   });
-  co_return Outcome<>::success();
+}
+
+void Policies::global_set(audit::Actor actor, Assurance level, Deadline deadline, Executor executor, Done<Outcome<>> done) {
+  auto answer = answering<Nothing>(deadline, executor, std::move(done), kChangeLate);
+  _write(std::move(actor), "global", level, "global", executor, [answer](Outcome<> written) { answer->finish(std::move(written)); });
+}
+
+void Policies::group(std::string group_id, Deadline deadline, Executor executor, Done<Outcome<std::optional<Assurance>>> done) const {
+  auto answer = answering<std::optional<Assurance>>(deadline, executor, std::move(done), kReadLate);
+  _read("group/" + group_id, executor, [answer](Outcome<std::optional<Assurance>> level) { answer->finish(std::move(level)); });
+}
+
+void Policies::group_set(audit::Actor actor, std::string group_id, std::optional<Assurance> level, Deadline deadline, Executor executor, Done<Outcome<>> done) {
+  using Answer = Outcome<>;
+  auto answer = answering<Nothing>(deadline, executor, std::move(done), kChangeLate);
+  _directory->group(group_id, kStepDeadline, executor,
+                    [self = shared_from_this(), answer, actor, group_id, level, executor](Outcome<std::optional<directory::Group>> found) {
+                      if (!found.ok()) return answer->finish(Answer::from(found));
+                      if (!found.value) return answer->finish(Answer::failure(Fault::not_found, "no such group"));
+                      self->_write(actor, "group/" + group_id, level, group_id, executor, [answer](Outcome<> written) { answer->finish(std::move(written)); });
+                    });
+}
+
+void Policies::required(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<Assurance>> done) const {
+  using Answer = Outcome<Assurance>;
+  auto answer = answering<Assurance>(deadline, executor, std::move(done), kReadLate);
+  auto self = shared_from_this();
+  _read("global", executor, [=](Outcome<std::optional<Assurance>> global) {
+    if (!global.ok()) return answer->finish(Answer::from(global));
+    auto level = std::make_shared<Assurance>(global.value.value_or(kDefault));
+    self->_directory->groups_of(user_id, kStepDeadline, executor, [=](Outcome<std::vector<std::string>> groups) {
+      if (!groups.ok()) return answer->finish(Answer::from(groups));
+      auto failed = std::make_shared<std::optional<Answer>>();
+      in_turn<std::string>(
+          std::make_shared<std::vector<std::string>>(std::move(groups.value)), 0,
+          [=](const std::string& group_id, std::function<void()> next) {
+            if (*failed) return next();
+            self->_read("group/" + group_id, executor, [=](Outcome<std::optional<Assurance>> own) {
+              if (!own.ok()) {
+                *failed = Answer::from(own);
+              } else if (own.value) {
+                *level = std::max(*level, *own.value);
+              }
+              next();
+            });
+          },
+          [=] { answer->finish(*failed ? std::move(**failed) : Answer::success(*level)); });
+    });
+  });
+}
+
+void Policies::_read(std::string key, Executor executor, Done<Outcome<std::optional<Assurance>>> done) const {
+  using Answer = Outcome<std::optional<Assurance>>;
+  _calls.get_settled(kTable, std::move(key), std::move(executor), [done = std::move(done)](Outcome<std::optional<store::Record>> record) {
+    if (!record.ok()) return done(Answer::from(record));
+    const auto& found = record.value;
+    if (!found || found->value.size() != 2 || found->value[0] != kFormat) return done(Answer::success(std::nullopt));
+    const auto level = found->value[1];
+    if (level < static_cast<std::uint8_t>(Assurance::pwd) || level > static_cast<std::uint8_t>(Assurance::phr)) return done(Answer::success(std::nullopt));
+    done(Answer::success(static_cast<Assurance>(level)));
+  });
+}
+
+void Policies::_write(audit::Actor actor, std::string key, std::optional<Assurance> level, std::string subject, Executor executor, Done<Outcome<>> done) {
+  using Answer = Outcome<>;
+  SecureBuffer value{kFormat, level ? static_cast<std::uint8_t>(*level) : kNone};
+  _calls.put_settled(kTable, std::move(key), std::move(value), std::nullopt, executor,
+                     [audit = _audit, actor, level, subject = std::move(subject), executor, done = std::move(done)](store::Write written) mutable {
+                       if (!written.ok()) return done(Answer::failure(directory::fault_of(written.error), written.message));
+                       // A failure is logged by the audit log itself; the change has been made.
+                       audit->record(audit::Event{"policy.set", actor.id, std::move(subject), actor.source, level ? std::string(acr(*level)) : "none"},
+                                     kStepDeadline, executor, [done = std::move(done)](Status) { done(Answer::success()); });
+                     });
 }
 
 }  // namespace lugh::authn

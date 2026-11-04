@@ -80,7 +80,8 @@ Task<Step> Authenticator::password(std::string login, Secret password, std::stri
 
   SignIn sign_in;
   sign_in.user_id = user->id;
-  sign_in.required = co_await _policies->required(user->id);
+  sign_in.required = co_await awaited_value<Assurance>(
+      [&](Executor executor, Done<Outcome<Assurance>> done) { _policies->required(user->id, kTransitionDeadline, std::move(executor), std::move(done)); });
   sign_in.started = _time.now();
   sign_in.amr = {"pwd"};
 
@@ -174,7 +175,8 @@ Task<Step> Authenticator::redeem(Secret token, Secret password, std::string sour
   SignIn sign_in;
   sign_in.user_id = user->id;
   sign_in.stage = SignIn::Stage::enrolment;
-  sign_in.required = co_await _policies->required(user->id);
+  sign_in.required = co_await awaited_value<Assurance>(
+      [&](Executor executor, Done<Outcome<Assurance>> done) { _policies->required(user->id, kTransitionDeadline, std::move(executor), std::move(done)); });
   sign_in.started = _time.now();
   sign_in.amr = {"pwd"};
   co_return Step::of(Step::Kind::next, std::move(sign_in));
@@ -226,7 +228,9 @@ Task<Outcome<>> Authenticator::remove_factor(audit::Actor actor, std::string use
   if (target == nullptr) co_return Answer::failure(Fault::not_found, "no such factor");
 
   const bool last = target->kind == FactorKind::totp && target->confirmed && confirmed_totp == 1;
-  if (last && co_await _policies->required(user_id) > Assurance::pwd) {
+  if (last && co_await awaited_value<Assurance>([&](Executor executor, Done<Outcome<Assurance>> done) {
+                _policies->required(user_id, kTransitionDeadline, std::move(executor), std::move(done));
+              }) > Assurance::pwd) {
     co_return Answer::failure(Fault::refused, "the user's last second factor cannot be removed while their policy requires one");
   }
   co_return co_await _factors->remove(std::move(actor), std::move(user_id), std::move(factor_id));

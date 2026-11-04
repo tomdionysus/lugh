@@ -34,5 +34,6 @@ TEST(PolicyRoutes, OnlyTheThreeLevels) {
   EXPECT_EQ(rig.request(verb::put, "/api/v1/policies/global", R"({"acr":"mfa"})").status, 400u);
   EXPECT_EQ(rig.request(verb::put, "/api/v1/policies/global", R"({})").status, 400u);
   EXPECT_EQ(rig.request(verb::put, "/api/v1/policies/groups/nothing", R"({"acr":"urn:lugh:acr:mfa"})").status, 404u);
-  EXPECT_EQ(run(rig.policies->global()), lugh::authn::Assurance::mfa);
+  EXPECT_EQ(read_value<lugh::authn::Assurance>([&](lugh::Executor executor, auto done) { rig.policies->global(kTestDeadline, executor, done); }),
+            lugh::authn::Assurance::mfa);
 }

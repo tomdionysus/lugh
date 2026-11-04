@@ -23,8 +23,10 @@ TEST(Policy, AcrValues) {
 TEST(Policy, MfaForEveryoneUntilSaidOtherwise) {
   AuthnRig rig;
   const auto alice = rig.person("alice");
-  EXPECT_EQ(run(rig.policies->global()), Assurance::mfa);
-  EXPECT_EQ(run(rig.policies->required(alice.id)), Assurance::mfa);
+  EXPECT_EQ(read_value<lugh::authn::Assurance>([&](lugh::Executor executor, auto done) { rig.policies->global(kTestDeadline, executor, done); }),
+            Assurance::mfa);
+  EXPECT_EQ(read_value<lugh::authn::Assurance>([&](lugh::Executor executor, auto done) { rig.policies->required(alice.id, kTestDeadline, executor, done); }),
+            Assurance::mfa);
 }
 
 TEST(Policy, TheStrictestWins) {
@@ -44,22 +46,41 @@ TEST(Policy, TheStrictestWins) {
   wait_for<lugh::Outcome<lugh::Nothing>>(
       [&](lugh::Executor executor, auto done) { rig.directory->add_member(rig.admin, relaxed.id, bob.id, kTestDeadline, executor, done); });
 
-  ASSERT_TRUE(run(rig.policies->group_set(rig.admin, admins.id, Assurance::phr)).ok());
-  ASSERT_TRUE(run(rig.policies->group_set(rig.admin, relaxed.id, Assurance::pwd)).ok());
-  EXPECT_EQ(run(rig.policies->required(alice.id)), Assurance::phr);
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                rig.policies->group_set(rig.admin, admins.id, Assurance::phr, kTestDeadline, executor, done);
+              }).ok());
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                rig.policies->group_set(rig.admin, relaxed.id, Assurance::pwd, kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_EQ(read_value<lugh::authn::Assurance>([&](lugh::Executor executor, auto done) { rig.policies->required(alice.id, kTestDeadline, executor, done); }),
+            Assurance::phr);
   // A group cannot lower what the global level asks.
-  EXPECT_EQ(run(rig.policies->required(bob.id)), Assurance::mfa);
+  EXPECT_EQ(read_value<lugh::authn::Assurance>([&](lugh::Executor executor, auto done) { rig.policies->required(bob.id, kTestDeadline, executor, done); }),
+            Assurance::mfa);
 
-  ASSERT_TRUE(run(rig.policies->global_set(rig.admin, Assurance::pwd)).ok());
-  EXPECT_EQ(run(rig.policies->required(bob.id)), Assurance::pwd);
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                rig.policies->global_set(rig.admin, Assurance::pwd, kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_EQ(read_value<lugh::authn::Assurance>([&](lugh::Executor executor, auto done) { rig.policies->required(bob.id, kTestDeadline, executor, done); }),
+            Assurance::pwd);
 
-  ASSERT_TRUE(run(rig.policies->group_set(rig.admin, admins.id, std::nullopt)).ok());
-  EXPECT_FALSE(run(rig.policies->group(admins.id)));
-  EXPECT_EQ(run(rig.policies->required(alice.id)), Assurance::pwd);
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                rig.policies->group_set(rig.admin, admins.id, std::nullopt, kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_FALSE(read_value<std::optional<lugh::authn::Assurance>>(
+      [&](lugh::Executor executor, auto done) { rig.policies->group(admins.id, kTestDeadline, executor, done); }));
+  EXPECT_EQ(read_value<lugh::authn::Assurance>([&](lugh::Executor executor, auto done) { rig.policies->required(alice.id, kTestDeadline, executor, done); }),
+            Assurance::pwd);
   // And set again after clearing.
-  ASSERT_TRUE(run(rig.policies->group_set(rig.admin, admins.id, Assurance::mfa)).ok());
-  EXPECT_EQ(run(rig.policies->required(alice.id)), Assurance::mfa);
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                rig.policies->group_set(rig.admin, admins.id, Assurance::mfa, kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_EQ(read_value<lugh::authn::Assurance>([&](lugh::Executor executor, auto done) { rig.policies->required(alice.id, kTestDeadline, executor, done); }),
+            Assurance::mfa);
 
-  EXPECT_EQ(run(rig.policies->group_set(rig.admin, "nothing", Assurance::mfa)).fault, lugh::Fault::not_found);
+  EXPECT_EQ(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+              rig.policies->group_set(rig.admin, "nothing", Assurance::mfa, kTestDeadline, executor, done);
+            }).fault,
+            lugh::Fault::not_found);
   EXPECT_TRUE(rig.audited("policy.set"));
 }

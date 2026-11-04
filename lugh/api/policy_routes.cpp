@@ -47,12 +47,15 @@ void PolicyRoutes::register_routes(http::Router& router) {
 
 Task<void> PolicyRoutes::_get(http::RouteContext context) const {
   boost::json::object body;
-  body["global"] = std::string(authn::acr(co_await _policies->global()));
+  body["global"] = std::string(authn::acr(co_await awaited_value<authn::Assurance>(
+      [&](Executor executor, Done<Outcome<authn::Assurance>> done) { _policies->global(kTransitionDeadline, std::move(executor), std::move(done)); })));
   boost::json::array groups;
   for (const auto& group : co_await awaited_value<std::vector<directory::Group>>([&](Executor executor, Done<Outcome<std::vector<directory::Group>>> done) {
          _directory->groups(kTransitionDeadline, std::move(executor), std::move(done));
        })) {
-    const auto level = co_await _policies->group(group.id);
+    const auto level = co_await awaited_value<std::optional<authn::Assurance>>([&](Executor executor, Done<Outcome<std::optional<authn::Assurance>>> done) {
+      _policies->group(group.id, kTransitionDeadline, std::move(executor), std::move(done));
+    });
     if (!level) continue;
     boost::json::object one;
     one["group"] = group.id;
@@ -70,7 +73,9 @@ Task<void> PolicyRoutes::_set_global(http::RouteContext context) {
     context.done();
     co_return;
   }
-  const auto set = co_await _policies->global_set(actor_of(context), *level);
+  const auto set = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+    _policies->global_set(actor_of(context), *level, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!set.ok()) {
     write_fault(context.response, set);
     context.done();
@@ -85,7 +90,9 @@ Task<void> PolicyRoutes::_set_group(http::RouteContext context) {
     context.done();
     co_return;
   }
-  const auto set = co_await _policies->group_set(actor_of(context), context.parameter("id"), level);
+  const auto set = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+    _policies->group_set(actor_of(context), context.parameter("id"), level, kTransitionDeadline, std::move(executor), std::move(done));
+  });
   if (!set.ok()) {
     write_fault(context.response, set);
     context.done();
