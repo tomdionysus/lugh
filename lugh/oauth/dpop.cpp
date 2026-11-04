@@ -11,6 +11,7 @@
 
 #include "dannan/identity/crypto.h"
 #include "lugh/core/encoding.h"
+#include "lugh/http/client_certificate.h"
 
 namespace lugh::oauth {
 
@@ -113,6 +114,12 @@ std::optional<Bearer> presented_token(const TokenIssuer& issuer, DpopChecker& dp
   if (!bearer) return std::nullopt;
   // A bound token is never a bearer token: presented without its key, it is refused.
   if (bearer->jkt.has_value() != bound) return std::nullopt;
+  // A certificate-bound token (RFC 8705 section 3) is good only on a connection presenting
+  // that certificate.
+  if (bearer->x5t) {
+    const auto certificate = http::client_certificate(request);
+    if (!certificate || certificate->thumbprint != *bearer->x5t) return std::nullopt;
+  }
   if (!bound) return bearer;
   const auto proof = request.find(DpopChecker::kHeader);
   if (proof == request.end()) return std::nullopt;

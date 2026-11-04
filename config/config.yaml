@@ -26,6 +26,8 @@ server:
   threads: 2
 
 tls:
+  # client_ca: the CA a client certificate must chain to for its subject to name an
+  # application; without it, only a certificate's thumbprint does.
   # There is no plaintext listener: both are required. TLS 1.3 and nothing older. These
   # are the development pair that tools/lugh_dev_cert.sh writes; the unit points at the
   # installed ones.
@@ -58,3 +60,8 @@ oauth:
   # The issuer: every token's iss, and the base of the metadata's URLs. The public https URL
   # clients reach Lugh at, without a trailing '/'. Left out, no metadata is served.
   issuer: "https://localhost:8443"
+  # A second listener that asks every connection for a client certificate (RFC 8705): for
+  # applications that authenticate with one (tls_client_auth) or whose tokens are bound to
+  # one. Left out, there is none. The main listener never asks, so a browser never sees a
+  # certificate picker.
+  # mtls_port: 8444

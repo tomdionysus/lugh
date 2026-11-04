@@ -40,6 +40,9 @@ struct HttpPipeline {
   std::shared_ptr<ClientAddress> client_address;
   std::vector<HttpMiddleware> middlewares;
   Limits limits;
+  // The mTLS listener: a client certificate presented is handed to the routes
+  // (lugh/http/client_certificate.h).
+  bool client_certificates = false;
 };
 
 // Beast over TLS 1.3, and only that: there is no plaintext listener. Runs on an io_context
@@ -47,8 +50,10 @@ struct HttpPipeline {
 // security headers, whatever the middleware set.
 class HttpServer : public std::enable_shared_from_this<HttpServer> {
  public:
+  // With `client_certificates`, the listener is the mTLS one, its TLS context asking for them
+  // (TlsContext::ClientCertificates).
   HttpServer(std::shared_ptr<dannan::status::LogSink> log, net::io_context& io_context, std::shared_ptr<ssl::context> tls,
-             std::shared_ptr<ClientAddress> client_address, HttpPipeline::Limits limits = {});
+             std::shared_ptr<ClientAddress> client_address, HttpPipeline::Limits limits = {}, bool client_certificates = false);
 
   // In the order they run. Before start().
   void middleware_add(HttpMiddleware middleware);
@@ -73,6 +78,7 @@ class HttpServer : public std::enable_shared_from_this<HttpServer> {
   std::shared_ptr<ssl::context> _tls;
   std::shared_ptr<ClientAddress> _client_address;
   HttpPipeline::Limits _limits;
+  bool _client_certificates = false;
   std::vector<HttpMiddleware> _middlewares;
   std::shared_ptr<const HttpPipeline> _pipeline;
 };

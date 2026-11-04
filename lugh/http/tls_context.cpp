@@ -12,6 +12,10 @@
 namespace lugh::http {
 
 Result<std::shared_ptr<ssl::context>> TlsContext::server(const std::string& certificate_path, const std::string& key_path) {
+  return server(certificate_path, key_path, ClientCertificates{});
+}
+
+Result<std::shared_ptr<ssl::context>> TlsContext::server(const std::string& certificate_path, const std::string& key_path, ClientCertificates clients) {
   using Answer = Result<std::shared_ptr<ssl::context>>;
 
   if (certificate_path.empty() || key_path.empty()) return Answer::failure("TLS needs both tls.certificate and tls.key: there is no plaintext listener");
@@ -39,6 +43,17 @@ Result<std::shared_ptr<ssl::context>> TlsContext::server(const std::string& cert
 
   if (SSL_CTX_check_private_key(context->native_handle()) != 1)
     return Answer::failure("tls.key " + key_path + " does not match tls.certificate " + certificate_path);
+
+  if (clients.request) {
+    if (!clients.ca_path.empty()) {
+      if (SSL_CTX_load_verify_locations(context->native_handle(), clients.ca_path.c_str(), nullptr) != 1)
+        return Answer::failure("cannot read the client CA " + clients.ca_path);
+      if (auto* names = SSL_load_client_CA_file(clients.ca_path.c_str())) SSL_CTX_set_client_CA_list(context->native_handle(), names);
+    }
+    // Asked for, never required, and never a reason to end the handshake: the outcome of the
+    // chain check is kept on the connection (SSL_get_verify_result) for the routes to read.
+    SSL_CTX_set_verify(context->native_handle(), SSL_VERIFY_PEER, [](int, X509_STORE_CTX*) { return 1; });
+  }
 
   return Answer::success(std::move(context));
 }

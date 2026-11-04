@@ -57,6 +57,16 @@ struct Config {
   // URL without a query, fragment or trailing '/'. Empty: no metadata is served.
   std::string issuer;
 
+  // The mTLS listener (RFC 8705), on the same address: it asks every connection for a client
+  // certificate, which the main listener never does, so a browser is never shown a
+  // certificate picker. Zero: none, and tls_client_auth and certificate-bound tokens are
+  // unavailable.
+  std::uint16_t mtls_port = 0;
+
+  // The CA a client certificate must chain to for its subject to name a client. Empty: only a
+  // certificate's thumbprint names one.
+  std::string tls_client_ca;
+
   // A request from one of these is taken at the last X-Forwarded-For entry; everything else
   // at its socket's address. Empty by default: no proxy is trusted until named.
   std::vector<network::Cidr> trusted_proxies;

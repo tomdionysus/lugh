@@ -8,13 +8,18 @@
 #include "lugh/http/http_server.h"
 
 #include <gtest/gtest.h>
+#include <openssl/pem.h>
 #include <openssl/ssl.h>
+#include <openssl/x509.h>
 
 #include <boost/json.hpp>
 #include <stdexcept>
 #include <thread>
 
+#include "dannan/identity/crypto.h"
+#include "lugh/core/encoding.h"
 #include "lugh/http/api_json.h"
+#include "lugh/http/client_certificate.h"
 #include "lugh/http/tls_context.h"
 #include "lugh/test/fixtures/recording_sink.h"
 #include "lugh/test/fixtures/temp_directory.h"
@@ -43,12 +48,16 @@ struct Running {
   std::shared_ptr<HttpServer> server;
   std::thread thread;
 
-  explicit Running(std::vector<HttpMiddleware> middlewares, HttpPipeline::Limits limits = {}) {
+  // With `mtls`, the listener asks for client certificates, chained to `client_ca` if given.
+  explicit Running(std::vector<HttpMiddleware> middlewares, HttpPipeline::Limits limits = {}, bool mtls = false, const std::string& client_ca = "") {
     TestCertificate pair;
-    const auto tls = TlsContext::server(dir.write("cert.pem", pair.certificate_pem).string(), dir.write("key.pem", pair.key_pem).string());
+    const auto certificate = dir.write("cert.pem", pair.certificate_pem).string();
+    const auto key = dir.write("key.pem", pair.key_pem).string();
+    const auto tls = mtls ? TlsContext::server(certificate, key, {true, client_ca.empty() ? "" : dir.write("ca.pem", client_ca).string()})
+                          : TlsContext::server(certificate, key);
     EXPECT_TRUE(tls.ok) << tls.error;
 
-    server = std::make_shared<HttpServer>(logger, io_context, tls.value, std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}), limits);
+    server = std::make_shared<HttpServer>(logger, io_context, tls.value, std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}), limits, mtls);
     for (auto& middleware : middlewares) server->middleware_add(std::move(middleware));
 
     const auto listening = server->listen("127.0.0.1", 0);
@@ -72,7 +81,9 @@ struct Client {
   beast::ssl_stream<beast::tcp_stream> stream;
   beast::flat_buffer buffer;
 
-  explicit Client(std::uint16_t port, int max_version = TLS1_3_VERSION) : stream(_prepared(max_version), context) {
+  // With `certificate`, the client presents it (a TestCertificate's PEM pair).
+  explicit Client(std::uint16_t port, int max_version = TLS1_3_VERSION, const TestCertificate* certificate = nullptr)
+      : stream(_prepared(max_version, certificate), context) {
     stream.next_layer().connect(net::ip::tcp::endpoint(net::ip::make_address("127.0.0.1"), port));
     stream.handshake(ssl::stream_base::client);
   }
@@ -90,8 +101,12 @@ struct Client {
   std::string negotiated() { return SSL_get_version(stream.native_handle()); }
 
  private:
-  beast::tcp_stream _prepared(int max_version) {
+  beast::tcp_stream _prepared(int max_version, const TestCertificate* certificate) {
     context.set_verify_mode(ssl::verify_none);
+    if (certificate) {
+      context.use_certificate(net::buffer(certificate->certificate_pem), ssl::context::pem);
+      context.use_private_key(net::buffer(certificate->key_pem), ssl::context::pem);
+    }
     SSL_CTX_set_max_proto_version(context.native_handle(), max_version);
     return beast::tcp_stream(io_context);
   }
@@ -234,4 +249,64 @@ TEST(HttpServer, APortInUseFails) {
       std::make_shared<HttpServer>(std::make_shared<RecordingSink>(), io_context, tls, std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}));
 
   EXPECT_FALSE(second->listen("127.0.0.1", running.server->port()).ok);
+}
+
+namespace {
+
+// What the routes were told of the client's certificate, as the body.
+HttpMiddleware certificate_echo() {
+  return [](const HttpRequest& request, const std::string&, std::shared_ptr<HttpResponse> response, std::function<void(bool)> next) {
+    const auto certificate = lugh::http::client_certificate(request);
+    response->body() = certificate ? certificate->thumbprint + "|" + certificate->subject + "|" + (certificate->verified ? "verified" : "unverified") : "none";
+    next(false);
+  };
+}
+
+// The x5t#S256 of a PEM certificate: the SHA-256 of its DER, base64url (RFC 8705 section 3.1).
+std::string thumbprint_of(const std::string& pem) {
+  BIO* bio = BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size()));
+  X509* certificate = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
+  unsigned char* der = nullptr;
+  const int length = i2d_X509(certificate, &der);
+  const auto out = lugh::encoding::base64url(dannan::identity::sha256({der, static_cast<std::size_t>(length)}).bytes);
+  OPENSSL_free(der);
+  X509_free(certificate);
+  BIO_free(bio);
+  return out;
+}
+
+}  // namespace
+
+// RFC 8705: the certificate a client presents on the mTLS listener reaches the routes.
+TEST(HttpServer, TheMtlsListenerHandsOnTheClientCertificate) {
+  TestCertificate client_pair;
+  {
+    Running running({certificate_echo()}, {}, true);
+    Client client(running.server->port(), TLS1_3_VERSION, &client_pair);
+    EXPECT_EQ(client.send(get("/")).body(), thumbprint_of(client_pair.certificate_pem) + "|CN=localhost|unverified");
+    // A connection without one is served all the same.
+    Client plain(running.server->port());
+    EXPECT_EQ(plain.send(get("/")).body(), "none");
+  }
+  // Chained to the configured client CA, it is verified (a self-signed certificate is its own).
+  Running running({certificate_echo()}, {}, true, client_pair.certificate_pem);
+  Client client(running.server->port(), TLS1_3_VERSION, &client_pair);
+  EXPECT_EQ(client.send(get("/")).body(), thumbprint_of(client_pair.certificate_pem) + "|CN=localhost|verified");
+  // Another certificate is not.
+  TestCertificate stranger;
+  Client other(running.server->port(), TLS1_3_VERSION, &stranger);
+  EXPECT_NE(other.send(get("/")).body().find("|unverified"), std::string::npos);
+}
+
+// Only the server says what certificate a client presented: a client's own claim is dropped.
+TEST(HttpServer, AClientCannotClaimACertificate) {
+  for (const bool mtls : {false, true}) {
+    Running running({certificate_echo()}, {}, mtls);
+    Client client(running.server->port());
+    auto request = get("/");
+    request.set(lugh::http::kCertificateThumbprint, "forged");
+    request.set(lugh::http::kCertificateSubject, "CN=admin");
+    request.set(lugh::http::kCertificateChain, "verified");
+    EXPECT_EQ(client.send(request).body(), "none") << mtls;
+  }
 }

@@ -404,7 +404,7 @@ int run(const cli::Options& options) {
   auto pre_sessions = std::make_shared<session::PreSessions>(time, authn::Authenticator::Settings{}.lifetime);
   signin::Pages pages(services.authenticator, services.directory, services.sessions, pre_sessions);
   pages.register_routes(*router);
-  oauth::MetadataRoutes metadata_routes(services.keys, {config.issuer, config.allow_client_secrets});
+  oauth::MetadataRoutes metadata_routes(services.keys, {config.issuer, config.allow_client_secrets, config.mtls_port});
   metadata_routes.register_routes(*router);
   if (config.issuer.empty()) logger.warn("No oauth.issuer: the OAuth metadata, the code flow and the token endpoint are not served");
   std::unique_ptr<oauth::FlowRoutes> flow_routes;
@@ -425,6 +425,23 @@ int run(const cli::Options& options) {
   if (const auto listening = server->listen(config.address, config.port); !listening.ok) {
     logger.error(listening.error);
     return 1;
+  }
+
+  // The mTLS listener, when there is one: the same routes, and every connection asked for a
+  // client certificate (RFC 8705).
+  std::shared_ptr<http::HttpServer> mtls_server;
+  if (config.mtls_port != 0) {
+    const auto mtls_tls = http::TlsContext::server(config.tls_certificate, config.tls_key, {true, config.tls_client_ca});
+    if (!mtls_tls.ok) {
+      logger.error(mtls_tls.error);
+      return 1;
+    }
+    mtls_server = std::make_shared<http::HttpServer>(log, io_context, mtls_tls.value, client_address, http::HttpPipeline::Limits{}, true);
+    for (const auto* prefix : {"/health", "/ready", "/api", "/oauth2"}) mtls_server->middleware_add(router->middleware(prefix));
+    if (const auto listening = mtls_server->listen(config.address, config.mtls_port); !listening.ok) {
+      logger.error(listening.error);
+      return 1;
+    }
   }
 
   // Once an hour, a key that has signed for its time is replaced (the new one published for
@@ -462,10 +479,12 @@ int run(const cli::Options& options) {
     if (ec) return;
     logger.info("Stopping on " + signal_name(number));
     server->stop();
+    if (mtls_server) mtls_server->stop();
     io_context.stop();
   });
 
   server->start();
+  if (mtls_server) mtls_server->start();
 
   std::vector<std::thread> threads;
   for (unsigned i = 1; i < config.threads; ++i) threads.emplace_back([&io_context] { io_context.run(); });

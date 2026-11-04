@@ -10,8 +10,10 @@
 #include <stdexcept>
 
 #include "dannan/encoding/percent.h"
+#include "dannan/identity/crypto.h"
 #include "lugh/core/encoding.h"
 #include "lugh/core/steps.h"
+#include "lugh/http/client_certificate.h"
 #include "lugh/tokens/jose.h"
 
 namespace lugh::oauth {
@@ -117,8 +119,21 @@ void ClientAuthenticator::authenticate(const http::HttpRequest& request, const P
         if (basic || jws) return answer->finish(refused("this client is public: it presents no credential"));
         return answer->finish(Answer::success(app));
 
-      case apps::ClientAuth::tls_client_auth:
-        return answer->finish(refused("tls_client_auth needs the client's certificate, which this server asks for from O8"));
+      case apps::ClientAuth::tls_client_auth: {
+        // RFC 8705 section 2: the certificate presented on the mTLS listener, named by its
+        // thumbprint (any certificate whose key the client holds), or by its subject (only one
+        // that chains to the configured client CA, or anyone could make one with that name).
+        if (basic || jws) return answer->finish(refused("this client authenticates with its certificate, and nothing else"));
+        const auto certificate = http::client_certificate(request);
+        if (!certificate) return answer->finish(refused("this client authenticates with a certificate, presented at the mTLS endpoint"));
+        if (!app.tls_thumbprint.empty()) {
+          if (!dannan::identity::constant_time_equal(byte_span(certificate->thumbprint), byte_span(app.tls_thumbprint)))
+            return answer->finish(refused("the certificate is not this client's"));
+          return answer->finish(Answer::success(app));
+        }
+        if (!certificate->verified || certificate->subject != app.tls_subject) return answer->finish(refused("the certificate is not this client's"));
+        return answer->finish(Answer::success(app));
+      }
 
       case apps::ClientAuth::private_key_jwt: {
         if (!jws) return answer->finish(refused("this client authenticates with private_key_jwt"));

@@ -113,7 +113,7 @@ void TokenIssuer::person_claims(std::string user_id, std::vector<std::string> sc
 }
 
 void TokenIssuer::for_person(apps::App app, CodeGrant grant, Deadline deadline, Executor executor, Done<Outcome<Issued>> done, bool id_token,
-                             std::optional<std::string> jkt) {
+                             std::optional<boost::json::object> cnf) {
   using Answer = Outcome<Issued>;
   auto answer = answering<Issued>(deadline, executor, std::move(done), "no tokens were made within the deadline");
   const auto signer = _keys->signer();
@@ -140,11 +140,11 @@ void TokenIssuer::for_person(apps::App app, CodeGrant grant, Deadline deadline, 
       access["amr"] = strings(grant.amr);
       access["auth_time"] = grant.auth_time;
       access["sid"] = grant.sid;
-      if (jkt) access["cnf"] = {{"jkt", *jkt}};
+      if (cnf) access["cnf"] = *cnf;
 
       Issued issued;
       issued.access_token = tokens::jws_sign(*signer->key, signer->kid, "at+jwt", access);
-      if (jkt) issued.token_type = "DPoP";
+      if (cnf && cnf->contains("jkt")) issued.token_type = "DPoP";
       issued.expires_in = app.access_seconds;
       issued.scopes = scopes;
       if (id_token && has(scopes, "openid")) {
@@ -167,7 +167,7 @@ void TokenIssuer::for_person(apps::App app, CodeGrant grant, Deadline deadline, 
   });
 }
 
-Outcome<Issued> TokenIssuer::for_client(const apps::App& app, const std::vector<std::string>& asked, std::optional<std::string> jkt) const {
+Outcome<Issued> TokenIssuer::for_client(const apps::App& app, const std::vector<std::string>& asked, std::optional<boost::json::object> cnf) const {
   using Answer = Outcome<Issued>;
   const auto signer = _keys->signer();
   if (!signer) return Answer::failure(Fault::failed, "no key signs yet");
@@ -187,10 +187,10 @@ Outcome<Issued> TokenIssuer::for_client(const apps::App& app, const std::vector<
   access["exp"] = now + app.access_seconds;
   access["jti"] = random_id();
   access["scope"] = scopes::join(scopes);
-  if (jkt) access["cnf"] = {{"jkt", *jkt}};
+  if (cnf) access["cnf"] = *cnf;
   Issued issued;
   issued.access_token = tokens::jws_sign(*signer->key, signer->kid, "at+jwt", access);
-  if (jkt) issued.token_type = "DPoP";
+  if (cnf && cnf->contains("jkt")) issued.token_type = "DPoP";
   issued.expires_in = app.access_seconds;
   issued.scopes = scopes;
   return Answer::success(std::move(issued));
@@ -227,8 +227,11 @@ std::optional<Bearer> TokenIssuer::verify(std::string_view token, std::optional<
   bearer.service = bearer.subject == bearer.client_id;
   if (const auto cnf = claims.if_contains("cnf"); cnf && cnf->is_object()) {
     const auto jkt = cnf->as_object().if_contains("jkt");
-    if (!jkt || !jkt->is_string()) return std::nullopt;
-    bearer.jkt = std::string(jkt->as_string());
+    const auto x5t = cnf->as_object().if_contains("x5t#S256");
+    if (jkt && jkt->is_string()) bearer.jkt = std::string(jkt->as_string());
+    if (x5t && x5t->is_string()) bearer.x5t = std::string(x5t->as_string());
+    // A cnf that binds to nothing Lugh knows is no token of Lugh's.
+    if (!bearer.jkt && !bearer.x5t) return std::nullopt;
   }
   if (const auto scope = claims.if_contains("scope"); scope && scope->is_string()) {
     if (auto split = scopes::split(scope->as_string())) bearer.scopes = std::move(*split);

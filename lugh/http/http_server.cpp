@@ -7,11 +7,18 @@
 
 #include "lugh/http/http_server.h"
 
+#include <openssl/bio.h>
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+
 #include <exception>
 #include <optional>
 #include <utility>
 
+#include "dannan/identity/crypto.h"
+#include "lugh/core/encoding.h"
 #include "lugh/http/api_json.h"
+#include "lugh/http/client_certificate.h"
 
 namespace lugh::http {
 
@@ -43,6 +50,31 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
   HttpRequest _request;
   net::ip::address _peer;
   std::string _remote;
+  std::optional<ClientCertificate> _certificate;
+
+  // The certificate the client presented on the mTLS listener, if any.
+  void _read_certificate() {
+    SSL* ssl = _stream.native_handle();
+    X509* peer = SSL_get1_peer_certificate(ssl);
+    if (!peer) return;
+    ClientCertificate certificate;
+    unsigned char* der = nullptr;
+    const int length = i2d_X509(peer, &der);
+    if (length > 0) {
+      certificate.thumbprint = encoding::base64url(dannan::identity::sha256({der, static_cast<std::size_t>(length)}).bytes);
+      OPENSSL_free(der);
+    }
+    if (BIO* bio = BIO_new(BIO_s_mem())) {
+      X509_NAME_print_ex(bio, X509_get_subject_name(peer), 0, XN_FLAG_RFC2253);
+      char* data = nullptr;
+      const long size = BIO_get_mem_data(bio, &data);
+      if (size > 0) certificate.subject.assign(data, static_cast<std::size_t>(size));
+      BIO_free(bio);
+    }
+    certificate.verified = SSL_get_verify_result(ssl) == X509_V_OK;
+    X509_free(peer);
+    if (!certificate.thumbprint.empty()) _certificate = std::move(certificate);
+  }
 
   void _handshake() {
     _stream.next_layer().expires_after(_pipeline->limits.handshake);
@@ -54,6 +86,7 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
         self->_pipeline->logger.debug("TLS handshake from " + self->_peer.to_string() + " failed: " + ec.message());
         return self->_close();
       }
+      if (self->_pipeline->client_certificates) self->_read_certificate();
       self->_read();
     });
   }
@@ -78,6 +111,16 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
     if (ec) return _close();
 
     _request = _parser->release();
+    // Only the server says what certificate a client presented: whatever a client sent in
+    // these headers is gone before anything reads the request.
+    for (const auto* name : {kCertificateThumbprint, kCertificateSubject, kCertificateChain}) {
+      while (_request.find(name) != _request.end()) _request.erase(name);
+    }
+    if (_certificate) {
+      _request.set(kCertificateThumbprint, _certificate->thumbprint);
+      _request.set(kCertificateSubject, _certificate->subject);
+      _request.set(kCertificateChain, _certificate->verified ? "verified" : "unverified");
+    }
     _remote = _pipeline->client_address->resolve(_peer, _request);
 
     _run(0, std::make_shared<HttpResponse>(status::ok, _request.version()));
@@ -152,13 +195,14 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
 }  // namespace
 
 HttpServer::HttpServer(std::shared_ptr<dannan::status::LogSink> log, net::io_context& io_context, std::shared_ptr<ssl::context> tls,
-                       std::shared_ptr<ClientAddress> client_address, HttpPipeline::Limits limits)
+                       std::shared_ptr<ClientAddress> client_address, HttpPipeline::Limits limits, bool client_certificates)
     : _logger(std::move(log), "http"),
       _io_context(io_context),
       _acceptor(net::make_strand(io_context)),
       _tls(std::move(tls)),
       _client_address(std::move(client_address)),
-      _limits(limits) {}
+      _limits(limits),
+      _client_certificates(client_certificates) {}
 
 void HttpServer::middleware_add(HttpMiddleware middleware) { _middlewares.push_back(std::move(middleware)); }
 
@@ -187,12 +231,12 @@ Status HttpServer::listen(const std::string& address, std::uint16_t port) {
 }
 
 void HttpServer::start() {
-  _pipeline = std::make_shared<const HttpPipeline>(HttpPipeline{_logger, _client_address, _middlewares, _limits});
+  _pipeline = std::make_shared<const HttpPipeline>(HttpPipeline{_logger, _client_address, _middlewares, _limits, _client_certificates});
 
   boost::system::error_code ec;
   const auto endpoint = _acceptor.local_endpoint(ec);
   _logger.info("Listening on " + (ec ? std::string("an unknown address") : endpoint.address().to_string() + ":" + std::to_string(endpoint.port())) +
-               ", TLS 1.3 only");
+               ", TLS 1.3 only" + (_client_certificates ? ", asking for client certificates" : ""));
 
   net::dispatch(_acceptor.get_executor(), [self = shared_from_this()] { self->_accept(); });
 }

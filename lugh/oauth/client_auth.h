@@ -28,10 +28,11 @@ namespace lugh::oauth {
 //                        Core 9): iss and sub its client_id, aud this server, a jti never seen
 //                        before, expiring within ten minutes
 //   none                 a public client, PKCE its only proof
+//   tls_client_auth      the certificate it presented at the mTLS listener (RFC 8705): by
+//                        thumbprint, or by subject when it chains to the client CA
 //
-// tls_client_auth needs the client's certificate, which the listener asks for from O8; until
-// then such a client is refused. A client presenting more than one method, or one that is not
-// its own, is refused. Every refusal is Fault::refused, answered as invalid_client.
+// A client presenting more than one method, or one that is not its own, is refused. Every
+// refusal is Fault::refused, answered as invalid_client.
 class ClientAuthenticator {
  public:
   static constexpr const char* kAssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";

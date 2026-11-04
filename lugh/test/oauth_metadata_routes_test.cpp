@@ -92,3 +92,19 @@ TEST(Issuer, WhatCanBeOne) {
     EXPECT_FALSE(MetadataRoutes::issuer_ok(bad)) << bad;
   }
 }
+
+// RFC 8705 section 5: with an mTLS listener, the metadata names its endpoints there.
+TEST_F(MetadataTest, MtlsEndpointAliases) {
+  const auto without = boost::json::parse(get("/.well-known/openid-configuration", kIssued)->body());
+  EXPECT_FALSE(without.as_object().contains("mtls_endpoint_aliases"));
+  EXPECT_EQ(without.at("tls_client_certificate_bound_access_tokens"), false);
+
+  const auto with = boost::json::parse(get("/.well-known/openid-configuration", {"https://id.example.com", false, 8444})->body());
+  EXPECT_EQ(with.at("mtls_endpoint_aliases").at("token_endpoint"), "https://id.example.com:8444/oauth2/token");
+  EXPECT_EQ(with.at("tls_client_certificate_bound_access_tokens"), true);
+  const auto methods = with.at("token_endpoint_auth_methods_supported").as_array();
+  EXPECT_NE(std::find(methods.begin(), methods.end(), boost::json::value("tls_client_auth")), methods.end());
+
+  EXPECT_EQ(MetadataRoutes::on_port("https://id.example.com:8443/lugh", 8444), "https://id.example.com:8444/lugh");
+  EXPECT_EQ(MetadataRoutes::on_port("https://[2001:db8::1]:8443", 9000), "https://[2001:db8::1]:9000");
+}

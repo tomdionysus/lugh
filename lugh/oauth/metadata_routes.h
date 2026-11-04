@@ -28,7 +28,14 @@ class MetadataRoutes {
     std::string issuer;
     // Whether client_secret_basic is offered (oauth.allow_client_secrets).
     bool allow_client_secrets = false;
+    // The mTLS listener's port (oauth.mtls_port); zero for none. With one, the metadata names
+    // its endpoints there (RFC 8705 section 5) and offers tls_client_auth.
+    std::uint16_t mtls_port = 0;
   };
+
+  // `issuer` on another port: `https://id.example.com/x` on 8444 is
+  // `https://id.example.com:8444/x`.
+  static std::string on_port(const std::string& issuer, std::uint16_t port);
 
   MetadataRoutes(std::shared_ptr<const tokens::SigningKeys> keys, Settings settings);
 

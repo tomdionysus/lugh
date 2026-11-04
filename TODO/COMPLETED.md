@@ -2,6 +2,15 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O8b, mTLS
+
+- `TlsContext` gains a client-certificate mode: asked for, never required, never ending a handshake; the chain's check against `tls.client_ca`, when set, kept for the routes. `HttpServer` reads the certificate after the handshake on the mTLS listener and hands its thumbprint (x5t#S256), subject (RFC 2253) and whether it chained to the CA to the routes in `Lugh-Client-Cert-*` headers (`lugh/http/client_certificate.h`), which it removes from every request it reads, on every listener, before it sets its own.
+- `tls_client_auth` (RFC 8705 section 2): a client named by its certificate's thumbprint, or by its subject when it chains to the client CA.
+- Certificate-bound tokens (RFC 8705 section 3): an application whose `sender_constraint` is mtls gets access tokens with `cnf.x5t#S256`, accepted only on a connection presenting that certificate. The issuer's binding is now a `cnf` object, a DPoP key or a certificate.
+- The node runs the mTLS listener when `oauth.mtls_port` is set, with every route but the sign-in pages and the dashboard; the metadata names its endpoints in `mtls_endpoint_aliases` and offers `tls_client_auth` only then.
+- Departure, for the maintainer: a second listener rather than the main one asking for certificates (TODO/2026-11-04-oauth.md, O8).
+- Tests: 470 to 475 (the listener handing on a certificate, verified against a CA or not; a client's own claim dropped on both listeners; tls_client_auth by thumbprint and by subject; certificate-bound tokens at the API; the metadata's aliases; the settings), green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: P6 step O8b, DPoP
 
 - `lugh/oauth/dpop.h` (RFC 9449): a proof's own parser, since Lugh's JWS parser refuses a key in the header and a proof is exactly that: typ dpop+jwt, alg ES256 or EdDSA, a public jwk, nothing else; checked for its method and URL, made within five minutes either way, used once on the node, and for an access token carrying its hash. RFC 7638 thumbprints, matching RFC 9449's own example.

@@ -536,3 +536,58 @@ TEST_F(OAuthRefreshTest, ABoundFamilyNeedsItsKey) {
   ASSERT_EQ(good.status, 200u) << good.body;
   EXPECT_EQ(boost::json::parse(good.body).at("token_type"), "DPoP");
 }
+
+// RFC 8705: a client known by its certificate, and tokens bound to it. The router is reached
+// here as the mTLS listener would pass it a request: with the certificate's headers set.
+TEST_F(OAuthFlowTest, TlsClientAuthAndCertificateBoundTokens) {
+  const auto make = [&](const std::string& thumbprint, const std::string& subject, lugh::apps::SenderConstraint sender) {
+    lugh::apps::App draft;
+    draft.name = "hub";
+    draft.kind = lugh::apps::Kind::service;
+    draft.auth = lugh::apps::ClientAuth::tls_client_auth;
+    draft.tls_thumbprint = thumbprint;
+    draft.tls_subject = subject;
+    draft.grants = lugh::apps::kClientCredentials;
+    draft.client_scopes = {"lugh:directory.read"};
+    draft.audiences = {"lugh"};
+    draft.sender = sender;
+    const auto made = wait_for<lugh::Outcome<lugh::apps::Apps::Made>>(
+        [&](lugh::Executor executor, auto done) { rig.apps->create(rig.admin, draft, kTestDeadline, executor, done); });
+    EXPECT_TRUE(made.ok()) << made.message;
+    return made.value.app.client_id;
+  };
+  const std::string thumbprint(43, 'T');
+  const auto with_certificate = [](const std::string& print, const std::string& subject, bool verified) {
+    return std::vector<std::pair<std::string, std::string>>{
+        {"Lugh-Client-Cert-Thumbprint", print}, {"Lugh-Client-Cert-Subject", subject}, {"Lugh-Client-Cert-Chain", verified ? "verified" : "unverified"}};
+  };
+  const auto ask = [&](const std::string& client_id, std::vector<std::pair<std::string, std::string>> headers) {
+    return rig.request(verb::post, "/oauth2/token", {{"grant_type", "client_credentials"}, {"client_id", client_id}}, std::move(headers));
+  };
+
+  // By thumbprint: any certificate whose key the client holds.
+  const auto by_print = make(thumbprint, "", lugh::apps::SenderConstraint::none);
+  EXPECT_EQ(ask(by_print, with_certificate(thumbprint, "CN=anything", false)).status, 200u);
+  EXPECT_EQ(ask(by_print, with_certificate(std::string(43, 'X'), "CN=anything", false)).status, 401u);
+  EXPECT_EQ(ask(by_print, {}).status, 401u);
+
+  // By subject: only a certificate that chains to the client CA.
+  const auto by_subject = make("", "CN=hub,O=Blackraven", lugh::apps::SenderConstraint::none);
+  EXPECT_EQ(ask(by_subject, with_certificate(std::string(43, 'S'), "CN=hub,O=Blackraven", true)).status, 200u);
+  EXPECT_EQ(ask(by_subject, with_certificate(std::string(43, 'S'), "CN=hub,O=Blackraven", false)).status, 401u);
+  EXPECT_EQ(ask(by_subject, with_certificate(std::string(43, 'S'), "CN=other", true)).status, 401u);
+
+  // Bound to the certificate: cnf.x5t#S256, and good only where that certificate is presented.
+  const auto bound = make(thumbprint, "", lugh::apps::SenderConstraint::mtls);
+  const auto issued = ask(bound, with_certificate(thumbprint, "", false));
+  ASSERT_EQ(issued.status, 200u) << issued.body;
+  const auto access = std::string(boost::json::parse(issued.body).at("access_token").as_string());
+  EXPECT_EQ(claims_of(access).at("cnf").at("x5t#S256"), boost::json::value(thumbprint));
+  auto with_token = with_certificate(thumbprint, "", false);
+  with_token.emplace_back("Authorization", "Bearer " + access);
+  EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, with_token).status, 200u);
+  EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, {{"Authorization", "Bearer " + access}}).status, 401u);
+  auto other_certificate = with_certificate(std::string(43, 'X'), "", false);
+  other_certificate.emplace_back("Authorization", "Bearer " + access);
+  EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, other_certificate).status, 401u);
+}

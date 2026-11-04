@@ -11,6 +11,7 @@
 
 #include "dannan/encoding/percent.h"
 #include "lugh/http/api_json.h"
+#include "lugh/http/client_certificate.h"
 #include "lugh/http/forms.h"
 #include "lugh/scopes/scope.h"
 #include "lugh/signin/html.h"
@@ -226,9 +227,18 @@ void token(const std::shared_ptr<Shared>& shared, RouteContext context) {
         const auto app = client.value;
         if (app.sender == apps::SenderConstraint::dpop && !jkt)
           return token_error(context, http::status::bad_request, "invalid_dpop_proof", "this client's tokens are bound by DPoP: send a proof");
-        if (app.sender == apps::SenderConstraint::mtls)
-          return token_error(context, http::status::bad_request, "invalid_request",
-                             "certificate-bound tokens need the client certificate, which arrives with mTLS");
+        // What the tokens are bound to: the client's certificate (RFC 8705) for a client that
+        // asked for that, otherwise a DPoP key if a proof came.
+        std::optional<boost::json::object> cnf;
+        if (app.sender == apps::SenderConstraint::mtls) {
+          const auto certificate = http::client_certificate(*context.request);
+          if (!certificate)
+            return token_error(context, http::status::bad_request, "invalid_request",
+                               "this client's tokens are bound to its certificate: call the mTLS endpoint");
+          cnf = boost::json::object{{"x5t#S256", certificate->thumbprint}};
+        } else if (jkt) {
+          cnf = boost::json::object{{"jkt", *jkt}};
+        }
         const auto value_of = [&](const char* name) { return form.count(name) ? form.at(name) : std::string(); };
 
         if (grant_type == "authorization_code") {
@@ -242,7 +252,7 @@ void token(const std::shared_ptr<Shared>& shared, RouteContext context) {
             return token_error(context, http::status::bad_request, "invalid_grant", "the code_verifier does not match");
           return shared->parts.issuer->for_person(
               app, *grant, kStepDeadline, context.executor,
-              [shared, context, app, grant = *grant, jkt](Outcome<Issued> issued) {
+              [shared, context, app, grant = *grant, jkt, cnf](Outcome<Issued> issued) {
                 if (issued.fault == Fault::refused) return token_error(context, http::status::bad_request, "invalid_grant", issued.message);
                 if (!issued.ok()) return token_error(context, http::status::internal_server_error, "server_error", "no tokens could be made");
                 if (!(app.grants & apps::kRefreshToken)) return token_answer(context, issued.value);
@@ -255,7 +265,7 @@ void token(const std::shared_ptr<Shared>& shared, RouteContext context) {
                                                token_answer(context, issued);
                                              });
               },
-              true, jkt);
+              true, cnf);
         }
         if (grant_type == "refresh_token") {
           if (!(app.grants & apps::kRefreshToken)) return token_error(context, http::status::bad_request, "unauthorized_client", "not this client's grant");
@@ -263,7 +273,7 @@ void token(const std::shared_ptr<Shared>& shared, RouteContext context) {
           if (!asked) return token_error(context, http::status::bad_request, "invalid_scope", "scope is a space-separated list of scopes");
           return shared->parts.refresh->rotate(
               value_of("refresh_token"), app.client_id, jkt, kStepDeadline, context.executor,
-              [shared, context, app, asked = *asked, jkt](Outcome<RefreshTokens::Rotated> rotated) {
+              [shared, context, app, asked = *asked, cnf](Outcome<RefreshTokens::Rotated> rotated) {
                 if (rotated.fault == Fault::refused) return token_error(context, http::status::bad_request, "invalid_grant", rotated.message);
                 if (rotated.fault == Fault::invalid) return token_error(context, http::status::bad_request, "invalid_dpop_proof", rotated.message);
                 if (!rotated.ok()) return token_error(context, http::status::internal_server_error, "server_error", "the refresh token could not be read");
@@ -283,7 +293,7 @@ void token(const std::shared_ptr<Shared>& shared, RouteContext context) {
                       answer.refresh_token = token;
                       token_answer(context, answer);
                     },
-                    false, jkt);
+                    false, cnf);
               });
         }
         if (grant_type == "client_credentials") {
@@ -291,7 +301,7 @@ void token(const std::shared_ptr<Shared>& shared, RouteContext context) {
             return token_error(context, http::status::bad_request, "unauthorized_client", "not this client's grant");
           const auto asked = scopes::split(value_of("scope"));
           if (!asked) return token_error(context, http::status::bad_request, "invalid_scope", "scope is a space-separated list of scopes");
-          const auto issued = shared->parts.issuer->for_client(app, *asked, jkt);
+          const auto issued = shared->parts.issuer->for_client(app, *asked, cnf);
           if (issued.fault == Fault::invalid) return token_error(context, http::status::bad_request, "invalid_scope", issued.message);
           if (!issued.ok()) return token_error(context, http::status::internal_server_error, "server_error", "no token could be made");
           return token_answer(context, issued.value);

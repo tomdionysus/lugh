@@ -51,6 +51,8 @@ std::vector<dannan::config::Setting> ConfigLoader::settings() {
       {"authn.breached_passwords", Kind::value, "", "", "a path"},
       {"oauth.allow_client_secrets", Kind::toggle, "", "", "true or false"},
       {"oauth.issuer", Kind::value, "--issuer", "LUGH_ISSUER", "an https URL without a query, fragment or trailing '/'"},
+      {"oauth.mtls_port", Kind::value, "--mtls-port", "LUGH_MTLS_PORT", "a port, 1 to 65535, or 0 for none"},
+      {"tls.client_ca", Kind::value, "", "", "a path"},
   };
 }
 
@@ -112,6 +114,8 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
       config.issuer = *issuer;
     }
 
+    if (const auto port = read.number("oauth.mtls_port", 0, 65535)) config.mtls_port = static_cast<std::uint16_t>(*port);
+    if (const auto ca = read.path_of("tls.client_ca")) config.tls_client_ca = *ca;
     for (const auto& text : read.list("proxy.trusted_networks")) {
       const auto cidr = network::Cidr::parse(text);
       if (!cidr) return Result<Config>::failure(read.find("proxy.trusted_networks")->source + ": proxy.trusted_networks: not a network: " + text);
