@@ -49,8 +49,9 @@ Lugh keeps CMake presets, the stack's one exception (the maintainer, 2026-11-04:
 of auth"): `debug` (into `build/`), `release`, `asan`, `tsan` and `fuzz`, each into
 `build-<preset>/` except `debug`. They carry the MacPorts paths.
 
-Dannan is fetched from `../dannan` at the commit `LUGH_DANNAN_COMMIT` names, into
-the build tree; building Lugh never touches the sibling checkout.
+Dannan is fetched from `../dannan` at the release tag `LUGH_DANNAN_TAG` names
+(0.2.0), into the build tree, and linked as `dannan::dannan`; building Lugh never
+touches the sibling checkout.
 
 Run `lugh_tests` for the unit suite. `ctest` runs it too, beside what only a
 whole process shows: the shutdown, `init` and API tests in `test/process/`,

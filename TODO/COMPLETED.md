@@ -106,6 +106,9 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   MacPorts' uninstrumented GoogleTest meets libc++'s annotated containers; the ASan test
   binary now turns container-overflow detection off (`lugh/test/sanitizer_options.cpp`),
   every other check on.
+- Dannan is pinned to its first release tag, 0.2.0 (`LUGH_DANNAN_TAG`), in place of a
+  commit, and linked as `dannan::dannan`, the name an installed Dannan exports. Under the
+  debug build, ASan with UBSan, and TSan, `lugh_tests` (335) and `ctest` (5) pass.
 
 ## 2026-10-18: P5, the management API (not committed)
 

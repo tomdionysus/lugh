@@ -42,14 +42,13 @@ find_package(yaml-cpp REQUIRED)
 # (the presets say where).
 find_package(OpenSSL 3.0 REQUIRED)
 
-# Dannan, the network layer Lugh hosts on (and Dagda, the store, built beside it). From
-# the sibling checkout, pinned to one commit and cloned into the build tree, so building
-# Lugh never touches ../dannan. Its Context, secure memory, signing, Argon2id and key custody
-# exist only on feature/wire-v1 so far, which has no tag; the pin moves to a tag once one
-# carries them (the maintainer, 2026-11-03).
+# Dannan, the network layer Lugh hosts on (and Dagda, the store, built beside it), at a
+# release tag: from the sibling checkout, cloned into the build tree, so building Lugh never
+# touches ../dannan. Linked as dannan::dannan, the name an installed Dannan exports too
+# (find_package(dannan 0.2 CONFIG)).
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_COMMIT "7f02e5813a561df7d0c61e0e4d4867b39287e688")
+set(LUGH_DANNAN_TAG "0.2.0")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -59,7 +58,7 @@ elseif (LUGH_SANITIZE STREQUAL "thread")
     add_link_options(-fsanitize=thread)
 endif()
 include(FetchContent)
-FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_COMMIT}")
+FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_TAG}")
 set(DANNAN_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(dannan)
 

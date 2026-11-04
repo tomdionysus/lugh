@@ -52,7 +52,7 @@ target_include_directories(lugh
 
 target_link_libraries(lugh
     PUBLIC
-        dannan
+        dannan::dannan
         Boost::headers
         OpenSSL::SSL
         OpenSSL::Crypto

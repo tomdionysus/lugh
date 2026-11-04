@@ -4,7 +4,7 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here
 
-2026-11-04: **Aligning with Dannan and Dagda** on `feature/dannan-alignment`, one commit per step, nothing pushed (COMPLETED.md, "Aligning with Dannan and Dagda", says what each step did and what it cost in tests). The stack, its seams and the maintainer's rules are in `../dagda/TODO/2026-11-03-stack.md`; Lugh must not duplicate Dannan or Dagda, and the three share one style, convention and layout. Done so far: the header and layout; Dannan's SHA-256, compare, hex, Argon2id, signing, time sources, secure memory, codec, HKDF, AES-GCM, `Secret`, randomness, logging (text and JSON sinks), checked locks and test temp directories; HMAC-SHA-1 kept inside TOTP. Dannan is pinned by commit (`LUGH_DANNAN_COMMIT`), as no tag carries its Context yet.
+2026-11-04: **Aligning with Dannan and Dagda** on `feature/dannan-alignment`, one commit per step, nothing pushed (COMPLETED.md, "Aligning with Dannan and Dagda", says what each step did and what it cost in tests). The stack, its seams and the maintainer's rules are in `../dagda/TODO/2026-11-03-stack.md`; Lugh must not duplicate Dannan or Dagda, and the three share one style, convention and layout. Done so far: the header and layout; Dannan's SHA-256, compare, hex, Argon2id, signing, time sources, secure memory, codec, HKDF, AES-GCM, `Secret`, randomness, logging (text and JSON sinks), checked locks and test temp directories; HMAC-SHA-1 kept inside TOTP. Dannan is pinned to its release tag 0.2.0 (`LUGH_DANNAN_TAG`) and linked as `dannan::dannan`.
 
 Not next: the keyring's root from Dannan's key custody. The sealed store and `keys/` are frozen until Dagda carries Lugh's spaces and are deleted then (the maintainer: "Keep the store until Dagda"; the stack document's table), when Lugh's keys come from Dagda's domains under Dannan's custody through the Context (`derive_local`, `derive_key`). Rewiring them now would be work on code that is going. Until then they are changed only as far as the rest of the alignment needs.
 
@@ -36,7 +36,7 @@ From this session and the stack document's "Decided" section (`../dagda/TODO/202
 - **One process per node**: `lugh-node` is a Dannan node, as its own user. Node revocation is CA-signed, in Dannan's step 10.
 - **HTTP stays Lugh's**; token verification does not move to Dannan; Lir's authentication is pluggable, and a Lugh plugin there depends on Lugh.
 - **Accepted limits**: the partition bound and the trust boundary.
-- **Dannan 0.2.0** will be a tag with install and export targets (`find_package(dannan 0.2 CONFIG)`, `dannan::dannan`); Lugh pins it once it is cut, in place of the commit.
+- **Dannan 0.2.0** is a tag with install and export targets (`find_package(dannan 0.2 CONFIG)`, `dannan::dannan`); Lugh pins it.
 
 ## Plan
 
