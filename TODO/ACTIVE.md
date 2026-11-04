@@ -6,7 +6,7 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 2026-11-04: **The alignment with Dannan and Dagda is done**, merged into `develop` and tagged `0.1.0` (`develop` and the tag pushed; `main` not, see "Not merged yet" below) (COMPLETED.md, "Aligning with Dannan and Dagda", says what each step did and what it cost in tests). Lugh links Dannan for every shared primitive and has no copy of one; it is in Dannan's callback shape above the frozen store and keyring; it has the stack's layout, conventions and warning set, with presets and routine sanitizers as its two stated exceptions; it has no Python; `docs/architecture.md` describes it as the top of the stack. `lugh_tests` (353) and `ctest` pass in the debug, ASan and TSan builds. Dannan is pinned by `LUGH_DANNAN_REF` to its tag 0.3.0.
 
-**Next is P6** (the maintainer, 2026-11-04): OAuth 2 and OIDC, on the frozen store, in callback style, with the LDAP plan's L1 (the name fields) and L2 (app passwords with a scope set) folded into its start. Its design and steps O1 to O10 are `2026-11-04-oauth.md`; its seven questions for the maintainer are at that document's end, and O1 and O2 (the fields, then the scope model that Lir and LDAP wait on) can start before they are answered. Then LDAP, L3 to L5 (`2026-11-04-ldap.md`), then P8 (hosting on Dannan's Context and Dagda), which waits on Dagda's heads. P6 also defines the scope grammar Lir waits on ("For P6, from Lir").
+**Next is P6** (the maintainer, 2026-11-04): OAuth 2 and OIDC, on the frozen store, in callback style, with the LDAP plan's L1 (the name fields) and L2 (app passwords with a scope set) folded into its start. Its design and steps O1 to O10 are `2026-11-04-oauth.md`, every question in it decided 2026-11-04; O1 (the fields) then O2 (the scope model that Lir and LDAP wait on) are first. Then LDAP, L3 to L5 (`2026-11-04-ldap.md`), then P8 (hosting on Dannan's Context and Dagda), which waits on Dagda's heads. P6 also defines the scope grammar Lir waits on ("For P6, from Lir").
 
 Not next: the keyring's root from Dannan's key custody. The sealed store and `keys/` are frozen until Dagda carries Lugh's spaces and are deleted then (the maintainer: "Keep the store until Dagda"; the stack document's table), when Lugh's keys come from Dagda's domains under Dannan's custody through the Context (`derive_local`, `derive_key`). Rewiring them now would be work on code that is going. Until then they are changed only as far as the rest of the alignment needs.
 
@@ -25,7 +25,7 @@ GitHub's `main` carries one commit this tree was never based on: aaac977 "Update
 
 - The open questions in `docs/architecture.md`, "Still open": question 2 (single-use grants) is needed by P6 and P8, question 14 (Lugh's hostname) by P13.
 - Nothing from the LDAP plan: its questions and review were decided 2026-11-04 (`2026-11-04-ldap.md`, "Decided").
-- The P6 plan's seven questions, `2026-11-04-oauth.md` "For the maintainer": refresh tokens replicated or leased; Lir dropping subscriptions on narrowing; JWKS through Dagda; mTLS deferred to P12; client-credentials apps bound to a service principal; session lifetimes; OIDC from the start (closing open question 3).
+- Nothing from the P6 plan: its questions were decided 2026-11-04 (`2026-11-04-oauth.md`, "Decided").
 
 ## For P8, from Dannan
 
