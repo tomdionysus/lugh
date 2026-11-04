@@ -4,7 +4,7 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here
 
-2026-11-04: **The alignment with Dannan and Dagda is done** on `feature/dannan-alignment`, one commit per step, nothing pushed, not yet merged into `develop` (COMPLETED.md, "Aligning with Dannan and Dagda", says what each step did and what it cost in tests). Lugh links Dannan for every shared primitive and has no copy of one; it is in Dannan's callback shape above the frozen store and keyring; it has the stack's layout, conventions and warning set, with presets and routine sanitizers as its two stated exceptions; it has no Python; `docs/architecture.md` describes it as the top of the stack. `lugh_tests` (353) and `ctest` pass in the debug, ASan and TSan builds. Dannan is pinned by `LUGH_DANNAN_REF` to ca029bb (0.2.0 with the ChildProcess options) until its next tag.
+2026-11-04: **The alignment with Dannan and Dagda is done** on `feature/dannan-alignment`, one commit per step, nothing pushed, not yet merged into `develop` (COMPLETED.md, "Aligning with Dannan and Dagda", says what each step did and what it cost in tests). Lugh links Dannan for every shared primitive and has no copy of one; it is in Dannan's callback shape above the frozen store and keyring; it has the stack's layout, conventions and warning set, with presets and routine sanitizers as its two stated exceptions; it has no Python; `docs/architecture.md` describes it as the top of the stack. `lugh_tests` (353) and `ctest` pass in the debug, ASan and TSan builds. Dannan is pinned by `LUGH_DANNAN_REF` to its tag 0.3.0.
 
 Next is the maintainer's call: merge this branch into `develop`; then P6 (OAuth 2 and OIDC, on the frozen store, in callback style) or P8 (hosting on Dannan's Context and Dagda, once Dagda carries Lugh's spaces).
 
@@ -42,7 +42,7 @@ From this session and the stack document's "Decided" section (`../dagda/TODO/202
 - **One process per node**: `lugh-node` is a Dannan node, as its own user. Node revocation is CA-signed, in Dannan's step 10.
 - **HTTP stays Lugh's**; token verification does not move to Dannan; Lir's authentication is pluggable, and a Lugh plugin there depends on Lugh.
 - **Accepted limits**: the partition bound and the trust boundary.
-- **Dannan 0.2.0** is a tag with install and export targets (`find_package(dannan 0.2 CONFIG)`, `dannan::dannan`); Lugh pins it.
+- **Dannan 0.2.0** is a tag with install and export targets (`find_package(dannan 0.2 CONFIG)`, `dannan::dannan`); Lugh pins a tag. Now 0.3.0 (Dannan main 277adab: identity with CA-signed revocation and the scope seam, `contract::Unlocked`, cancelled late `Routes::call`s, `context.time().source()` and `executor()`, `sched::DutyShare`, `NodeEvents::membership`, `Nodes::absent_since`).
 
 ## Plan
 
