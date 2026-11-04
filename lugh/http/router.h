@@ -80,6 +80,10 @@ class Router : public std::enable_shared_from_this<Router> {
   // address while not.
   void add(verb method, const std::string& pattern, std::string scope, Handler handler);
 
+  // A route for any caller with a credential, whatever it holds: what the caller may know
+  // about itself (/api/v1/me). Limited by caller.
+  void add_authenticated(verb method, const std::string& pattern, Handler handler);
+
   // A route that needs no credential: the health check, discovery, and the sign-in that
   // hands credentials out. Limited by client address.
   void add_open(verb method, const std::string& pattern, Handler handler);
@@ -92,7 +96,7 @@ class Router : public std::enable_shared_from_this<Router> {
   struct Route {
     verb method;
     std::vector<std::string> pattern;
-    // Empty for an open route.
+    // Empty for an open route, and for one any caller may use.
     std::string scope;
     bool open = false;
     Handler handler;

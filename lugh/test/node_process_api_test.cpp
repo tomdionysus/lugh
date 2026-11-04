@@ -9,10 +9,11 @@
 
 #include "lugh/test/fixtures/node_process.h"
 
-// /api/v1 through the real binary, over TLS, before P6. A node made with `lugh-node init`
-// has root and nothing else: no token, key or setting opens the API. Until sessions and
-// OAuth tokens resolve a caller (P6), every route refuses everyone with 401, whatever is
-// presented, and an unknown path is still a JSON 404.
+// /api/v1 through the real binary, over TLS. A node made with `lugh-node init` has root and
+// nothing else: no token, key or setting opens the API. Only a session does, and only the
+// sign-in pages make one (node_process_signin_test.cpp); until OAuth tokens arrive (P6, O7)
+// every route refuses anything presented in Authorization with 401, root's password among
+// them, and an unknown path is still a JSON 404.
 
 using namespace node_process;
 namespace http = boost::beast::http;

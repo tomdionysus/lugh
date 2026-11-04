@@ -36,6 +36,7 @@ add_executable(lugh_tests
     directory_records_test.cpp
     directory_test.cpp
     http_client_address_test.cpp
+    http_forms_test.cpp
     http_health_routes_test.cpp
     http_rate_limiter_test.cpp
     http_router_test.cpp
@@ -54,7 +55,11 @@ add_executable(lugh_tests
     node_ioc_check_test.cpp
     node_process_api_test.cpp
     node_process_init_test.cpp
+    node_process_signin_test.cpp
     node_process_shutdown_test.cpp
+    session_pre_sessions_test.cpp
+    session_sessions_test.cpp
+    signin_pages_test.cpp
     store_async_test.cpp
     store_contract_test.cpp
     store_log_format_test.cpp

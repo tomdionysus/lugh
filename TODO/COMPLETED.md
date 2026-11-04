@@ -2,6 +2,17 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O5, sessions and the sign-in pages
+
+- `lugh/session/`: the Lugh session (`Sessions`), in the sealed `sessions` table keyed by the SHA-256 of a 256-bit handle, held in memory so a request resolves without waiting; 24 hours idle, 30 days at most (the maintainer); a CSRF token per session; ended by signing out, by expiry, and when its user is disabled or removed. `refresh()`, run by the node every minute, reads each session's user and scopes again and saves when it was last seen. The sign-in in progress (`PreSessions`) is in memory on its node, under a visitor cookie that every form's CSRF token is made from with a per-process key; nothing is held for a visitor until a password is accepted, and past 10,000 the oldest is dropped.
+- `SessionCallers`: the API's first callers. A session's cookie, and on any request but GET and HEAD its CSRF token in `X-CSRF-Token`.
+- `lugh/signin/`: the server-rendered pages, no JavaScript, under `default-src 'none'; style-src 'self'; form-action 'self'`, every value escaped: the password; the second factor, a TOTP or a recovery code; a new password from an enrolment link; enrolling a TOTP factor, a wrong code keeping the same secret and the wrong-code count; the recovery codes shown once; signed in; signing out. Root's first sign-in goes from genesis's password to enrolment. The stylesheet is in the dashboard's tokens.
+- `lugh/http/forms.h`: form bodies (Dannan's form decoding; a name given twice refused), cookies (a cookie given twice taken as none), and `__Host-` Set-Cookie values. The server keeps a response's own, tighter CSP. The router gains `add_authenticated()` for `/api/v1/me`, and refuses a protected route without a scope.
+- `GET /api/v1/me`: the caller, its scopes, and its session's CSRF token.
+- `fuzz_form`, over form bodies and cookies; syntax-checked only here.
+- Departures from the plan, for the maintainer: scopes read again within a minute rather than at once, and CSRF required only where something may change (TODO/2026-11-04-oauth.md, O5). Not yet: the TOTP QR code (O5b).
+- Tests: 413 to 435 (forms and cookies, sessions and their lifetimes, refresh following the directory, the sign-in in progress, every page's flow and refusal, root's first sign-in, the API through a session, and the real node from genesis's password to an API change through the session), green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: P6 step O4, signing keys, JWKS and metadata
 
 - `lugh/tokens/jose.h`: a public key as a JWK (P-256 and Ed25519, built and read as the SubjectPublicKeyInfo Dannan signs with), and a compact JWS signed and verified with Dannan's ES256 and EdDSA. Parsing refuses every algorithm but those two (no `none`, HMAC or RSA), a missing kid, and any header member but `alg`, `kid` and `typ` (no `crit`, `jku`, `jwk`); verifying takes the algorithm from the key, never from the token. RFC 7515 A.3 and RFC 8037 A.4's signatures verify.

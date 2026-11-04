@@ -26,7 +26,13 @@ void Router::write_too_many(const std::shared_ptr<HttpResponse>& response, std::
 }
 
 void Router::add(verb method, const std::string& pattern, std::string scope, Handler handler) {
+  // An empty scope would admit any caller: that is add_authenticated(), said so.
+  if (scope.empty()) throw std::invalid_argument("a protected route names its scope: " + pattern);
   _routes.push_back(Route{method, _split(pattern), std::move(scope), false, std::move(handler)});
+}
+
+void Router::add_authenticated(verb method, const std::string& pattern, Handler handler) {
+  _routes.push_back(Route{method, _split(pattern), {}, false, std::move(handler)});
 }
 
 void Router::add_open(verb method, const std::string& pattern, Handler handler) {
@@ -91,7 +97,7 @@ void Router::_handle(const std::string& prefix, const HttpRequest& request, cons
 
       // A real credential without the scope is a 403, not a 401. Scope names are documented
       // vocabulary and safe to say.
-      if (!context.caller.has_scope(route.scope)) {
+      if (!route.scope.empty() && !context.caller.has_scope(route.scope)) {
         write_error(response, status::forbidden, "forbidden", "this credential does not hold the scope " + route.scope);
         return next(false);
       }

@@ -7,11 +7,18 @@ that owns them.
 
 ## Credentials and scopes
 
-Every route needs a caller: from P6, a signed-in person's session (the dashboard, with a
-CSRF token) or an OAuth access token, each carrying the scopes it was granted. Until then
-nothing resolves a caller, and every route answers `401`. There is no other way in: no
-bootstrap token, no key in a file, no setting. The one credential a cluster is born with is
-root's password, made at genesis (`lugh init` on the first node) and shown once.
+Every route needs a caller. Today that is a signed-in Lugh session: the `__Host-lugh_session`
+cookie the sign-in pages set (`/signin`). A request through a session that may change
+anything (any method but `GET` and `HEAD`) also carries the session's CSRF token in
+`X-CSRF-Token`; `GET /api/v1/me` gives it. OAuth access tokens join sessions with the token
+endpoint (P6). There is no other way in: no bootstrap token, no key in a file, no setting.
+The one credential a cluster is born with is root's password, made at genesis (`lugh init` on
+the first node) and shown once, and it opens a session only through the sign-in pages, where
+root's first sign-in goes straight to enrolling a second factor.
+
+A caller's scopes are those its groups grant (`/api/v1/groups/{id}/scopes`), read when the
+session starts and again every minute, so a change to someone's groups reaches their session
+within a minute; so does disabling or removing them, which ends it.
 
 | Scope | Allows |
 |---|---|
@@ -67,6 +74,7 @@ the client reads again. Policies are settings written whole with `PUT`, and memb
 
 | Method and path | Scope | Does |
 |---|---|---|
+| `GET /api/v1/me` | any caller | `{user, scopes, session}`: who the caller is, what it holds, and for a session its `acr`, `auth_time` and `csrf_token` |
 | `GET /api/v1/users` | directory.read | Every user; `?name=` or `?email=` for one |
 | `POST /api/v1/users` | directory.write | `{kind?, name, email, display_name?, given_name?, family_name?}`: `201`, `Location`, `ETag`. A person needs an address and starts not enrolled; a `service` needs neither. `given_name` and `family_name` are the OIDC claims and LDAP's `givenName` and `sn`; neither is required, since not every name has two parts |
 | `GET /api/v1/users/{id}` | directory.read | One user. `posix_number` appears once LDAP has allocated one |

@@ -186,6 +186,70 @@ inline std::optional<Answer> request(std::uint16_t port, boost::beast::http::ver
   return answer;
 }
 
+// One HTTPS request with any headers and body, and every header of the answer, for what a
+// browser does: forms, cookies, redirects not followed.
+struct Reply {
+  unsigned status = 0;
+  std::string body;
+  std::vector<std::pair<std::string, std::string>> headers;
+
+  std::string header(const std::string& name) const {
+    for (const auto& [key, value] : headers) {
+      if (boost::beast::iequals(key, name)) return value;
+    }
+    return {};
+  }
+  std::vector<std::string> all(const std::string& name) const {
+    std::vector<std::string> out;
+    for (const auto& [key, value] : headers) {
+      if (boost::beast::iequals(key, name)) out.push_back(value);
+    }
+    return out;
+  }
+};
+
+inline std::optional<Reply> send(std::uint16_t port, boost::beast::http::verb method, const std::string& target,
+                                 const std::vector<std::pair<std::string, std::string>>& headers = {}, const std::string& body = "",
+                                 std::chrono::milliseconds timeout = std::chrono::seconds(10)) {
+  namespace net = boost::asio;
+  namespace beast = boost::beast;
+  namespace http = boost::beast::http;
+
+  net::io_context io;
+  net::ssl::context context(net::ssl::context::tls_client);
+  context.set_verify_mode(net::ssl::verify_none);
+  beast::ssl_stream<beast::tcp_stream> stream(io, context);
+
+  http::request<http::string_body> out{method, target, 11};
+  out.set(http::field::host, "127.0.0.1");
+  for (const auto& [name, value] : headers) out.set(name, value);
+  out.body() = body;
+  out.prepare_payload();
+
+  beast::flat_buffer buffer;
+  http::response<http::string_body> in;
+  bool answered = false;
+  const net::ip::tcp::endpoint where(net::ip::make_address("127.0.0.1"), port);
+  stream.next_layer().async_connect(where, [&](beast::error_code ec) {
+    if (ec) return;
+    stream.async_handshake(net::ssl::stream_base::client, [&](beast::error_code ec) {
+      if (ec) return;
+      http::async_write(stream, out, [&](beast::error_code ec, std::size_t) {
+        if (ec) return;
+        http::async_read(stream, buffer, in, [&](beast::error_code ec, std::size_t) { answered = !ec; });
+      });
+    });
+  });
+  io.run_for(timeout);
+  if (!answered) return std::nullopt;
+
+  Reply reply;
+  reply.status = in.result_int();
+  reply.body = in.body();
+  for (const auto& field : in.base()) reply.headers.emplace_back(std::string(field.name_string()), std::string(field.value()));
+  return reply;
+}
+
 // Polls /health until it answers {"status":"ok"}, the child exits, or the deadline passes.
 inline bool wait_until_up(dannan::test::ChildProcess& child, std::uint16_t port, std::chrono::seconds within) {
   const auto deadline = Clock::now() + within;

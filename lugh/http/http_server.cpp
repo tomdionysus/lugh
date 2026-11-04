@@ -110,15 +110,16 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
     }
   }
 
-  // The headers every response carries, set last so no middleware can leave one out. The
-  // dashboard's and the sign-in pages' tighter policies are set here too, by path, when
-  // they arrive.
+  // The headers every response carries, set last so no middleware can leave one out. A
+  // response that set its own, tighter Content-Security-Policy (the sign-in pages) keeps it;
+  // every other gets this one.
   void _respond(std::shared_ptr<HttpResponse> response) {
     response->version(_request.version());
     response->set(field::server, "Lugh");
     response->set(field::strict_transport_security, "max-age=63072000; includeSubDomains");
     response->set("X-Content-Type-Options", "nosniff");
-    response->set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    if (response->find("Content-Security-Policy") == response->end())
+      response->set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     response->set("Referrer-Policy", "no-referrer");
     response->keep_alive(_request.keep_alive());
 

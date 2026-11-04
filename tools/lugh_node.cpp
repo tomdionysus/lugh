@@ -28,6 +28,7 @@
 #include "lugh/api/audit_routes.h"
 #include "lugh/api/group_routes.h"
 #include "lugh/api/key_routes.h"
+#include "lugh/api/me_routes.h"
 #include "lugh/api/policy_routes.h"
 #include "lugh/api/scope_routes.h"
 #include "lugh/api/user_routes.h"
@@ -48,6 +49,10 @@
 #include "lugh/node/config.h"
 #include "lugh/oauth/metadata_routes.h"
 #include "lugh/scopes/grants.h"
+#include "lugh/session/pre_sessions.h"
+#include "lugh/session/session_callers.h"
+#include "lugh/session/sessions.h"
+#include "lugh/signin/pages.h"
 #include "lugh/store/sealed_store.h"
 #include "lugh/store/tables.h"
 #include "lugh/system/system_console.h"
@@ -139,6 +144,7 @@ struct Services {
   std::shared_ptr<apps::Apps> apps;
   std::shared_ptr<scopes::Grants> grants;
   std::shared_ptr<tokens::SigningKeys> keys;
+  std::shared_ptr<session::Sessions> sessions;
 };
 
 // The cluster's birth, once its first keyring is saved: the store under it, then root,
@@ -264,6 +270,11 @@ Task<Result<Services>> start(Ports ports, Config config) {
   const auto keys_open =
       co_await awaited<Status>([&](Executor executor, Done<Status> done) { services.keys->open(kTransitionDeadline, std::move(executor), std::move(done)); });
   if (!keys_open.ok) co_return Answer::failure(keys_open.error);
+  services.sessions =
+      std::make_shared<session::Sessions>(store, ports.wall, services.directory, services.grants, services.audit, session::Sessions::Settings{});
+  const auto sessions_open = co_await awaited<Status>(
+      [&](Executor executor, Done<Status> done) { services.sessions->open(kTransitionDeadline, std::move(executor), std::move(done)); });
+  if (!sessions_open.ok) co_return Answer::failure(sessions_open.error);
   // Reached by the API now, and by the sign-in routes from P6.
   services.authenticator = std::make_shared<authn::Authenticator>(ports.log, ports.time, services.directory, passwords, services.factors, services.policies,
                                                                   services.links, services.audit, authn::Authenticator::Settings{});
@@ -339,10 +350,10 @@ int run(const cli::Options& options) {
     return 1;
   }
 
-  // Nothing resolves a caller until sessions and OAuth tokens arrive (P6), so until then
-  // the API answers 401 to everyone. There is no other way in: the one credential Lugh is
-  // born with is root's password, made at genesis.
-  std::shared_ptr<http::CallerResolver> resolver;
+  // A caller is a signed-in session; OAuth tokens join it with the token endpoint (P6, O7).
+  // There is no other way in: the one credential Lugh is born with is root's password, made
+  // at genesis, and it opens a session only through the sign-in pages.
+  std::shared_ptr<http::CallerResolver> resolver = std::make_shared<session::SessionCallers>(services.sessions);
 
   // Route handlers run on the io_context's own threads: they are coroutines, and suspend
   // on the pools rather than block.
@@ -366,6 +377,11 @@ int run(const cli::Options& options) {
   audit_routes.register_routes(*router);
   api::KeyRoutes key_routes(services.keys);
   key_routes.register_routes(*router);
+  api::MeRoutes me_routes(services.directory, services.sessions);
+  me_routes.register_routes(*router);
+  auto pre_sessions = std::make_shared<session::PreSessions>(time, authn::Authenticator::Settings{}.lifetime);
+  signin::Pages pages(services.authenticator, services.directory, services.sessions, pre_sessions);
+  pages.register_routes(*router);
   oauth::MetadataRoutes metadata_routes(services.keys, {config.issuer, config.allow_client_secrets});
   metadata_routes.register_routes(*router);
   if (config.issuer.empty()) logger.warn("No oauth.issuer: the OAuth metadata is not served");
@@ -374,7 +390,7 @@ int run(const cli::Options& options) {
 
   // The router first, under the paths it owns; anything left is a 404. The dashboard
   // joins the chain after the API, in P7.
-  for (const auto* prefix : {"/health", "/ready", "/api", "/oauth2", "/.well-known"}) server->middleware_add(router->middleware(prefix));
+  for (const auto* prefix : {"/health", "/ready", "/api", "/oauth2", "/.well-known", "/signin", "/signout"}) server->middleware_add(router->middleware(prefix));
 
   if (const auto listening = server->listen(config.address, config.port); !listening.ok) {
     logger.error(listening.error);
@@ -395,6 +411,21 @@ int run(const cli::Options& options) {
     });
   };
   rotate_when_due();
+
+  // Every minute, each session's user and scopes are read again, and the sessions of users
+  // removed or disabled, and those expired, end.
+  boost::asio::steady_timer refresh(io_context);
+  std::function<void()> refresh_sessions = [&] {
+    refresh.expires_after(std::chrono::minutes(1));
+    refresh.async_wait([&](const boost::system::error_code& ec) {
+      if (ec) return;
+      services.sessions->refresh(kTransitionDeadline, io_context.get_executor(), [&](Status refreshed) {
+        if (!refreshed.ok) logger.error("Session refresh: " + refreshed.error);
+        refresh_sessions();
+      });
+    });
+  };
+  refresh_sessions();
 
   boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
   signals.async_wait([&](const boost::system::error_code& ec, int number) {

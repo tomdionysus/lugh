@@ -24,9 +24,10 @@ struct RouteCall {
   bool answered = false;
 };
 
-inline RouteCall call(boost::asio::io_context& io, const lugh::http::HttpMiddleware& middleware, lugh::http::verb method, const std::string& target,
-                      const std::string& remote = "203.0.113.7", const std::string& body = "",
-                      const std::vector<std::pair<lugh::http::field, std::string>>& headers = {}) {
+// Headers by Beast's field or by name, for one Beast has no field for (X-CSRF-Token).
+template <typename Name = lugh::http::field>
+RouteCall call(boost::asio::io_context& io, const lugh::http::HttpMiddleware& middleware, lugh::http::verb method, const std::string& target,
+               const std::string& remote = "203.0.113.7", const std::string& body = "", const std::vector<std::pair<Name, std::string>>& headers = {}) {
   lugh::http::HttpRequest request{method, target, 11};
   for (const auto& [name, value] : headers) request.set(name, value);
   request.body() = body;

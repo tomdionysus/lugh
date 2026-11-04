@@ -295,7 +295,7 @@ The profile follows the OAuth 2.1 draft and the OAuth 2.0 Security BCP (RFC 9700
 
 - **Passwords:** Argon2id, with a minimum length and a breached-password check against a local list. The second factor is described in Two-factor authentication above.
 - **Lockout and rate limits:** per account and per source address, using back-off rather than hard lockout so an attacker cannot lock users out on purpose.
-- **Browser sessions:** `__Host-` cookies that are `Secure`, `HttpOnly` and `SameSite=Lax`, with server-side session records. CSRF tokens protect every form.
+- **Browser sessions:** `__Host-` cookies that are `Secure`, `HttpOnly` and `SameSite=Lax`, with server-side session records keyed by the cookie's hash. CSRF tokens protect every form and every API request that may change something. As built (P6, O5): `lugh/session/` and `lugh/signin/`; a session's scopes are read again every minute, and a sign-in in progress is held in memory on the node it started on.
 - **Comparisons:** every comparison of a secret is constant time.
 
 ### The process and the build
