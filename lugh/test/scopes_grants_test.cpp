@@ -20,6 +20,17 @@ namespace {
 
 class GrantsTest : public ::testing::Test {
  protected:
+  // T.O.M.S registered as an api, so its scopes may be granted.
+  void SetUp() override {
+    lugh::apps::App toms;
+    toms.name = "T.O.M.S";
+    toms.kind = lugh::apps::Kind::api;
+    toms.prefix = "toms";
+    ASSERT_TRUE(wait_for<Outcome<lugh::apps::Apps::Made>>([&](lugh::Executor executor, auto done) {
+                  rig.apps->create(rig.admin, toms, kTestDeadline, executor, done);
+                }).ok());
+  }
+
   lugh::directory::Group group(const std::string& name) {
     const auto made = wait_for<Outcome<lugh::directory::Group>>(
         [&](lugh::Executor executor, auto done) { rig.directory->create_group(rig.admin, name, "", kTestDeadline, executor, done); });

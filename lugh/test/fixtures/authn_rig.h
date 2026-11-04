@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "dannan/test/fixtures/stepped_time.h"
+#include "lugh/apps/apps.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/authenticator.h"
 #include "lugh/authn/totp.h"
@@ -32,7 +33,8 @@ inline lugh::Secret copy_of(const lugh::Secret& secret) { return lugh::Secret(se
 // Every table, with the directory's indexes, as main opens them.
 inline std::vector<lugh::store::TableSpec> all_tables() {
   std::vector<lugh::store::TableSpec> out;
-  const auto indexed = lugh::directory::table_specs();
+  auto indexed = lugh::directory::table_specs();
+  indexed.push_back(lugh::apps::table_spec());
   for (const auto name : lugh::store::kTables) {
     lugh::store::TableSpec spec{std::string(name), {}};
     for (const auto& one : indexed) {
@@ -61,7 +63,11 @@ class AuthnRig {
     directory->dependent_add(factors);
     policies = std::make_shared<lugh::authn::Policies>(store, directory, audit);
     links = std::make_shared<lugh::authn::EnrolmentLinks>(store, wall, directory, audit);
-    grants = std::make_shared<lugh::scopes::Grants>(store, directory, audit);
+    lugh::apps::Apps::Settings app_settings;
+    app_settings.allow_client_secrets = true;
+    app_settings.secret_costs = kTestArgon2;
+    apps = std::make_shared<lugh::apps::Apps>(store, wall, directory, audit, test_pool(), app_settings);
+    grants = std::make_shared<lugh::scopes::Grants>(store, directory, apps, audit);
     authenticator = std::make_shared<lugh::authn::Authenticator>(logger, time, directory, passwords, factors, policies, links, audit, settings);
   }
 
@@ -137,6 +143,7 @@ class AuthnRig {
   std::shared_ptr<lugh::authn::Factors> factors;
   std::shared_ptr<lugh::authn::Policies> policies;
   std::shared_ptr<lugh::authn::EnrolmentLinks> links;
+  std::shared_ptr<lugh::apps::Apps> apps;
   std::shared_ptr<lugh::scopes::Grants> grants;
   std::shared_ptr<lugh::authn::Authenticator> authenticator;
 

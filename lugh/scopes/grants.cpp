@@ -22,8 +22,9 @@ constexpr Deadline kStepDeadline = std::chrono::seconds(30);
 
 }  // namespace
 
-Grants::Grants(std::shared_ptr<store::Store> store, std::shared_ptr<directory::Directory> directory, std::shared_ptr<audit::AuditLog> audit)
-    : _calls(std::move(store)), _directory(std::move(directory)), _audit(std::move(audit)) {}
+Grants::Grants(std::shared_ptr<store::Store> store, std::shared_ptr<directory::Directory> directory, std::shared_ptr<apps::Apps> apps,
+               std::shared_ptr<audit::AuditLog> audit)
+    : _calls(std::move(store)), _directory(std::move(directory)), _apps(std::move(apps)), _audit(std::move(audit)) {}
 
 SecureBuffer Grants::encode(const std::vector<std::string>& scopes) {
   SecureWriter writer;
@@ -81,20 +82,24 @@ void Grants::group_set(audit::Actor actor, std::string group_id, std::vector<std
   auto sorted = std::make_shared<std::vector<std::string>>(united(std::move(scopes)));
 
   auto self = shared_from_this();
-  _directory->group(group_id, kStepDeadline, executor, [=](Outcome<std::optional<directory::Group>> found) {
-    if (!found.ok()) return answer->finish(Answer::from(found));
-    if (!found.value) return answer->finish(Answer::failure(Fault::not_found, "no such group"));
-    self->_read(group_id, executor, [=](Answer current) {
-      if (!current.ok()) return answer->finish(std::move(current));
-      if (expected && *expected != current.value.version)
-        return answer->finish(Answer::failure(Fault::conflict, "the group's scopes have changed since they were read"));
-      if (current.value.version != 0 && current.value.scopes == *sorted) return answer->finish(std::move(current));
-      self->_calls.put_settled(kTable, group_id, encode(*sorted), current.value.version, executor, [=](store::Write written) {
-        if (!written.ok()) return answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
-        Granted made{*sorted, written.version};
-        // A failure is logged by the audit log itself; the change has been made.
-        self->_audit->record(audit::Event{"scopes.set", actor.id, group_id, actor.source, join(*sorted)}, kStepDeadline, executor,
-                             [answer, made](Status) { answer->finish(Answer::success(made)); });
+  _apps->prefixes(kStepDeadline, executor, [=](Outcome<std::vector<std::string>> registered) {
+    if (!registered.ok()) return answer->finish(Answer::from(registered));
+    if (const auto ok = apps::Apps::references_ok(registered.value, "", *sorted, {}); !ok.ok()) return answer->finish(Answer::from(ok));
+    self->_directory->group(group_id, kStepDeadline, executor, [=](Outcome<std::optional<directory::Group>> found) {
+      if (!found.ok()) return answer->finish(Answer::from(found));
+      if (!found.value) return answer->finish(Answer::failure(Fault::not_found, "no such group"));
+      self->_read(group_id, executor, [=](Answer current) {
+        if (!current.ok()) return answer->finish(std::move(current));
+        if (expected && *expected != current.value.version)
+          return answer->finish(Answer::failure(Fault::conflict, "the group's scopes have changed since they were read"));
+        if (current.value.version != 0 && current.value.scopes == *sorted) return answer->finish(std::move(current));
+        self->_calls.put_settled(kTable, group_id, encode(*sorted), current.value.version, executor, [=](store::Write written) {
+          if (!written.ok()) return answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
+          Granted made{*sorted, written.version};
+          // A failure is logged by the audit log itself; the change has been made.
+          self->_audit->record(audit::Event{"scopes.set", actor.id, group_id, actor.source, join(*sorted)}, kStepDeadline, executor,
+                               [answer, made](Status) { answer->finish(Answer::success(made)); });
+        });
       });
     });
   });

@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "lugh/api/app_routes.h"
 #include "lugh/api/audit_routes.h"
 #include "lugh/api/group_routes.h"
 #include "lugh/api/policy_routes.h"
@@ -48,11 +49,13 @@ class ApiRig : public AuthnRig {
         groups(directory),
         policy_routes(policies, directory),
         scope_routes(grants),
+        app_routes(apps),
         audit_routes(audit) {
     users.register_routes(*router);
     groups.register_routes(*router);
     policy_routes.register_routes(*router);
     scope_routes.register_routes(*router);
+    app_routes.register_routes(*router);
     audit_routes.register_routes(*router);
   }
 
@@ -96,5 +99,6 @@ class ApiRig : public AuthnRig {
   lugh::api::GroupRoutes groups;
   lugh::api::PolicyRoutes policy_routes;
   lugh::api::ScopeRoutes scope_routes;
+  lugh::api::AppRoutes app_routes;
   lugh::api::AuditRoutes audit_routes;
 };

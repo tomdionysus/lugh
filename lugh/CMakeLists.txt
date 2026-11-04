@@ -9,11 +9,14 @@
 # targets. Listed, not globbed: a file added without a line here should fail to link, not
 # be found by accident. Included from the repository root as "lugh/<subsystem>/x.h".
 add_library(lugh STATIC
+    api/app_routes.cpp
     api/audit_routes.cpp
     api/group_routes.cpp
     api/policy_routes.cpp
     api/scope_routes.cpp
     api/user_routes.cpp
+    apps/app.cpp
+    apps/apps.cpp
     audit/audit_log.cpp
     authn/authenticator.cpp
     authn/enrolment_links.cpp

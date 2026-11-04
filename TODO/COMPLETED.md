@@ -2,6 +2,15 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O3, applications
+
+- `lugh/apps/`: an application's record and every rule that can be checked without the store (`validate()`): client authentication by kind, a JWK Set of public keys only, redirect URIs written exactly (https, no fragment or user information, loopback http for native apps only), grants by kind, prefixes, audiences, role names, the least `acr`, and lifetimes.
+- `Apps`: register (a random `client_id`, a secret shown once where `client_secret_basic` is allowed), read, list, replace (keeping what never changes), the groups that may sign in, role mapping, secret rotation with a 24-hour overlap, removal as a tombstone so a `client_id` or prefix is never reused. Scopes and audiences must belong to a registered api; the scope grants check that too now. Every change audited.
+- One record per application, holding its access groups and role mapping, so each change is one versioned write; the `app_access` table is unused. Client secrets are in that record as Argon2id hashes; on Dagda (P8) they move to `lugh/secrets` with the other credentials.
+- The API: `/api/v1/apps` and its access, roles and secret routes (`docs/api.md`, "Applications"); a new scope, `lugh:apps.write`, which genesis gives administrators with the rest; and the setting `oauth.allow_client_secrets`, off by default.
+- The records fuzz target reads applications and scope grants too.
+- Tests: 369 to 392 (the record's rules, the component, the routes, and the grant check), green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: onto Dannan 0.4.0's settings reader and percent-encoding (rule 3)
 
 - **Dannan pinned to its tag 0.4.0.**

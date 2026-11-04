@@ -49,6 +49,10 @@ struct Config {
   // A list of passwords no one may set, one per line. Empty: none.
   std::string breached_passwords;
 
+  // The policy that permits client_secret_basic for an application. Off: applications
+  // authenticate with private_key_jwt or tls_client_auth.
+  bool allow_client_secrets = false;
+
   // A request from one of these is taken at the last X-Forwarded-For entry; everything else
   // at its socket's address. Empty by default: no proxy is trusted until named.
   std::vector<network::Cidr> trusted_proxies;

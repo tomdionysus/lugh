@@ -47,6 +47,7 @@ std::vector<dannan::config::Setting> ConfigLoader::settings() {
       {"proxy.trusted_networks", Kind::list, "", "", "networks, as 10.0.0.0/8"},
       {"state.directory", Kind::value, "--state-directory", "LUGH_STATE_DIRECTORY", "a path"},
       {"authn.breached_passwords", Kind::value, "", "", "a path"},
+      {"oauth.allow_client_secrets", Kind::toggle, "", "", "true or false"},
   };
 }
 
@@ -102,6 +103,7 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
     if (const auto key = read.path_of("tls.key")) config.tls_key = *key;
     if (const auto directory = read.path_of("state.directory")) config.state_directory = *directory;
     if (const auto breached = read.text("authn.breached_passwords")) config.breached_passwords = *breached;
+    if (const auto secrets = read.toggle("oauth.allow_client_secrets")) config.allow_client_secrets = *secrets;
 
     for (const auto& text : read.list("proxy.trusted_networks")) {
       const auto cidr = network::Cidr::parse(text);

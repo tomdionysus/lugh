@@ -24,11 +24,13 @@
 
 #include "dannan/identity/secure_memory.h"
 #include "dannan/status/log.h"
+#include "lugh/api/app_routes.h"
 #include "lugh/api/audit_routes.h"
 #include "lugh/api/group_routes.h"
 #include "lugh/api/policy_routes.h"
 #include "lugh/api/scope_routes.h"
 #include "lugh/api/user_routes.h"
+#include "lugh/apps/apps.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/authenticator.h"
 #include "lugh/authn/genesis.h"
@@ -98,7 +100,8 @@ bool write_all(int fd, const SecureBuffer& data) {
 // Every table, with the indexes of those that have any.
 std::vector<store::TableSpec> all_tables() {
   std::vector<store::TableSpec> tables;
-  const auto indexed = directory::table_specs();
+  auto indexed = directory::table_specs();
+  indexed.push_back(apps::table_spec());
   for (const auto name : store::kTables) {
     store::TableSpec spec{std::string(name), {}};
     for (const auto& one : indexed) {
@@ -130,6 +133,7 @@ struct Services {
   std::shared_ptr<authn::Policies> policies;
   std::shared_ptr<authn::EnrolmentLinks> links;
   std::shared_ptr<authn::Authenticator> authenticator;
+  std::shared_ptr<apps::Apps> apps;
   std::shared_ptr<scopes::Grants> grants;
 };
 
@@ -153,7 +157,8 @@ Task<int> genesis(Ports ports, keys::Keyring keyring, std::string state_director
   auto passwords = std::make_shared<authn::Passwords>(ports.log, opened.value, ports.wall, audit.value, ports.hashing, crypto::Argon2Costs{},
                                                       authn::PasswordRules{}, authn::BreachedPasswords{});
   auto links = std::make_shared<authn::EnrolmentLinks>(opened.value, ports.wall, directory, audit.value);
-  auto grants = std::make_shared<scopes::Grants>(opened.value, directory, audit.value);
+  auto applications = std::make_shared<apps::Apps>(opened.value, ports.wall, directory, audit.value, ports.hashing, apps::Apps::Settings{});
+  auto grants = std::make_shared<scopes::Grants>(opened.value, directory, applications, audit.value);
   const auto password = co_await awaited<Outcome<Secret>>([&](Executor executor, Done<Outcome<Secret>> done) {
     authn::Genesis(directory, passwords, links, grants, audit.value).run(kTransitionDeadline, std::move(executor), std::move(done));
   });
@@ -247,7 +252,10 @@ Task<Result<Services>> start(Ports ports, Config config) {
   services.directory->dependent_add(services.factors);
   services.policies = std::make_shared<authn::Policies>(store, services.directory, services.audit);
   services.links = std::make_shared<authn::EnrolmentLinks>(store, ports.wall, services.directory, services.audit);
-  services.grants = std::make_shared<scopes::Grants>(store, services.directory, services.audit);
+  apps::Apps::Settings app_settings;
+  app_settings.allow_client_secrets = config.allow_client_secrets;
+  services.apps = std::make_shared<apps::Apps>(store, ports.wall, services.directory, services.audit, ports.hashing, app_settings);
+  services.grants = std::make_shared<scopes::Grants>(store, services.directory, services.apps, services.audit);
   // Reached by the API now, and by the sign-in routes from P6.
   services.authenticator = std::make_shared<authn::Authenticator>(ports.log, ports.time, services.directory, passwords, services.factors, services.policies,
                                                                   services.links, services.audit, authn::Authenticator::Settings{});
@@ -344,6 +352,8 @@ int run(const cli::Options& options) {
   policy_routes.register_routes(*router);
   api::ScopeRoutes scope_routes(services.grants);
   scope_routes.register_routes(*router);
+  api::AppRoutes app_routes(services.apps);
+  app_routes.register_routes(*router);
   api::AuditRoutes audit_routes(services.audit);
   audit_routes.register_routes(*router);
 

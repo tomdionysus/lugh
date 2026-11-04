@@ -49,3 +49,9 @@ authn:
   # starts a comment. Leave it out to check length and the user's own name and address
   # only. Read once at start; a list that cannot be read stops the start.
   # breached_passwords: "/usr/local/etc/lugh/breached-passwords.txt"
+
+oauth:
+  # Whether an application may authenticate with a client secret (client_secret_basic).
+  # Off: applications use private_key_jwt or a TLS client certificate, so Lugh holds no
+  # secret of theirs, only a public key or a certificate's name.
+  allow_client_secrets: false

@@ -5,8 +5,9 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-// The directory's and authn's record parsers: users, groups, memberships, TOTP factors,
-// recovery codes, enrolment links and audit entries. Each reads a value the store has
+// The directory's, authn's, the applications' and the scope grants' record parsers: users,
+// groups, memberships, TOTP factors, recovery codes, enrolment links, audit entries,
+// applications and the scopes each group grants. Each reads a value the store has
 // opened, so it is reached only with the keys, but a parser that trusts its input is one
 // bad record from a crash at start. Also the text a person types: base32, names,
 // addresses, recovery codes. The first byte picks which, so one corpus covers all.
@@ -17,11 +18,13 @@
 #include <span>
 #include <string_view>
 
+#include "lugh/apps/app.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/enrolment_links.h"
 #include "lugh/authn/factors.h"
 #include "lugh/core/encoding.h"
 #include "lugh/directory/records.h"
+#include "lugh/scopes/grants.h"
 
 namespace {
 
@@ -39,7 +42,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   const std::string_view text(reinterpret_cast<const char*>(input.data()), input.size());
 
   using namespace lugh;
-  switch (data[0] % 9) {
+  switch (data[0] % 11) {
     case 0:
       if (const auto user = directory::decode_user(input)) same(directory::encode(*user), input);
       break;
@@ -60,6 +63,12 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
       break;
     case 6:
       if (const auto entry = audit::AuditLog::decode(input)) same(audit::AuditLog::encode(*entry), input);
+      break;
+    case 8:
+      if (const auto app = apps::decode(input)) same(apps::encode(*app), input);
+      break;
+    case 9:
+      if (const auto granted = scopes::Grants::decode(input)) same(scopes::Grants::encode(*granted), input);
       break;
     case 7:
       if (const auto decoded = encoding::base32_decode(text)) {

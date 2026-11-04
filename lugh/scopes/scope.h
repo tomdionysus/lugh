@@ -33,6 +33,8 @@ inline constexpr const char* kCredentialsWrite = "lugh:credentials.write";
 // Assurance levels, and which group holds which scope.
 inline constexpr const char* kPoliciesWrite = "lugh:policies.write";
 inline constexpr const char* kAuditRead = "lugh:audit.read";
+// Registering, changing and removing applications, their access and secrets.
+inline constexpr const char* kAppsWrite = "lugh:apps.write";
 
 inline constexpr std::string_view kLughPrefix = "lugh";
 

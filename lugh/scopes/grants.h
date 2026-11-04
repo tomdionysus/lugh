@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "lugh/apps/apps.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/core/completion.h"
 #include "lugh/core/outcome.h"
@@ -46,13 +47,14 @@ class Grants : public std::enable_shared_from_this<Grants> {
   // A group grants at most this many.
   static constexpr std::size_t kMostScopes = 256;
 
-  Grants(std::shared_ptr<store::Store> store, std::shared_ptr<directory::Directory> directory, std::shared_ptr<audit::AuditLog> audit);
+  Grants(std::shared_ptr<store::Store> store, std::shared_ptr<directory::Directory> directory, std::shared_ptr<apps::Apps> apps,
+         std::shared_ptr<audit::AuditLog> audit);
 
   // not_found when there is no such group.
   void group(std::string group_id, Deadline deadline, Executor executor, Done<Outcome<Granted>> done) const;
 
-  // Replaces the group's set with `scopes`, each checked by grantable(), sorted and each
-  // once. `expected` is the version last read (zero for a group never granted anything);
+  // Replaces the group's set with `scopes`, each checked by grantable(), an application's
+  // only once an api with its prefix is registered; sorted and each once. `expected` is the version last read (zero for a group never granted anything);
   // conflict when it is not current; without one, made against the version just read.
   void group_set(audit::Actor actor, std::string group_id, std::vector<std::string> scopes, std::optional<std::uint64_t> expected, Deadline deadline,
                  Executor executor, Done<Outcome<Granted>> done);
@@ -69,6 +71,7 @@ class Grants : public std::enable_shared_from_this<Grants> {
 
   store::StoreCalls _calls;
   std::shared_ptr<directory::Directory> _directory;
+  std::shared_ptr<apps::Apps> _apps;
   std::shared_ptr<audit::AuditLog> _audit;
 };
 

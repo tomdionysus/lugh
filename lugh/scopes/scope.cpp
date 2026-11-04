@@ -13,7 +13,7 @@
 
 namespace lugh::scopes {
 
-std::vector<std::string> lugh_scopes() { return {kDirectoryRead, kDirectoryWrite, kCredentialsWrite, kPoliciesWrite, kAuditRead}; }
+std::vector<std::string> lugh_scopes() { return {kDirectoryRead, kDirectoryWrite, kCredentialsWrite, kPoliciesWrite, kAuditRead, kAppsWrite}; }
 
 std::vector<std::string> oidc_scopes() { return {"openid", "profile", "email", "groups", "offline_access"}; }
 

@@ -36,6 +36,7 @@ TEST_F(ScopeRoutesTest, TheKnownScopes) {
 }
 
 TEST_F(ScopeRoutesTest, AGroupsScopesWithETags) {
+  ASSERT_EQ(rig.post("/api/v1/apps", R"({"name":"T.O.M.S","kind":"api","scope_prefix":"toms"})").status, 201u);
   const auto id = made_group("staff");
   const auto path = "/api/v1/groups/" + id + "/scopes";
 
@@ -61,6 +62,8 @@ TEST_F(ScopeRoutesTest, RefusesWhatCannotBeGranted) {
   const auto path = "/api/v1/groups/" + id + "/scopes";
   const std::vector<std::pair<field, std::string>> any{{field::if_match, "*"}};
   EXPECT_EQ(rig.request(verb::put, path, R"({"scopes":["lugh:everything"]})", any).error(), "invalid");
+  // An application's scope, before any api has its prefix.
+  EXPECT_EQ(rig.request(verb::put, path, R"({"scopes":["toms:dns"]})", any).error(), "invalid");
   EXPECT_EQ(rig.request(verb::put, path, R"({"scopes":"openid"})", any).status, 400u);
   EXPECT_EQ(rig.request(verb::put, path, R"({"scopes":["openid",7]})", any).status, 400u);
   EXPECT_EQ(rig.request(verb::put, path, R"({"scope":["openid"]})", any).status, 400u);

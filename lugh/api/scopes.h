@@ -15,6 +15,7 @@
 namespace lugh::api {
 
 // What a caller may do through /api/v1: Lugh's own scopes, which lugh/scopes/scope.h holds.
+using scopes::kAppsWrite;
 using scopes::kAuditRead;
 using scopes::kCredentialsWrite;
 using scopes::kDirectoryRead;
