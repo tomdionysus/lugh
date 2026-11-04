@@ -18,7 +18,7 @@ root's password, made at genesis (`lugh init` on the first node) and shown once.
 | `lugh:directory.read` | Reading users, groups, memberships, factors (never their secrets) and policies |
 | `lugh:directory.write` | Creating, changing and removing users and groups, and who is in which |
 | `lugh:credentials.write` | Enrolment links, and removing or resetting a user's factors |
-| `lugh:policies.write` | Setting the assurance level, globally and per group |
+| `lugh:policies.write` | Setting the assurance level, globally and per group, and which scopes each group grants |
 | `lugh:audit.read` | Reading and verifying the audit log |
 
 No token, or one that does not resolve: `401` with `WWW-Authenticate: Bearer realm="lugh"`,
@@ -83,6 +83,9 @@ the client reads again. Policies are settings written whole with `PUT`, and memb
 | `GET /api/v1/groups/{id}/members` | directory.read | Its members, as users |
 | `PUT /api/v1/groups/{id}/members/{user}` | directory.write | Adds them; `204` whether or not they were in it |
 | `DELETE /api/v1/groups/{id}/members/{user}` | directory.write | Removes them; `404` if they were not |
+| `GET /api/v1/groups/{id}/scopes` | directory.read | The scopes the group grants its members: `{scopes}`, with an `ETag` (`"0"` for a group never granted anything) |
+| `PUT /api/v1/groups/{id}/scopes` | policies.write | `{scopes: [...]}`, the whole set, with `If-Match`: each scope one Lugh can grant (Lugh's own, OIDC's, an application's `<prefix>:<name>`, or a topic scope `lir:pub\|sub\|retain:<filter>`), stored sorted and once each, at most 256. A user's scopes are the union over their groups |
+| `GET /api/v1/scopes` | directory.read | `{lugh, oidc}`: the scopes Lugh itself defines. Applications' arrive with applications |
 | `GET /api/v1/policies` | directory.read | `{global, groups: [{group, acr}]}` |
 | `PUT /api/v1/policies/global` | policies.write | `{acr}`: `urn:lugh:acr:pwd`, `mfa` or `phr` |
 | `PUT /api/v1/policies/groups/{id}` | policies.write | `{acr}`, or `{acr: null}` to clear |

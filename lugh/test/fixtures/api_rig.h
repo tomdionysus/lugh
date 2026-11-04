@@ -16,6 +16,7 @@
 #include "lugh/api/audit_routes.h"
 #include "lugh/api/group_routes.h"
 #include "lugh/api/policy_routes.h"
+#include "lugh/api/scope_routes.h"
 #include "lugh/api/scopes.h"
 #include "lugh/api/user_routes.h"
 #include "lugh/test/fixtures/authn_rig.h"
@@ -46,10 +47,12 @@ class ApiRig : public AuthnRig {
         users(directory, factors, authenticator, links),
         groups(directory),
         policy_routes(policies, directory),
+        scope_routes(grants),
         audit_routes(audit) {
     users.register_routes(*router);
     groups.register_routes(*router);
     policy_routes.register_routes(*router);
+    scope_routes.register_routes(*router);
     audit_routes.register_routes(*router);
   }
 
@@ -92,5 +95,6 @@ class ApiRig : public AuthnRig {
   lugh::api::UserRoutes users;
   lugh::api::GroupRoutes groups;
   lugh::api::PolicyRoutes policy_routes;
+  lugh::api::ScopeRoutes scope_routes;
   lugh::api::AuditRoutes audit_routes;
 };

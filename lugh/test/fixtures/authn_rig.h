@@ -17,6 +17,7 @@
 #include "lugh/authn/totp.h"
 #include "lugh/core/encoding.h"
 #include "lugh/directory/directory.h"
+#include "lugh/scopes/grants.h"
 #include "lugh/store/tables.h"
 #include "lugh/test/fixtures/audit_calls.h"
 #include "lugh/test/fixtures/memory_store.h"
@@ -60,6 +61,7 @@ class AuthnRig {
     directory->dependent_add(factors);
     policies = std::make_shared<lugh::authn::Policies>(store, directory, audit);
     links = std::make_shared<lugh::authn::EnrolmentLinks>(store, wall, directory, audit);
+    grants = std::make_shared<lugh::scopes::Grants>(store, directory, audit);
     authenticator = std::make_shared<lugh::authn::Authenticator>(logger, time, directory, passwords, factors, policies, links, audit, settings);
   }
 
@@ -135,6 +137,7 @@ class AuthnRig {
   std::shared_ptr<lugh::authn::Factors> factors;
   std::shared_ptr<lugh::authn::Policies> policies;
   std::shared_ptr<lugh::authn::EnrolmentLinks> links;
+  std::shared_ptr<lugh::scopes::Grants> grants;
   std::shared_ptr<lugh::authn::Authenticator> authenticator;
 
   lugh::Secret secret;

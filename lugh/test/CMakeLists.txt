@@ -12,6 +12,7 @@ add_executable(lugh_tests
     api_concurrency_test.cpp
     api_group_routes_test.cpp
     api_policy_routes_test.cpp
+    api_scope_routes_test.cpp
     api_user_routes_test.cpp
     audit_log_test.cpp
     authn_authenticator_test.cpp
@@ -40,6 +41,9 @@ add_executable(lugh_tests
     keys_keyring_manager_test.cpp
     keys_keyring_test.cpp
     network_cidr_test.cpp
+    scopes_grants_test.cpp
+    scopes_scope_test.cpp
+    scopes_topic_scope_test.cpp
     node_cli_test.cpp
     node_config_test.cpp
     node_ioc_check_test.cpp

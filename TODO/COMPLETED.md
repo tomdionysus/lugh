@@ -2,6 +2,16 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O2, the scope model
+
+- `lugh/scopes/`: what a scope is (RFC 6749 section 3.3's word, at most 1024 bytes) and its four kinds, Lugh's own, OIDC's, an application's `<prefix>:<name>` and Lir's topic scopes; the space-delimited list split and joined. Lugh's own scope names move here from `lugh/api/scopes.h`, which now refers to them.
+- Lir's topic-scope grammar as the maintainer decided it (`lir:pub|sub|retain:<filter>`, `{sub}` the one substitution, a whole level), decoded strictly and encoded with Dannan's percent-encoding (Dannan pinned to 32f163b for it). A grant whose filter is not a valid MQTT filter is refused, and an encoded scope decodes to what was encoded.
+- `scope_grants` (a new table): which scopes each group grants, versioned for ETags; a user's effective scopes are the union over their groups, read when needed. Genesis grants `administrators` every Lugh scope.
+- The API: `GET /api/v1/scopes`, and `GET`/`PUT /api/v1/groups/{id}/scopes` (`lugh:policies.write` to change, with `If-Match`).
+- `fuzz_scope`, a libFuzzer target over the list, the kinds and the topic grammar's round trip. Syntax-checked only: this machine has no clang with libFuzzer.
+- Not in O2, and why: an application's prefix is checked against the registered apps in O3; `ScopeSource` over an in-memory image of the grants is P8's, since nothing installs it before Lugh runs on Dannan's Context.
+- Tests: 356 to 378 (the scope rules, the topic grammar, the grants, the routes, genesis's grant), green in the debug, ASan and TSan builds, and `ctest`.
+
 ## 2026-11-04: P6 step O1, the name parts and the POSIX number
 
 - `User` gains `given_name` and `family_name` (optional, printable, at most 128 bytes) for OIDC's `profile` claims and LDAP's `givenName` and `sn`, and `posix_number`; `Group` gains `posix_number`. Nothing allocates a number yet; LDAP's L-steps do (`TODO/2026-11-04-ldap.md`).

@@ -12,6 +12,7 @@ add_library(lugh STATIC
     api/audit_routes.cpp
     api/group_routes.cpp
     api/policy_routes.cpp
+    api/scope_routes.cpp
     api/user_routes.cpp
     audit/audit_log.cpp
     authn/authenticator.cpp
@@ -35,6 +36,9 @@ add_library(lugh STATIC
     keys/keyring_format.cpp
     keys/keyring_manager.cpp
     network/cidr.cpp
+    scopes/grants.cpp
+    scopes/scope.cpp
+    scopes/topic_scope.cpp
     node/config.cpp
     store/log_format.cpp
     store/sealed_store.cpp

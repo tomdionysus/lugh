@@ -4,7 +4,7 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here
 
-2026-11-04: **The alignment with Dannan and Dagda is done**, merged into `develop` and tagged `0.1.0` (`develop` and the tag pushed; `main` not, see "Not merged yet" below) (COMPLETED.md, "Aligning with Dannan and Dagda", says what each step did and what it cost in tests). Lugh links Dannan for every shared primitive and has no copy of one; it is in Dannan's callback shape above the frozen store and keyring; it has the stack's layout, conventions and warning set, with presets and routine sanitizers as its two stated exceptions; it has no Python; `docs/architecture.md` describes it as the top of the stack. `lugh_tests` (353) and `ctest` pass in the debug, ASan and TSan builds. Dannan is pinned by `LUGH_DANNAN_REF` to its tag 0.3.0.
+2026-11-04: **The alignment with Dannan and Dagda is done**, merged into `develop` and tagged `0.1.0` (`develop` and the tag pushed; `main` not, see "Not merged yet" below) (COMPLETED.md, "Aligning with Dannan and Dagda", says what each step did and what it cost in tests). Lugh links Dannan for every shared primitive and has no copy of one; it is in Dannan's callback shape above the frozen store and keyring; it has the stack's layout, conventions and warning set, with presets and routine sanitizers as its two stated exceptions; it has no Python; `docs/architecture.md` describes it as the top of the stack. `lugh_tests` (353) and `ctest` pass in the debug, ASan and TSan builds. Dannan is pinned by `LUGH_DANNAN_REF` to 32f163b (0.3.0 with the shared percent-encoding) until its next tag.
 
 **Next is P6** (the maintainer, 2026-11-04): OAuth 2 and OIDC, on the frozen store, in callback style, with the LDAP plan's L1 (the name fields) and L2 (app passwords with a scope set) folded into its start. Its design and steps O1 to O10 are `2026-11-04-oauth.md`, every question in it decided 2026-11-04; O1 (the fields) then O2 (the scope model that Lir and LDAP wait on) are first. Then LDAP, L3 to L5 (`2026-11-04-ldap.md`), then P8 (hosting on Dannan's Context and Dagda), which waits on Dagda's heads. P6 also defines the scope grammar Lir waits on ("For P6, from Lir").
 
@@ -34,6 +34,15 @@ Dannan's identity step (step 10, Dannan 09a525f, design in `../dannan/TODO/2026-
 ## For P6, from Lir
 
 The maintainer decided Lir's authorisation (2026-11-04, via the Lir session): MQTT topic permissions are scopes carried in the Lugh token, publish and subscribe topic filters, checked through Dannan's scope check; Lir keeps no ACL. A client presents the token as the MQTT CONNECT password, and an MQTT 5 client may re-authenticate with the enhanced authentication method "lugh". The grammar of those scopes is Lugh's to define, in P6 with the rest of the scope model (group-to-scope grants, app-defined scopes), and Lir waits on it. Also from the maintainer, via Lir: the repositories are the sources of truth; the Claude Docs the projects started from are starters only and will be deleted, not read for direction or edited.
+
+## Onto Dannan's new foundations (rule 3)
+
+Dannan develop 57ebdb2 (in 0.4.0 when the maintainer cuts it) holds two things Lugh has copies of:
+
+1. **The settings reader**, `dannan/config/config.h` (e375b08), lifted from Lugh's `ConfigLoader` at Lir's request (the maintainer): the same layering, warnings and refusal wording, settings declared as `{key, kind, flag, variable, what}`. Lugh keeps its typed `Config` and its own checks (addresses, CIDRs) through `Settings::text/number/list/choice` and `Settings::refuse`, deletes its loader and its own yaml-cpp use.
+2. **Percent-encoding**, below. The topic-scope encoder already uses it (O2); the router is still to move.
+
+Both are done before O3, each its own commit.
 
 ## Percent-encoding moves to Dannan
 

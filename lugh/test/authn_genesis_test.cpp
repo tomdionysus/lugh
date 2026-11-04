@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include "lugh/authn/genesis.h"
+#include "lugh/scopes/scope.h"
 #include "lugh/test/fixtures/authn_rig.h"
 
 using lugh::Fault;
@@ -24,8 +25,9 @@ constexpr const char* kSource = "192.0.2.1";
 class GenesisTest : public ::testing::Test {
  protected:
   lugh::Outcome<Secret> genesis() {
-    return wait_for<lugh::Outcome<Secret>>(
-        [&](lugh::Executor executor, auto done) { Genesis(rig.directory, rig.passwords, rig.links, rig.audit).run(kTestDeadline, executor, done); });
+    return wait_for<lugh::Outcome<Secret>>([&](lugh::Executor executor, auto done) {
+      Genesis(rig.directory, rig.passwords, rig.links, rig.grants, rig.audit).run(kTestDeadline, executor, done);
+    });
   }
 
   AuthnRig rig;
@@ -54,6 +56,11 @@ TEST_F(GenesisTest, RootInAdministratorsWithARandomPassword) {
   EXPECT_TRUE(
       read_value<bool>([&](lugh::Executor executor, auto done) { rig.passwords->verify(root->id, copy_of(password.value), kTestDeadline, executor, done); }));
   EXPECT_TRUE(rig.audited("genesis"));
+
+  // Administrators hold every Lugh scope, and so root does; nothing else is granted.
+  EXPECT_EQ(read_value<std::vector<std::string>>([&](lugh::Executor executor, auto done) { rig.grants->effective(root->id, kTestDeadline, executor, done); }),
+            lugh::scopes::united(lugh::scopes::lugh_scopes()));
+  EXPECT_TRUE(rig.audited("scopes.set"));
 }
 
 TEST_F(GenesisTest, OnceOnly) {
@@ -76,7 +83,7 @@ TEST_F(GenesisTest, EachGenesisAPasswordOfItsOwn) {
   // Another cluster.
   AuthnRig other;
   const auto second = wait_for<lugh::Outcome<Secret>>([&](lugh::Executor executor, auto done) {
-                        Genesis(other.directory, other.passwords, other.links, other.audit).run(kTestDeadline, executor, done);
+                        Genesis(other.directory, other.passwords, other.links, other.grants, other.audit).run(kTestDeadline, executor, done);
                       }).value;
   EXPECT_FALSE(first == second);
 }

@@ -17,11 +17,13 @@
 #include "lugh/core/secret.h"
 #include "lugh/core/task.h"
 #include "lugh/directory/directory.h"
+#include "lugh/scopes/grants.h"
 
 namespace lugh::authn {
 
 // The birth of a cluster, once in its life, as `lugh-node init` makes its first node: the user
-// root, in the group administrators, with a password made here at random. That password is
+// root, in the group administrators, which is granted every one of Lugh's own scopes, with a
+// password made here at random. That password is
 // the one credential Lugh is born with. There is no other: no token, no key in a file, no
 // setting. It is returned to be shown once and kept nowhere but as its hash.
 //
@@ -35,7 +37,7 @@ class Genesis {
   static constexpr std::size_t kPasswordBytes = 18;
 
   Genesis(std::shared_ptr<directory::Directory> directory, std::shared_ptr<Passwords> passwords, std::shared_ptr<EnrolmentLinks> links,
-          std::shared_ptr<audit::AuditLog> audit);
+          std::shared_ptr<scopes::Grants> grants, std::shared_ptr<audit::AuditLog> audit);
 
   // Root's password. refused when the directory already has anyone in it: genesis happens
   // once. In Dannan's shape; the steps hold what they need, so the Genesis may go at once.
@@ -45,6 +47,7 @@ class Genesis {
   std::shared_ptr<directory::Directory> _directory;
   std::shared_ptr<Passwords> _passwords;
   std::shared_ptr<EnrolmentLinks> _links;
+  std::shared_ptr<scopes::Grants> _grants;
   std::shared_ptr<audit::AuditLog> _audit;
 };
 

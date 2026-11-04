@@ -10,18 +10,17 @@
 #include <string>
 #include <vector>
 
+#include "lugh/scopes/scope.h"
+
 namespace lugh::api {
 
-// What a caller may do through /api/v1. Vocabulary: an OAuth client is granted these by
-// name (P6), so a name never changes meaning once shipped.
-inline constexpr const char* kDirectoryRead = "lugh:directory.read";
-inline constexpr const char* kDirectoryWrite = "lugh:directory.write";
-// Enrolment links, and removing or resetting a user's factors: what lets someone into an
-// account, apart from changing who is in it.
-inline constexpr const char* kCredentialsWrite = "lugh:credentials.write";
-inline constexpr const char* kPoliciesWrite = "lugh:policies.write";
-inline constexpr const char* kAuditRead = "lugh:audit.read";
+// What a caller may do through /api/v1: Lugh's own scopes, which lugh/scopes/scope.h holds.
+using scopes::kAuditRead;
+using scopes::kCredentialsWrite;
+using scopes::kDirectoryRead;
+using scopes::kDirectoryWrite;
+using scopes::kPoliciesWrite;
 
-inline std::vector<std::string> all_scopes() { return {kDirectoryRead, kDirectoryWrite, kCredentialsWrite, kPoliciesWrite, kAuditRead}; }
+inline std::vector<std::string> all_scopes() { return scopes::lugh_scopes(); }
 
 }  // namespace lugh::api
