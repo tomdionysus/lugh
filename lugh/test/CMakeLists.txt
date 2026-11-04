@@ -50,6 +50,8 @@ add_executable(lugh_tests
 )
 
 target_link_libraries(lugh_tests PRIVATE lugh GTest::gtest_main)
+# Tests write only inside the build tree (Dannan's TempDir).
+target_compile_definitions(lugh_tests PRIVATE DANNAN_TEST_TEMP_ROOT="${PROJECT_BINARY_DIR}/test-tmp")
 target_precompile_headers(lugh_tests
     PRIVATE
         <boost/asio.hpp>

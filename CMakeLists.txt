@@ -164,6 +164,10 @@ if (LUGH_BUILD_TESTING)
     add_test(NAME api
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/process/api_test.py $<TARGET_FILE:lugh-node>)
 
+    # The process tests' temporary files and directories go inside the build tree too.
+    file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/test-tmp")
+    set_tests_properties(shutdown init api PROPERTIES ENVIRONMENT "TMPDIR=${PROJECT_BINARY_DIR}/test-tmp")
+
     # Outside the composition root and the adapters, nothing names a clock, the environment,
     # a thread, a process or a file write.
     add_test(NAME ioc

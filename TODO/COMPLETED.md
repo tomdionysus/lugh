@@ -74,6 +74,9 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   table and loading its keys now take that lock around the state they touch, though
   nothing else can see the table yet, so the analysis can prove every access. The IoC
   check refuses a standard lock outside the composition root.
+- The tests write only inside the build tree, as Dannan's do: `TempDirectory` is Dannan's
+  `TempDir` (under `build/test-tmp`) with a `write()` helper, and ctest gives the process
+  tests `TMPDIR` there. Before, both used the system temp directory.
 
 ## 2026-10-18: P5, the management API (not committed)
 
