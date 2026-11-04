@@ -1,8 +1,10 @@
 # Architecture
 
-Lugh is an authentication and directory server, and the single sign-on for every Blackraven project (T.O.M.S, blackraven-admin, Macha, AthenaSIP and those that follow). It holds the identities of people and services, authenticates people with two factors (a password and a second factor, or a passkey), and issues tokens that the applications it has been told to allow can trust. It speaks OAuth 2 (with OpenID Connect on top) to applications, a RESTful management API to administrators and automation, and a limited, read-mostly LDAP to legacy software that only knows how to bind and search. It also ships a native C++20 library, so a C++ project that includes Lugh as a subproject can authenticate users and verify tokens in process. Several Lugh nodes form one cluster over a replicated, encrypted table store built on the same technology as Macha. Lugh is a security product first: every byte is encrypted in flight and at rest, every parser is fuzzed, and the process runs with the least privilege the host can give it.
+Lugh is an authentication and directory server, and the single sign-on for every Blackraven project (T.O.M.S, blackraven-admin, Macha, AthenaSIP and those that follow). It holds the identities of people and services, authenticates people with two factors (a password and a second factor, or a passkey), and issues tokens that the applications it has been told to allow can trust. It speaks OAuth 2 (with OpenID Connect on top) to applications, a RESTful management API to administrators and automation, and a limited, read-mostly LDAP to legacy software that only knows how to bind and search. It also ships a native C++20 library, so a C++ project that includes Lugh as a subproject can authenticate users and verify tokens in process. Lugh is a security product first: every byte is encrypted in flight and at rest, every parser is fuzzed, and the process runs with the least privilege the host can give it.
 
-This is the design as understood on 2026-10-18, before any code exists. Nothing here is decided until it moves to "Decided" below; the open questions are at the end.
+Lugh is the top of a stack of three (the maintainer, 2026-11-03): **Dannan** (`../dannan`) is the network layer, nodes, membership, the transport, node identity and key custody, and the primitives every project shares (crypto, secure memory, the byte codec, durable files, time sources, the thread-safety contract, logging); **Dagda** (`../dagda`) is the replicated store; **Lugh** is the directory and its sign-in. Lugh uses Dannan as its network layer and Dagda as its datastore, and no code is duplicated between the three. What each owns, and the seams between them, are in `../dagda/TODO/2026-11-03-stack.md`; the maintainer's decisions of 2026-11-04 are in `TODO/ACTIVE.md`. A Lugh cluster is a Dannan cluster: `lugh-node` is a Dannan node, one process per node, and Lugh's state is Dagda's.
+
+This document began as the design of 2026-10-18, before any code existed. What is built is said where it is; what is still to come says so.
 
 ## What it does
 
@@ -38,40 +40,39 @@ Lugh is not a general-purpose LDAP server, a certificate authority for the outsi
              +-------------------------+---------------------------+
                                        |
              +-------------------------+---------------------------+
-             |  store: sealed tables on Macha's journal + packs     |
-             |  keys: master key -> KEKs -> per-table DEKs          |
+             |  Dagda: lugh/scope (every node), lugh/secrets       |
+             |  (Lugh nodes), node-local spaces; sealed, merged     |
+             |  (until then: Lugh's frozen sealed store + keyring)  |
              +-------------------------+---------------------------+
                                        |
              +-------------------------+---------------------------+
-             |  cluster: gossip membership, replication, merge      |
-             |  mTLS between nodes  :7443                           |
+             |  Dannan: nodes, membership, mTLS transport, node     |
+             |  identity and key custody, the scope seam            |
              +-----------------------------------------------------+
 ```
 
 ### Backend (`lugh`)
 
-One C++20 binary, built from a static library `lugh_core` and a `main.cpp` composition root, in the same shape as blackraven-admin.
+One C++20 binary, `lugh-node`, built from the static library `lugh` and the composition root `tools/lugh_node.cpp`. The layout is the stack's (`CONTRIBUTING.md`, "Layout").
 
 | Subsystem | Does |
 |---|---|
-| `src/http/` | Boost.Beast server over Asio with OpenSSL, TLS 1.3 only. Router, rate limiter, security headers, request size and time limits, the static file handler for the dashboard |
-| `src/oauth/` | Authorisation, token, introspection, revocation, PAR, device and userinfo endpoints; discovery and JWKS |
-| `src/api/` | The management API, `/api/v1/...` |
-| `src/ldap/` | LDAPv3 listener: a bounded BER decoder, bind, search, rootDSE, unbind. Nothing else |
-| `src/authn/` | Credential verification and the sign-in state machine (password, then second factor), lockout, rate limits, password policy |
-| `src/directory/` | Users, groups, applications, attributes, membership, the mapping to LDAP DNs and OIDC claims |
-| `src/tokens/` | Signing keys and their rotation, JWT encoding and verification, opaque token handles |
-| `src/audit/` | The append-only, hash-chained audit log |
-| `src/store/` | The table store: sealed records, indexes, compaction. Lifted from Macha |
-| `src/crypto/` | AEAD, HKDF, Argon2id, Ed25519/ECDSA, random, constant-time compare, secure memory. One thin layer over OpenSSL 3 |
-| `src/keys/` | The key hierarchy: unsealing the master key at start, KEKs, DEKs, rotation |
-| `src/cluster/` | Node identity, membership, the inter-node transport, replication, merge. Lifted from Macha |
-| `src/system/` | Ports (`Clock`, `Random`, `Environment`, `WorkPool`) and their real adapters |
-| (Dannan) `dannan/status/log.h` | Logging: the node's one `LogSink`, chosen in `tools/lugh_node.cpp`, and a `ScopedLogger` per component |
+| `lugh/http/` | Boost.Beast server over Asio with OpenSSL, TLS 1.3 only. Router, rate limiter, security headers, request size and time limits, the static file handler for the dashboard. HTTP stays each hosted system's own (the maintainer, 2026-11-04) |
+| `lugh/oauth/` | Authorisation, token, introspection, revocation, PAR, device and userinfo endpoints; discovery and JWKS (P6) |
+| `lugh/api/` | The management API, `/api/v1/...` |
+| `lugh/ldap/` | LDAPv3 listener: a bounded BER decoder, bind, search, rootDSE, unbind. Nothing else (P9) |
+| `lugh/authn/` | Credential verification and the sign-in state machine (password, then second factor), lockout, rate limits, password policy, TOTP and its HMAC-SHA-1 |
+| `lugh/directory/` | Users, groups, applications, attributes, membership, the mapping to LDAP DNs and OIDC claims |
+| `lugh/tokens/` | Signing keys and their rotation, JWT encoding and verification, opaque token handles (P6). Token verification stays Lugh's; other systems verify through a Lugh plugin (the maintainer, 2026-11-04) |
+| `lugh/audit/` | The append-only, hash-chained audit log |
+| `lugh/store/`, `lugh/keys/` | The sealed table store and the keyring. Frozen until Dagda carries Lugh's spaces, then deleted (the maintainer: "Keep the store until Dagda") |
+| `lugh/crypto/` | Only what is Lugh's: the sealed-value framing over Dannan's AES-GCM, and the stretch over Dannan's Argon2id. Everything else is Dannan's (`dannan/identity/`) |
+| `lugh/system/` | Ports for the environment, files and the console, and their adapters. Time, randomness and logging are Dannan's |
+| (Dannan) | Nodes, membership, the transport, node identity, key custody, the scope seam (Lugh installs its `ScopeSource`), the byte codec, durable files, time sources, the thread-safety contract, logging (P8 hosts Lugh on Dannan's `Context`) |
 
 ### Concurrency
 
-Lugh is asynchronous from the socket to the disk (the maintainer, 2026-10-18). Every operation that waits is a C++20 coroutine on Boost.Asio, `co_await`ed by its caller, and no thread is held while anything waits. That covers the HTTP server, the route handlers, the directory, authn, the audit log, the store, the keyring and the files and console ports. The io_context's threads run the coroutines. Two small pools take the only work that cannot help but block: `blocking` for system calls on regular files and for the console, which have no readiness to wait on (io_uring could replace it on Linux), and `hashing` for Argon2id, whose two threads bound the memory sign-ins can take under the unit's `MemoryMax`. The store guards each table with an async lock held across its synced append and a plain mutex held only for moments. So a write waits only for earlier writes to the same table, a read never waits for the disk, and a write is not visible until it is durable. The rules are in `code-style.md`, "Errors".
+Lugh is asynchronous from the socket to the disk (the maintainer, 2026-10-18), in Dannan's callback shape (the maintainer, 2026-11-03: "Lugh goes callback style"). Every operation that waits takes its arguments, a deadline, the caller's executor and `done`; `done` is posted to that executor exactly once, with the answer or, when the deadline passes first, what the operation says then, and never called inline (`lugh/core/completion.h`). An operation of several steps is one shared state whose steps start one another (`lugh/core/steps.h`); nothing holds a thread while anything waits. A read that could not happen answers `failed`, never "absent"; a change past its deadline says it may yet be made. Two small pools take the only work that cannot help but block: `blocking` for system calls on regular files and for the console, and `hashing` for Argon2id, whose two threads bound the memory sign-ins can take under the unit's `MemoryMax`. The audit chain is appended from a queue, one write in flight, so it has no gaps or forks without anything held across a write. The frozen store, keyring, files and console keep their coroutines until Dagda replaces them, reached through `lugh/store/store_calls.h`; the node's start-up, which runs them in sequence, is the one other coroutine.
 
 ### Library (`lugh_client`, and optionally `lugh_embedded`)
 
@@ -104,36 +105,17 @@ In development, Lugh runs with the static handler off, Vite runs on its own and 
 
 ### The store
 
-Lugh reuses Macha's storage and replication technology, not Macha's filesystem:
+**On the stack (P8):** Lugh's state is Dagda's (the maintainer, 2026-11-03, settled 2026-11-04). Two domains: `lugh/scope`, with every node a member, for what every hosted system's writes are checked against (who holds which scope), and `lugh/secrets`, with Lugh nodes only, for credentials, factors, sessions and grants. Sessions are replicated across Lugh nodes, so a session works at any of them; single-use grants and TOTP steps are node-local or held under a lease. Dagda seals at rest under Dannan's key custody, binds each value to its domain and id, never rolls a space back, and merges; Lugh brings its merge rules (below) and checks its ETags inside Dagda's `mutate_local`. Every write carries a durability level the caller picks (Ephemeral, Persisted on one node, Replicated on k nodes, Durable on every available replica): credential and factor changes and revocations are Replicated, and where a write's evidence names nodes still pending Lugh answers "applied, n nodes pending" and clears it from the write's ticket. Lugh has no store, keyring or sealing of its own then.
 
-| From Macha | Use in Lugh |
-|---|---|
-| `SealedJournal`: AES-GCM frames, fsync per append, truncate at the first bad frame | The write-ahead log for every table |
-| `LocalStore`: encrypted append-only packs, tombstones, compaction by rewrite and swap | Table records at rest |
-| AEAD sealing of every record | Every record sealed, with the table name, key and version bound in as associated data, so a record cannot be moved or replayed into another slot. Records are keyed by table key, not content hash, because they are mutable |
-| The replicated user table: full replica on every node, sealed at rest | The model for every table |
-| Gossip membership, node identity, CONTROL and DATA lanes | Cluster membership and replication. The transport is TLS 1.3 with per-node certificates over Asio and OpenSSL, not Macha's X25519 + HKDF handshake: Lugh already needs TLS, and one less hand-rolled protocol is one less thing to get wrong (proposed, with open question 1) |
-| Repair: background convergence of replica counts | Anti-entropy: each node checks it holds every extent and pulls the ones it is missing |
-| Commit DAG with per-author clocks ("dots") and deterministic merge | Merging concurrent writes after a partition |
-
-As built on one node (P3), each table is one log, `<state>/store/<table>.log`. It has a header sealed under the table's data key, then one AES-256-GCM frame per change, each bound to the table, its data key epoch and the frame before it. Every write is appended and synced before it is acknowledged. A torn tail is cut at the next open. Damage in the middle stops the open, because a record dropped from a security table might be a revocation. Records are held in memory sealed and opened on each read, the indexes are rebuilt at every open, and a table is compacted (rewritten under its current data key, then renamed over the old) once it is more than half superseded or its key is rotated. A removal leaves a tombstone kept for ever, and a removed key can never be written again. Every record has a version, which the API's ETags will use.
+**Until then (built, P3, frozen):** each table is one log, `<state>/store/<table>.log`. It has a header sealed under the table's data key, then one AES-256-GCM frame per change, each bound to the table, its data key epoch and the frame before it. Every write is appended and synced before it is acknowledged. A torn tail is cut at the next open. Damage in the middle stops the open, because a record dropped from a security table might be a revocation. Records are held in memory sealed and opened on each read, the indexes are rebuilt at every open, and a table is compacted (rewritten under its current data key, then renamed over the old) once it is more than half superseded or its key is rotated. A removal leaves a tombstone kept for ever, and a removed key can never be written again. Every record has a version, which the API's ETags use.
 
 Tables are `users`, `credentials`, `factors` (TOTP secrets, WebAuthn credentials, recovery codes), `app_passwords`, `groups`, `memberships`, `apps`, `app_access`, `consents`, `sessions`, `grants` (codes, refresh tokens, device codes), `signing_keys`, `policies` and `audit`. Secondary indexes (user name, email, client ID, group name) are derived and rebuilt from the tables, never trusted as authoritative.
 
-As built for the directory and authentication (P4): a user is keyed by a random 128-bit ID and found by name or address through the `users` table's unique indexes, both folded to lower case on the way in, so `Alice` and `alice` cannot both exist. A group is found by name the same way. Because a removal is final and its key is never used again, anything that can be removed and then made again gets a key of its own each time: a membership is `<group>/<user>/<instance>`, a factor `<user>/<kind>/<instance>`. A group's policy is never removed; clearing it writes "none". The password is one record per user in `credentials`, and its version is the credential version that P8's merge will compare. The audit log is one record per entry in `audit`, keyed by a zero-padded sequence number. Every write the directory makes carries the version it read, so two administrators editing one user cannot silently overwrite each other.
-
-**The one change from Macha: every node holds every extent** (the maintainer, 2026-10-18). In Lugh an extent is a sealed pack of table records, and the term is kept so the lifted code reads the same. A Lugh cluster has only a few nodes and the data is small, so there is no DHT placement, no preferred owners, and no `dht.replicas` or `write_copies` setting. The replica count is always every node. That means:
-
-- Placement and `replica_selector` are not lifted. A write is replicated to every live node, and a node that was away catches up from any peer.
-- Any node can serve any read from local disk, with no read ever crossing the network.
-- Losing a node loses no data while one node survives. Adding a node means a full copy, which is cheap at this size.
-- Retention and GC are simpler: an extent is garbage only when it is unreferenced on every node's view of the merged metadata, with no off-node owners to consult.
-
-The code is copied out of Macha and adapted, not linked. `macha_core` is a monolithic private shared library that bundles HTTP, media and FUSE with storage, so it cannot be linked as it stands. `src/storage`, `src/ledger`, `src/contract`, the crypto, membership, the transport and the metadata merge go into Lugh's `src/store` and `src/cluster`, rewritten to blackraven-admin's conventions (IoC ports, `Status`/`Result`, `_` members). Macha's licence headers are stripped, because the maintainer owns the code (the maintainer, 2026-10-18). The "What is lifted, from where" table in `code-style.md` will record each file.
+As built for the directory and authentication (P4): a user is keyed by a random 128-bit ID and found by name or address through the `users` table's unique indexes, both folded to lower case on the way in, so `Alice` and `alice` cannot both exist. A group is found by name the same way. Because a removal is final and its key is never used again, anything that can be removed and then made again gets a key of its own each time: a membership is `<group>/<user>/<instance>`, a factor `<user>/<kind>/<instance>`. A group's policy is never removed; clearing it writes "none". The password is one record per user in `credentials`, and its version is the credential version the merge will compare. The audit log is one record per entry in `audit`, keyed by a zero-padded sequence number. Every write the directory makes carries the version it read, so two administrators editing one user cannot silently overwrite each other.
 
 ### Consistency, and where eventual is not good enough
 
-Macha is availability-first: every node accepts writes and partitions merge later, by last-write-wins for the user table. That is right for most of a directory, such as a user's display name or a group's description. It is wrong for anything where a lost or merged write is a security hole:
+Dagda, like Macha before it, is availability-first: every node accepts writes and partitions merge later. That is right for most of a directory, such as a user's display name or a group's description. It is wrong for anything where a lost or merged write is a security hole, and these are the merge rules Lugh brings to Dagda (tombstones kept for ever: the maintainer, 2026-11-04):
 
 | Data | Rule |
 |---|---|
@@ -144,16 +126,18 @@ Macha is availability-first: every node accepts writes and partitions merge late
 | Lockout counters, rate limits | Per node, summed by gossip. A partition loosens lockout to at most N times the limit, never removes it |
 | Signing keys | Created on one node and published to the others before use, then announced in JWKS before any token is signed with them |
 
-This needs testing hardest of anything here, using Macha's in-process `TestCluster` approach.
+This needs testing hardest of anything here, on Dannan's in-process cluster fixture. Two limits are accepted as stated (the maintainer, 2026-11-04): the partition bound (lockout loosened to at most N times the limit) and the trust boundary (what a node of the cluster may do).
 
 ### Encryption at rest
 
-- **Master key:** 32 bytes, never stored in clear. `lugh init` makes it and writes it to standard output, which is piped to `systemd-creds encrypt`; the unit unseals it at each start with `LoadCredentialEncrypted=lugh-master-key` (bound to the TPM where there is one), and Lugh reads it from `$CREDENTIALS_DIRECTORY`. On a host without systemd credentials, `lugh init --passphrase` stretches a typed passphrase with Argon2id instead, and every start asks for it. The master key is used once, to derive the KEK, and then wiped.
-- **Keys under it:** each node has its own master key and derives its own KEK from it (HKDF-SHA256, salted with the keyring's random id). The DEKs (one per table and epoch) are cluster-wide, because every node must read every record; each node stores them wrapped under its own KEK. DEKs move between nodes only once, inside the mTLS join handshake when a new node enrols.
-- **The keyring:** the DEKs live in `<state>/keyring`, a file of their own outside the store they protect, sealed whole with AES-256-GCM under the KEK. Its header (how to find the master key: credential, or passphrase with its Argon2id costs and salt) is bound in as associated data, so a wrong key and an altered file are refused alike. It is written to a temporary, synced and renamed, so a crash leaves the old file or the new one. `lugh init` never replaces one. The KEK and DEKs are held in Dannan's locked memory (`dannan/identity/secure_memory.h`), kept out of core dumps and wiped when freed.
-- **Rotation:** rotating a DEK starts a new epoch, and compaction re-seals old records into it. Rotating a node's master key re-wraps only that node's copy of the DEKs. Macha has no rotation, so this part is new.
-- **Credentials:** password hashes are Argon2id (OpenSSL 3.2+), stored inside the sealed record. A copy of the store without the master key therefore gives an attacker neither records nor hashes.
-- **Signing keys:** private signing keys are sealed in the same store. Using a PKCS#11 HSM instead is an option for later.
+**On the stack (P8):** Dagda seals Lugh's domains, and the keys come from Dannan's node key custody (each node's key and seal root under a systemd credential or an Argon2id-stretched passphrase, never on disk in clear), reached through the `Context` (`derive_key`, `derive_local`). Lugh holds no key at rest of its own. Signing keys for tokens are sealed in `lugh/secrets`.
+
+**Until then (built, P2, frozen):**
+
+- **Master key:** 32 bytes, never stored in clear. `lugh-node init` makes it and writes it to standard output, which is piped to `systemd-creds encrypt`; the unit unseals it at each start with `LoadCredentialEncrypted=lugh-master-key` (bound to the TPM where there is one), and Lugh reads it from `$CREDENTIALS_DIRECTORY`. On a host without systemd credentials, `lugh-node init --passphrase` stretches a typed passphrase with Dannan's Argon2id instead, and every start asks for it. The master key is used once, to derive the KEK with Dannan's HKDF, and then wiped.
+- **The keyring:** the data keys (one per table and epoch) live in `<state>/keyring`, a file of their own outside the store they protect, sealed whole with AES-256-GCM under the KEK. Its header (how to find the master key: credential, or passphrase with its Argon2id costs and salt) is bound in as associated data, so a wrong key and an altered file are refused alike. It is written with Dannan's durable create (`init` never replaces one) or replace, so a crash leaves the old file or the new one. The KEK and data keys are held in Dannan's locked memory, kept out of core dumps and wiped when freed.
+- **Rotation:** rotating a data key starts a new epoch, and compaction re-seals old records into it.
+- **Credentials:** password hashes are Argon2id, stored inside the sealed record. A copy of the store without the master key therefore gives an attacker neither records nor hashes.
 
 ## Applications
 
@@ -363,32 +347,36 @@ Docker is not used. A first node is initialised with `lugh init`, which creates 
 
 ## Repository layout
 
+The stack's layout (`CONTRIBUTING.md`, "Layout"), identical in Dannan, Dagda and Lugh:
+
 ```text
-src/<subsystem>/  the service: headers and sources side by side, and main.cpp
-include/lugh/     the public headers of the client library, and nothing else
-dashboard/        React admin dashboard (React Router in SPA mode), installed beside the binary
-config/           config.yaml, no secrets
-deploy/           the systemd unit and host setup
-tests/            GoogleTest, mirroring src/; cluster tests; the shutdown test
-fuzz/             libFuzzer targets, one per parser
-scripts/          the IoC check and other build-time checks
-docs/             how it works
-TODO/             now and next (ACTIVE.md), and what shipped (COMPLETE.md)
+lugh/<subsystem>/   the library: headers and sources side by side
+lugh/include/lugh/  the public headers of the client library, and nothing else
+lugh/test/          GoogleTest, flat, one binary (lugh_tests): the units, the IoC check, and
+                    the process tests that run the real lugh-node; fixtures in fixtures/
+lugh/fuzz/          libFuzzer targets, one per parser
+tools/              lugh_node.cpp (the composition root, building lugh-node), and the
+                    development certificate and keyring scripts
+dashboard/          React admin dashboard (P7), installed beside the binary
+config/             config.yaml, no secrets
+deploy/             the systemd unit and host setup
+docs/               how it works
+TODO/               now and next (ACTIVE.md), and what shipped (COMPLETED.md)
 ```
 
-Conventions are blackraven-admin's: C++20 with no extensions; CMake presets `debug`, `release`, `asan`, `tsan`, plus `fuzz`; sources listed explicitly; `lugh::<subsystem>` namespaces; PascalCase types and snake_case everything else; `_`-prefixed private members; `#pragma once`; includes rooted at `src/`; constructor-injected ports with one composition root; `Status`/`Result<T>` with no exceptions across component boundaries; and `.clang-format` set to Google with a 160-column limit.
+The conventions are the stack's, in `CONTRIBUTING.md`: C++20, `.clang-format` (Google, 160 columns), `lugh::<subsystem>` namespaces, PascalCase types and snake_case everything else, `_`-prefixed private members, `#pragma once`, includes rooted at the repository (`"lugh/<subsystem>/x.h"`, `"dannan/<subsystem>/x.h"`), constructor injection with one composition root, Dannan's checked locks, and Dannan's warning set under `-Werror`. Lugh's two stated exceptions (the maintainer, 2026-11-04): it keeps CMake presets, and it runs the sanitizers at the end of every phase. There is no Python.
 
 ## Decided, 2026-10-18
 
 - **The dashboard is served from disk**, installed to `/usr/local/share/lugh/dashboard`, as in T.O.M.S and blackraven-admin. It is not compiled into the binary.
-- **Macha's code is copied into Lugh and adapted**, not linked or split into a shared library. Macha's licence headers are stripped; the maintainer owns the code.
-- **Every node holds every extent.** Clusters are small and the data is small, so there is full replication with no DHT placement.
+- **Macha's code is copied into Lugh and adapted** (superseded 2026-11-03: Lugh uses Dannan and Dagda, which are written from their own designs, and copies nothing from Macha; `docs/provenance.md` records what P1 to P5 took).
+- **Every node holds every extent** (superseded 2026-11-04: `lugh/scope` is on every node, `lugh/secrets` on Lugh nodes, by Dagda's placement).
 - **No static credentials** (the maintainer, 2026-10-18). There is no bootstrap token, no key or password in a file or setting, and nothing else built in. At genesis, which is `lugh init` on a new cluster's first node, Lugh makes the user `root`, in the group `administrators`, with a randomly generated password. It shows that password once and stores only its hash. That password is the only credential a cluster is born with. Root's first sign-in goes from that password straight to enrolling a second factor, once. That is the one exception to "enrolment starts from a link" (`authn/genesis.h`). Every other administrator is made by root or by another administrator.
 
 ## Still open
 
-1. **Node identity:** per-node certificates from a cluster CA (proposed), or Macha's shared cluster key with per-node keys added on top?
-2. **Single-use grants:** is "owned by the issuing node, fail closed if it is unreachable" acceptable? With every node holding everything and only a few nodes, a majority quorum write for just these tables is now cheap, and it would let any node redeem a grant while a majority is up.
+1. ~~**Node identity**~~: Dannan's, per-node certificates from a cluster CA over keys in key custody, with CA-signed revocation (Dannan step 10, 09a525f).
+2. **Single-use grants:** node-local or under a Dagda lease (the maintainer, 2026-11-04, "Lugh's design"). Which, for each kind of grant, is still to be designed with P6.
 3. **OIDC:** in scope from the start (proposed), or plain OAuth 2 first?
 4. **The C++ library's embedded mode:** the client side (`RelyingParty`, token verification, flows) is now required for SSO. Is the embedded mode, which holds a replica of the directory in the host process, still wanted? Full replication makes it simpler, but it puts every sealed credential into that process.
 5. **LDAP:** read-only bind and search (proposed), or are password changes over LDAP (the Password Modify extended operation) needed? Is TLS 1.2 needed for old LDAP clients?
