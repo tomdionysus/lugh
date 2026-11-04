@@ -55,7 +55,7 @@ touches the sibling checkout.
 
 Run `lugh_tests` for the unit suite. `ctest` runs it too, beside what only a
 whole process shows: the shutdown, `init` and API tests in `test/process/`,
-which drive the real `lugh-node`, and the IoC check. Everything runs on a
+which drive the real `lugh-node`. Everything runs on a
 developer machine (MacPorts for every dependency on the laptop); there is no
 hosted CI. `-DLUGH_BUILD_FUZZING=ON` builds the fuzz targets under a clang that
 has libFuzzer.
@@ -169,7 +169,7 @@ message, and that stays.
   and Dannan's time sources among them. No singletons, no service locator.
 - One composition root, `tools/lugh_node.cpp`, names the concrete
   implementations and touches the process. The IoC check
-  (`tools/lugh_ioc_check.py`, run by `ctest`) fails the build if anything else
+  (`lugh/test/node_ioc_check_test.cpp`, in `lugh_tests`) fails if anything else
   names a clock, the environment, a thread, a process, a file write, a concrete
   sink or adapter, or a lock that is not Dannan's.
 

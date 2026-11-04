@@ -23,7 +23,7 @@ lugh/<subsystem>/   the library: headers and sources side by side
 lugh/include/lugh/  the public headers
 lugh/test/          GoogleTest, flat, one binary (lugh_tests); fixtures in lugh/test/fixtures/
 lugh/fuzz/          libFuzzer targets, one per parser of untrusted bytes
-tools/              lugh-node (the service), the IoC check, the development certificate and keyring
+tools/              lugh-node (the service), the development certificate and keyring
 test/process/       the real binary's tests: shutdown, init, the API
 config/             config.yaml, no secrets
 deploy/             the systemd unit and host setup
@@ -77,7 +77,7 @@ to everyone.
 
 ```bash
 ./build/lugh_tests                           # the unit suite
-ctest --test-dir build --output-on-failure   # that, the shutdown, init and API tests, and the IoC check
+ctest --test-dir build --output-on-failure   # that, and the shutdown, init and API tests
 ```
 
 ## Deploy

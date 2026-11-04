@@ -109,6 +109,14 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
 - Dannan is pinned to its first release tag, 0.2.0 (`LUGH_DANNAN_TAG`), in place of a
   commit, and linked as `dannan::dannan`, the name an installed Dannan exports. Under the
   debug build, ASan with UBSan, and TSan, `lugh_tests` (335) and `ctest` (5) pass.
+- No Python (the maintainer, 2026-11-04), first part: the IoC check is a GoogleTest test,
+  `lugh/test/node_ioc_check_test.cpp`, in `lugh_tests`, and `tools/lugh_ioc_check.py` and
+  its ctest entry are gone. The same patterns and adapters; the one lookbehind is written
+  without one, as `std::regex` has none. Each pattern now proves it catches an example of
+  what it forbids, and that some of Lugh's own calls (`_time.now()`, `boost::asio::write`,
+  Dannan's `Lock`) are not caught; a `getenv` planted in a library file was named and failed
+  it. A plain-text prefilter keeps the scan near 0.2 s in a debug build. Unit count 335 to
+  339; `ctest` 5 to 4.
 
 ## 2026-10-18: P5, the management API (not committed)
 

@@ -141,7 +141,7 @@ add_subdirectory(tools)
 # ------------------------------------------------------------------- tests
 #
 # One GoogleTest binary, lugh_tests: run it directly for the unit suite. ctest runs it too,
-# beside the process tests (test/process/) and the IoC check, and gates the install.
+# beside the process tests (test/process/), and gates the install.
 
 if (LUGH_BUILD_TESTING)
     enable_testing()
@@ -167,10 +167,6 @@ if (LUGH_BUILD_TESTING)
     file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/test-tmp")
     set_tests_properties(shutdown init api PROPERTIES ENVIRONMENT "TMPDIR=${PROJECT_BINARY_DIR}/test-tmp")
 
-    # Outside the composition root and the adapters, nothing names a clock, the environment,
-    # a thread, a process or a file write.
-    add_test(NAME ioc
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/lugh_ioc_check.py ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 
 # -------------------------------------------------------------------- fuzz

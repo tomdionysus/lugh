@@ -41,6 +41,7 @@ add_executable(lugh_tests
     network_cidr_test.cpp
     node_cli_test.cpp
     node_config_test.cpp
+    node_ioc_check_test.cpp
     store_async_test.cpp
     store_contract_test.cpp
     store_log_format_test.cpp
@@ -54,6 +55,8 @@ if (LUGH_SANITIZE STREQUAL "address")
 endif()
 # Tests write only inside the build tree (Dannan's TempDir).
 target_compile_definitions(lugh_tests PRIVATE DANNAN_TEST_TEMP_ROOT="${PROJECT_BINARY_DIR}/test-tmp")
+# The IoC check reads the source tree.
+target_compile_definitions(lugh_tests PRIVATE LUGH_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 target_precompile_headers(lugh_tests
     PRIVATE
         <boost/asio.hpp>
