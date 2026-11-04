@@ -1,17 +1,16 @@
 # Management API
 
 `/api/v1`, over the same HTTPS listener as everything else. JSON in and out; every response
-carries `Cache-Control: no-store`. This is the API as built in P5: the directory,
-authentication and the audit log. Applications, sessions and keys join it with the code
-that owns them.
+carries `Cache-Control: no-store`: the directory, authentication, applications, sessions,
+signing keys and the audit log. OAuth itself is `docs/oauth.md`.
 
 ## Credentials and scopes
 
-Every route needs a caller. Today that is a signed-in Lugh session: the `__Host-lugh_session`
-cookie the sign-in pages set (`/signin`). A request through a session that may change
+Every route needs a caller: a signed-in Lugh session, the `__Host-lugh_session` cookie the
+sign-in pages set (`/signin`), or an OAuth access token with `lugh` among its audiences. An
+`Authorization` header never falls back to a cookie. A request through a session that may change
 anything (any method but `GET` and `HEAD`) also carries the session's CSRF token in
-`X-CSRF-Token`; `GET /api/v1/me` gives it. OAuth access tokens join sessions with the token
-endpoint (P6). There is no other way in: no bootstrap token, no key in a file, no setting.
+`X-CSRF-Token`; `GET /api/v1/me` gives it. There is no other way in: no bootstrap token, no key in a file, no setting.
 The one credential a cluster is born with is root's password, made at genesis (`lugh init` on
 the first node) and shown once, and it opens a session only through the sign-in pages, where
 root's first sign-in goes straight to enrolling a second factor.
@@ -29,6 +28,7 @@ within a minute; so does disabling or removing them, which ends it.
 | `lugh:audit.read` | Reading and verifying the audit log |
 | `lugh:apps.write` | Registering, changing and removing applications, who may use them, their roles and their secrets |
 | `lugh:keys.write` | Rotating a token signing key |
+| `lugh:sessions.write` | Ending a user's sessions |
 
 No token, or one that does not resolve: `401` with `WWW-Authenticate: Bearer realm="lugh"`,
 limited by client address. A token without the route's scope: `403`. A caller is limited
@@ -75,6 +75,10 @@ the client reads again. Policies are settings written whole with `PUT`, and memb
 | Method and path | Scope | Does |
 |---|---|---|
 | `GET /api/v1/me` | any caller | `{user, scopes, session}`: who the caller is, what it holds, and for a session its `acr`, `auth_time` and `csrf_token` |
+| `GET /api/v1/me/sessions`, `DELETE /api/v1/me/sessions/{sid}` | any caller | The caller's own sessions, the one in use marked `current`; ends one, `404` if it is not theirs |
+| `POST /api/v1/me/password` | a session | `{current, new}`: through the person's own session only, never a token. Every other session of theirs ends |
+| `GET /api/v1/users/{id}/sessions` | directory.read | A user's live sessions |
+| `DELETE /api/v1/users/{id}/sessions` | sessions.write | Ends them all: `{ended}` |
 | `GET /api/v1/users` | directory.read | Every user; `?name=` or `?email=` for one |
 | `POST /api/v1/users` | directory.write | `{kind?, name, email, display_name?, given_name?, family_name?}`: `201`, `Location`, `ETag`. A person needs an address and starts not enrolled; a `service` needs neither. `given_name` and `family_name` are the OIDC claims and LDAP's `givenName` and `sn`; neither is required, since not every name has two parts |
 | `GET /api/v1/users/{id}` | directory.read | One user. `posix_number` appears once LDAP has allocated one |
@@ -147,16 +151,14 @@ registered; so is a group's grant of one.
 
 ## Where it runs
 
-Every route is a coroutine, spawned once the credential, the limits and the scope have
-been checked in memory, so a refusal costs nothing. A handler suspends on the store, the
-audit log or the hashing pool and holds no thread while it waits; a write to one table
+A route's handler starts once the credential, the limits and the scope have been checked in
+memory, so a refusal costs nothing. It waits on the store, the audit log or the hashing pool by
+callback and holds no thread meanwhile; a write to one table
 waits only for writes to that table. At most 256 requests are in flight; past that the
 answer is `503 busy`. Concurrent writes are safe: a name or address taken twice at once goes
 to one writer, and the other gets `409 duplicate`.
 
 ## Not yet
 
-- **Signing in** is P6: the enrolment link's token is redeemed by the sign-in pages, which
-  set the password and enrol the TOTP factor.
 - **Lists are whole.** A directory of a few thousand is one response. Paging arrives if a
   directory grows past that.

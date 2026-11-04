@@ -13,7 +13,7 @@ This document began as the design of 2026-10-18, before any code existed. What i
 | OAuth 2 / OIDC | Allowed applications, browsers, services | Single sign-on, second factor, consent, access/ID/refresh tokens, back-channel logout, token introspection and revocation, discovery and JWKS |
 | Management API | The dashboard, administrators, automation | CRUD over users, groups, applications, factors, keys, policies; sessions; the audit log; cluster health |
 | Dashboard | Administrators | A React admin interface over the management API, served by Lugh itself |
-| LDAP | Legacy software (mail servers, NAS boxes, VPNs, Linux PAM/SSSD) | Simple bind over TLS, search over users and groups, rootDSE. Read only |
+| LDAP | Legacy software (mail servers, NAS boxes, VPNs, Linux PAM/SSSD) | Simple bind over TLS, search over users and groups, rootDSE; writes mapped onto Lugh's model and Password Modify (planned, `TODO/2026-11-04-ldap.md`) |
 | `lugh` C++ library | C++ projects that add Lugh as a subproject, first of all the Blackraven projects | A drop-in OIDC relying party (sign-in, callback, token verification against cached JWKS, back-channel logout), the other OAuth client flows, and optionally in-process authentication against an embedded store |
 
 Lugh is not a general-purpose LDAP server, a certificate authority for the outside world, or a SAML IdP (SAML stays out unless it is asked for).
@@ -273,7 +273,7 @@ LDAP service accounts work the same way: a service account has no password of it
 - **Clients:** TLS 1.3 only on HTTPS, with HSTS. Certificates come from files the operator supplies, with ACME as an open question.
 - **LDAP:** LDAPS on 636, or StartTLS on 389 with every operation except StartTLS refused until TLS is up. Plain-text simple bind is never accepted.
 - **Between nodes:** TLS 1.3 with mutual authentication. Macha uses one shared cluster key and cannot revoke a single node, which is not acceptable for an identity server. Lugh gives each node its own key pair signed by a cluster CA that Lugh itself holds, so removing a node revokes its certificate and the others stop talking to it (proposed, open question 1).
-- **Outbound:** calls such as webhooks and federation are TLS-verified with no option to turn verification off.
+- **Outbound:** calls such as back-channel logout, webhooks and federation are TLS-verified with no option to turn verification off (`lugh/http/outbound.h`).
 
 ### OAuth profile
 

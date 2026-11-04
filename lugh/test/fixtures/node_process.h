@@ -268,12 +268,10 @@ inline bool wait_until_up(dannan::test::ChildProcess& child, std::uint16_t port,
 class Serving {
  public:
   Serving(const Workspace& workspace, const std::filesystem::path& state, std::optional<std::filesystem::path> credentials,
-          std::optional<std::string> input = std::nullopt)
+          std::optional<std::string> input = std::nullopt, const std::vector<std::string>& arguments = {})
       : _log(workspace.path("serve-" + std::to_string(++_sequence) + ".log")),
         _port(dannan::test::free_port()),
-        _child({kBinary, "--tls-certificate", workspace.certificate.string(), "--tls-key", workspace.key.string(), "--state-directory", state.string(),
-                "--address", "127.0.0.1", "--port", std::to_string(_port)},
-               _log, {.environment = environment(credentials), .input = std::move(input)}) {}
+        _child(command_line(workspace, state, _port, arguments), _log, {.environment = environment(credentials), .input = std::move(input)}) {}
 
   // Whether it came up, within 15 seconds.
   bool up() { return wait_until_up(_child, _port, std::chrono::seconds(15)); }
@@ -294,6 +292,23 @@ class Serving {
   std::string log() const { return read_file(_log); }
 
  private:
+  static std::vector<std::string> command_line(const Workspace& workspace, const std::filesystem::path& state, std::uint16_t port,
+                                               const std::vector<std::string>& arguments) {
+    std::vector<std::string> out{kBinary,
+                                 "--tls-certificate",
+                                 workspace.certificate.string(),
+                                 "--tls-key",
+                                 workspace.key.string(),
+                                 "--state-directory",
+                                 state.string(),
+                                 "--address",
+                                 "127.0.0.1",
+                                 "--port",
+                                 std::to_string(port)};
+    out.insert(out.end(), arguments.begin(), arguments.end());
+    return out;
+  }
+
   static inline int _sequence = 0;
   std::filesystem::path _log;
   std::uint16_t _port;

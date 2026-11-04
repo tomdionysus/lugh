@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: P6 step O10c, the whole flow on the real binary
+
+- `node_process_oauth_test.cpp`: root signs in and enrols, registers an application through the API, consents, redeems the code, reads userinfo and refreshes; the sign-out reaches a real HTTPS server over a verified post, and the logout token checks out against the published keys; the old cookie and the refresh token are dead after it. The same across a restart between sign-in and sign-out. Nothing secret reaches the log.
+- `docs/oauth.md` written. `docs/api.md` had stale sections (coroutines, signing in as still to come, no sessions routes); brought up to date, with `docs/architecture.md`'s LDAP row and `ACTIVE.md`.
+- Found doing it: `opaque_access_tokens` is stored and shown but not honoured.
+- Tests: 516 to 518, green in the debug, ASan and TSan builds, repeated and shuffled.
+
 ## 2026-11-04: The way back to a client after a form
 
 - `form-action 'self'` also covers where a form's answer redirects to, so a browser that enforces that would have stopped a consent answered, or a sign-in resumed, on its way back to the client. Those now leave by a page (`signin::write_leaving`) that goes on by itself and carries a link. An authorisation request that no form led to still gets a 303. Not yet tried in a real browser.
