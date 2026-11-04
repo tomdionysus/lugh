@@ -24,6 +24,7 @@
 #include "lugh/core/task.h"
 #include "lugh/directory/directory.h"
 #include "lugh/store/store.h"
+#include "lugh/store/store_calls.h"
 #include "lugh/system/files.h"
 
 namespace lugh::authn {
@@ -62,9 +63,11 @@ struct PasswordRules {
 // and revokes the sessions of the rest.
 //
 // Hashing runs on `hashing`, a pool of a few threads kept for it: each hash takes 64 MiB and
-// a noticeable fraction of a second, and the caller is suspended meanwhile, holding no
-// thread. The pool's size is what bounds the memory sign-ins can take at once.
-class Passwords : public directory::Dependent {
+// a noticeable fraction of a second, and no other thread waits for it. The pool's size is
+// what bounds the memory sign-ins can take at once.
+//
+// Every operation takes Dannan's shape (core/completion.h). Made with std::make_shared.
+class Passwords : public directory::Dependent, public std::enable_shared_from_this<Passwords> {
  public:
   static constexpr const char* kTable = "credentials";
 
@@ -76,23 +79,26 @@ class Passwords : public directory::Dependent {
   Outcome<> acceptable(const Secret& password, const directory::User& user) const;
 
   // Checks, hashes and stores it, replacing any before.
-  Task<Outcome<>> set(audit::Actor actor, directory::User user, Secret password);
+  void set(audit::Actor actor, directory::User user, Secret password, Deadline deadline, Executor executor, Done<Outcome<>> done);
 
   // Whether it matches. A user with no password matches nothing, and costs as much to ask
   // about as one with a password, so the time taken says nothing about who exists. A
-  // match under old costs is hashed again under the current ones.
-  Task<bool> verify(std::string user_id, Secret password);
+  // match under old costs is hashed again under the current ones. `failed` when the store
+  // fails or the deadline passes: never a false "no".
+  void verify(std::string user_id, Secret password, Deadline deadline, Executor executor, Done<Outcome<bool>> done);
 
-  // As verify() for a user who does not exist: the same work, and false.
-  Task<void> spend(Secret password);
+  // As verify() for a user who does not exist: the same work, and nothing to say.
+  void spend(Secret password, Deadline deadline, Executor executor, Done<Outcome<>> done);
 
-  Task<bool> has_password(std::string user_id) const;
+  void has_password(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<bool>> done) const;
 
-  Task<Status> forget(audit::Actor actor, std::string user_id) override;
+  void forget(audit::Actor actor, std::string user_id, Deadline deadline, Executor executor, Done<Status> done) override;
 
  private:
+  void _record(audit::Event event, Executor executor, std::function<void()> then);
+
   dannan::status::ScopedLogger _logger;
-  std::shared_ptr<store::Store> _store;
+  store::StoreCalls _calls;
   const dannan::contract::WallClock& _wall;
   std::shared_ptr<audit::AuditLog> _audit;
   Executor _hashing;

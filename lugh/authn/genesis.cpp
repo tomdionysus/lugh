@@ -45,7 +45,11 @@ Task<Outcome<Secret>> Genesis::run() {
   const auto raw = secure_random(kPasswordBytes);
   auto password = text_secret(encoding::base64url(raw));
 
-  if (const auto set = co_await _passwords->set(actor, root.value, Secret(password.reveal())); !set.ok()) co_return Answer::from(set);
+  if (const auto set = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+        _passwords->set(actor, root.value, Secret(password.reveal()), kTransitionDeadline, std::move(executor), std::move(done));
+      });
+      !set.ok())
+    co_return Answer::from(set);
   if (const auto allowed = co_await _links->first_sign_in_allow(actor, root.value.id); !allowed.ok()) co_return Answer::from(allowed);
 
   co_await awaited<Status>([&](Executor executor, Done<Status> done) {

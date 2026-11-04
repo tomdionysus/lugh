@@ -335,7 +335,15 @@ Task<Outcome<>> Factors::remove(audit::Actor actor, std::string user_id, std::st
   co_return Answer::success();
 }
 
-Task<Status> Factors::forget(audit::Actor actor, std::string user_id) {
+void Factors::forget(audit::Actor actor, std::string user_id, Deadline deadline, Executor executor, Done<Status> done) {
+  auto answer = Completion<Status>::start(deadline, executor, std::move(done),
+                                          [] { return Status::failure("the factors did not answer within the deadline; they may yet be removed"); });
+  spawned<Status>(
+      executor, _forget(std::move(actor), std::move(user_id)), [answer](Status forgotten) { answer->finish(std::move(forgotten)); },
+      [](const std::string& why) { return Status::failure(why); });
+}
+
+Task<Status> Factors::_forget(audit::Actor actor, std::string user_id) {
   const auto all = co_await _records(user_id, std::nullopt);
   if (all.empty()) co_return Status::success();
   std::string failed;

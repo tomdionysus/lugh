@@ -168,7 +168,7 @@ TEST_F(FactorsTest, RemoveAndForget) {
   EXPECT_EQ(run(factors.remove(rig.admin, alice.id, setup.factor_id)).fault, Fault::not_found);
 
   confirmed_totp();
-  ASSERT_TRUE(run(factors.forget(rig.admin, alice.id)).ok);
+  ASSERT_TRUE(wait_for<lugh::Status>([&](lugh::Executor executor, auto done) { factors.forget(rig.admin, alice.id, kTestDeadline, executor, done); }).ok);
   EXPECT_TRUE(run(factors.list(alice.id)).empty());
   EXPECT_TRUE(rig.audited("factor.reset"));
 }

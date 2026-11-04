@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <boost/asio/post.hpp>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -38,6 +39,16 @@ void in_turn(std::shared_ptr<std::vector<Item>> items, std::size_t at, std::func
   if (at >= items->size()) return then();
   const auto& item = (*items)[at];
   step(item, [items, at, step, then] { in_turn<Item>(items, at + 1, step, then); });
+}
+
+// `work`, which blocks (a hash, a system call), on `pool`, kept for such work, and what it
+// answered to `answer` on `back`. `work` may hold what cannot be copied, a Secret.
+template <typename Work, typename Answer>
+void on_pool(Executor pool, Work work, Executor back, Answer answer) {
+  boost::asio::post(pool, [work = std::move(work), back = std::move(back), answer = std::move(answer)]() mutable {
+    auto value = work();
+    boost::asio::post(back, [answer = std::move(answer), value = std::move(value)]() mutable { answer(std::move(value)); });
+  });
 }
 
 }  // namespace lugh

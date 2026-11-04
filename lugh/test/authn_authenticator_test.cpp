@@ -224,7 +224,8 @@ TEST_F(AuthenticatorTest, APasswordAloneWhenPolicySaysSo) {
   wait_for<lugh::Outcome<lugh::Nothing>>(
       [&](lugh::Executor executor, auto done) { rig.policies->global_set(rig.admin, Assurance::pwd, kTestDeadline, executor, done); });
   const auto alice = rig.person("alice");
-  run(rig.passwords->set(rig.admin, alice, text_secret(kPassword)));
+  wait_for<lugh::Outcome<lugh::Nothing>>(
+      [&](lugh::Executor executor, auto done) { rig.passwords->set(rig.admin, alice, text_secret(kPassword), kTestDeadline, executor, done); });
   wait_for<lugh::Outcome<lugh::directory::User>>(
       [&](lugh::Executor executor, auto done) { rig.directory->enrolled_set(rig.admin, alice.id, true, kTestDeadline, executor, done); });
 

@@ -32,7 +32,8 @@ namespace lugh::directory {
 class Dependent {
  public:
   virtual ~Dependent() = default;
-  virtual Task<Status> forget(audit::Actor actor, std::string user_id) = 0;
+  // Everything kept for the user, removed; in Dannan's shape.
+  virtual void forget(audit::Actor actor, std::string user_id, Deadline deadline, Executor executor, Done<Status> done) = 0;
 };
 
 struct NewUser {

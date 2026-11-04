@@ -55,9 +55,13 @@ Task<Step> Authenticator::password(std::string login, Secret password, std::stri
   // The password is checked whatever else is wrong, so the time taken says nothing.
   bool right = false;
   if (user) {
-    right = co_await _passwords->verify(user->id, std::move(password));
+    right = co_await awaited_value<bool>([&](Executor executor, Done<Outcome<bool>> done) {
+      _passwords->verify(user->id, std::move(password), kTransitionDeadline, std::move(executor), std::move(done));
+    });
   } else {
-    co_await _passwords->spend(std::move(password));
+    co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+      _passwords->spend(std::move(password), kTransitionDeadline, std::move(executor), std::move(done));
+    });
   }
 
   std::string why;
@@ -167,7 +171,10 @@ Task<Step> Authenticator::redeem(Secret token, Secret password, std::string sour
   const auto spent = co_await _links->spend(std::move(token), actor);
   if (!spent.ok()) co_return Step::of(spent.fault == Fault::failed ? Step::Kind::failed : Step::Kind::refused);
 
-  if (const auto set = co_await _passwords->set(actor, *user, std::move(password)); !set.ok()) {
+  if (const auto set = co_await awaited<Outcome<Nothing>>([&](Executor executor, Done<Outcome<Nothing>> done) {
+        _passwords->set(actor, *user, std::move(password), kTransitionDeadline, std::move(executor), std::move(done));
+      });
+      !set.ok()) {
     _logger.error("enrolment of " + user->id + ": the link is spent and the password was not set: " + set.message);
     co_return Step::of(Step::Kind::failed);
   }
@@ -249,7 +256,10 @@ Task<Outcome<>> Authenticator::reset_factors(audit::Actor actor, std::string use
     _directory->enrolled_set(actor, user->id, false, kTransitionDeadline, std::move(executor), std::move(done));
   });
   if (!unenrolled.ok()) co_return Answer::from(unenrolled);
-  if (const auto forgotten = co_await _factors->forget(actor, user->id); !forgotten.ok) co_return Answer::failure(Fault::failed, forgotten.error);
+  if (const auto forgotten = co_await awaited<Status>(
+          [&](Executor executor, Done<Status> done) { _factors->forget(actor, user->id, kTransitionDeadline, std::move(executor), std::move(done)); });
+      !forgotten.ok)
+    co_return Answer::failure(Fault::failed, forgotten.error);
   co_return Answer::success();
 }
 

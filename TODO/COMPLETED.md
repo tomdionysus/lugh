@@ -153,6 +153,13 @@ store until Dagda"). The stack and its seams are in `../dagda/TODO/2026-11-03-st
   added, and `std::nullopt` where `expected` had been left to its default. A new test reads
   and writes through a store slower than the deadline: the read is `failed`, the write says
   it may yet be made. 352 to 353, in the debug, ASan and TSan builds.
+- Callback style, the policies and the passwords. The step helpers (`answering`, `refusing`,
+  `in_turn`, and `on_pool` for blocking work) are `lugh/core/steps.h`. Argon2id runs on the
+  hashing pool through `on_pool`, the password held in a `shared_ptr` where a step needs it,
+  since a `Secret` is not copied; `verify` and `has_password` answer `failed` rather than
+  a false "no" when the store fails or the deadline passes. The directory's `Dependent`
+  takes the callback shape; factors, not yet converted, answers it by running its
+  coroutine through `spawned`. 353, in the debug, ASan and TSan builds.
 
 ## 2026-10-18: P5, the management API (not committed)
 

@@ -274,13 +274,10 @@ void Directory::remove_user(audit::Actor actor, std::string id, std::optional<st
                                     in_turn<std::shared_ptr<Dependent>>(
                                         dependents, 0,
                                         [=](const std::shared_ptr<Dependent>& dependent, std::function<void()> next) {
-                                          spawned<Status>(
-                                              executor, dependent->forget(actor, found.id),
-                                              [=](Status forgotten) {
-                                                if (!forgotten.ok) self->_logger.error("removing user " + found.id + ": " + forgotten.error);
-                                                next();
-                                              },
-                                              [](const std::string& why) { return Status::failure(why); });
+                                          dependent->forget(actor, found.id, kAuditDeadline, executor, [=](Status forgotten) {
+                                            if (!forgotten.ok) self->_logger.error("removing user " + found.id + ": " + forgotten.error);
+                                            next();
+                                          });
                                         },
                                         [answer] { answer->finish(Answer::success()); });
                                   });

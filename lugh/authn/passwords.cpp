@@ -8,8 +8,8 @@
 #include "lugh/authn/passwords.h"
 
 #include "dannan/identity/crypto.h"
-#include "lugh/core/awaited.h"
 #include "lugh/core/codec.h"
+#include "lugh/core/steps.h"
 
 namespace lugh::authn {
 
@@ -93,7 +93,7 @@ std::array<unsigned char, 32> BreachedPasswords::_fold_and_hash(std::span<const 
 Passwords::Passwords(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
                      std::shared_ptr<audit::AuditLog> audit, Executor hashing, crypto::Argon2Costs params, PasswordRules rules, BreachedPasswords breached)
     : _logger(std::move(log), "passwords"),
-      _store(std::move(store)),
+      _calls(std::move(store)),
       _wall(wall),
       _audit(std::move(audit)),
       _hashing(std::move(hashing)),
@@ -116,72 +116,123 @@ Outcome<> Passwords::acceptable(const Secret& password, const directory::User& u
   return Answer::success();
 }
 
-Task<Outcome<>> Passwords::set(audit::Actor actor, directory::User user, Secret password) {
+namespace {
+
+constexpr const char* kChangeLate = "the passwords did not answer within the deadline; the change may yet be made";
+constexpr const char* kCheckLate = "the password was not checked within the deadline";
+constexpr Deadline kAuditDeadline = std::chrono::seconds(30);
+
+}  // namespace
+
+void Passwords::set(audit::Actor actor, directory::User user, Secret password, Deadline deadline, Executor executor, Done<Outcome<>> done) {
   using Answer = Outcome<>;
-  if (user.kind != directory::Kind::person) co_return Answer::failure(Fault::refused, "a service has no password");
-  if (const auto ok = acceptable(password, user); !ok.ok()) co_return ok;
+  auto answer = answering<Nothing>(deadline, executor, std::move(done), kChangeLate);
+  if (user.kind != directory::Kind::person) return answer->finish(Answer::failure(Fault::refused, "a service has no password"));
+  if (const auto ok = acceptable(password, user); !ok.ok()) return answer->finish(ok);
 
-  auto hashed = co_await offload(_hashing, [params = _params, password = std::move(password)] { return hash_password(password.reveal(), params); });
-  if (!hashed.ok) co_return Answer::failure(Fault::failed, hashed.error);
-
-  const auto written = co_await _store->put(kTable, user.id, encode(Credential{std::move(hashed.value), (_wall.unix_ms() / 1000)}));
-  if (!written.ok()) co_return Answer::failure(directory::fault_of(written.error), written.message);
-  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
-    _audit->record(audit::Event{"password.set", actor.id, user.id, actor.source, "version " + std::to_string(written.version)}, kTransitionDeadline,
-                   std::move(executor), std::move(done));
-  });
-  co_return Answer::success();
+  on_pool(
+      _hashing, [params = _params, password = std::move(password)] { return hash_password(password.reveal(), params); }, executor,
+      [self = shared_from_this(), answer, actor, user, executor](Result<PasswordHash> hashed) mutable {
+        if (!hashed.ok) return answer->finish(Answer::failure(Fault::failed, hashed.error));
+        self->_calls.put_settled(kTable, user.id, encode(Credential{std::move(hashed.value), (self->_wall.unix_ms() / 1000)}), std::nullopt, executor,
+                                 [self, answer, actor, user, executor](store::Write written) {
+                                   if (!written.ok()) return answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
+                                   self->_record(audit::Event{"password.set", actor.id, user.id, actor.source, "version " + std::to_string(written.version)},
+                                                 executor, [answer] { answer->finish(Answer::success()); });
+                                 });
+      });
 }
 
-Task<bool> Passwords::verify(std::string user_id, Secret password) {
-  const auto record = co_await _store->get(kTable, user_id);
-  auto credential = record ? decode(record->value) : std::nullopt;
-  if (!credential) {
-    co_await spend(std::move(password));
-    co_return false;
-  }
-
-  // The match and, when the costs have moved, the new hash, in one trip to the pool.
-  struct Checked {
-    bool right = false;
-    std::optional<PasswordHash> again;
-  };
-  auto checked = co_await offload(_hashing, [params = _params, hash = std::move(credential->hash), password = std::move(password)] {
-    Checked out;
-    const auto secret = password.reveal();
-    out.right = verify_password(secret, hash);
-    if (out.right && !same_costs(hash.params, params)) {
-      if (auto hashed = hash_password(secret, params); hashed.ok) out.again = std::move(hashed.value);
+void Passwords::verify(std::string user_id, Secret password, Deadline deadline, Executor executor, Done<Outcome<bool>> done) {
+  using Answer = Outcome<bool>;
+  auto answer = answering<bool>(deadline, executor, std::move(done), kCheckLate);
+  // Held where every step can reach it: a Secret is not copied.
+  auto held = std::make_shared<Secret>(std::move(password));
+  auto self = shared_from_this();
+  _calls.get_settled(kTable, user_id, executor, [=](Outcome<std::optional<store::Record>> record) {
+    if (!record.ok()) return answer->finish(Answer::from(record));
+    auto credential = record.value ? decode(record.value->value) : std::nullopt;
+    if (!credential) {
+      // The same work as a real check, so the time taken says nothing about who exists.
+      return on_pool(
+          self->_hashing,
+          [params = self->_params, salt = self->_decoy_salt, held] {
+            (void)crypto::stretch(held->reveal(), salt, params, kPasswordHashBytes);
+            return false;
+          },
+          executor, [answer](bool) { answer->finish(Answer::success(false)); });
     }
-    return out;
-  });
-  if (!checked.right) co_return false;
 
-  if (checked.again) {
-    // Against the version just read: if the password changed in the meantime, the newer
-    // one stands.
-    const auto written = co_await _store->put(kTable, user_id, encode(Credential{std::move(*checked.again), credential->changed}), record->version);
-    if (written.ok()) _logger.info("password hash for " + user_id + " moved to the current costs");
-  }
-  co_return true;
+    // The match and, when the costs have moved, the new hash, in one trip to the pool.
+    struct Checked {
+      bool right = false;
+      std::optional<PasswordHash> again;
+    };
+    const auto version = record.value->version;
+    const auto changed = credential->changed;
+    on_pool(
+        self->_hashing,
+        [params = self->_params, hash = std::move(credential->hash), held] {
+          Checked out;
+          const auto secret = held->reveal();
+          out.right = verify_password(secret, hash);
+          if (out.right && !same_costs(hash.params, params)) {
+            if (auto hashed = hash_password(secret, params); hashed.ok) out.again = std::move(hashed.value);
+          }
+          return out;
+        },
+        executor,
+        [=](Checked checked) mutable {
+          if (!checked.right) return answer->finish(Answer::success(false));
+          if (!checked.again) return answer->finish(Answer::success(true));
+          // Against the version just read: if the password changed in the meantime, the
+          // newer one stands.
+          self->_calls.put_settled(kTable, user_id, encode(Credential{std::move(*checked.again), changed}), version, executor,
+                                   [self, answer, user_id](store::Write written) {
+                                     if (written.ok()) self->_logger.info("password hash for " + user_id + " moved to the current costs");
+                                     answer->finish(Answer::success(true));
+                                   });
+        });
+  });
 }
 
-Task<void> Passwords::spend(Secret password) {
-  co_await offload(_hashing, [params = _params, salt = _decoy_salt, password = std::move(password)] {
-    (void)crypto::stretch(password.reveal(), salt, params, kPasswordHashBytes);
+void Passwords::spend(Secret password, Deadline deadline, Executor executor, Done<Outcome<>> done) {
+  auto answer = answering<Nothing>(deadline, executor, std::move(done), kCheckLate);
+  on_pool(
+      _hashing,
+      [params = _params, salt = _decoy_salt, password = std::move(password)] {
+        (void)crypto::stretch(password.reveal(), salt, params, kPasswordHashBytes);
+        return Outcome<>::success();
+      },
+      executor, [answer](Outcome<> spent) { answer->finish(std::move(spent)); });
+}
+
+void Passwords::has_password(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<bool>> done) const {
+  using Answer = Outcome<bool>;
+  auto answer = answering<bool>(deadline, executor, std::move(done), kCheckLate);
+  _calls.get_settled(kTable, std::move(user_id), executor, [answer](Outcome<std::optional<store::Record>> record) {
+    if (!record.ok()) return answer->finish(Answer::from(record));
+    answer->finish(Answer::success(record.value.has_value()));
   });
 }
 
-Task<bool> Passwords::has_password(std::string user_id) const { co_return (co_await _store->get(kTable, std::move(user_id))).has_value(); }
-
-Task<Status> Passwords::forget(audit::Actor actor, std::string user_id) {
-  if (!co_await _store->get(kTable, user_id)) co_return Status::success();
-  const auto removed = co_await _store->remove(kTable, user_id);
-  if (!removed.ok()) co_return Status::failure("cannot remove the password: " + removed.message);
-  co_await awaited<Status>([&](Executor executor, Done<Status> done) {
-    _audit->record(audit::Event{"password.remove", actor.id, user_id, actor.source, {}}, kTransitionDeadline, std::move(executor), std::move(done));
+void Passwords::forget(audit::Actor actor, std::string user_id, Deadline deadline, Executor executor, Done<Status> done) {
+  auto answer = Completion<Status>::start(deadline, executor, std::move(done),
+                                          [] { return Status::failure("the passwords did not answer within the deadline; the password may yet be removed"); });
+  auto self = shared_from_this();
+  _calls.get_settled(kTable, user_id, executor, [=](Outcome<std::optional<store::Record>> record) {
+    if (!record.ok()) return answer->finish(Status::failure("cannot read the password: " + record.message));
+    if (!record.value) return answer->finish(Status::success());
+    self->_calls.remove_settled(kTable, user_id, std::nullopt, executor, [=](store::Write removed) {
+      if (!removed.ok()) return answer->finish(Status::failure("cannot remove the password: " + removed.message));
+      self->_record(audit::Event{"password.remove", actor.id, user_id, actor.source, {}}, executor, [answer] { answer->finish(Status::success()); });
+    });
   });
-  co_return Status::success();
+}
+
+void Passwords::_record(audit::Event event, Executor executor, std::function<void()> then) {
+  // A failure is logged by the audit log itself; the change has been made.
+  _audit->record(std::move(event), kAuditDeadline, std::move(executor), [then = std::move(then)](Status) { then(); });
 }
 
 }  // namespace lugh::authn

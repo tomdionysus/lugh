@@ -97,9 +97,10 @@ class Factors : public directory::Dependent {
   Task<Outcome<>> remove(audit::Actor actor, std::string user_id, std::string factor_id);
 
   // Every factor the user has, for an administrator's reset and for removal.
-  Task<Status> forget(audit::Actor actor, std::string user_id) override;
+  void forget(audit::Actor actor, std::string user_id, Deadline deadline, Executor executor, Done<Status> done) override;
 
  private:
+  Task<Status> _forget(audit::Actor actor, std::string user_id);
   struct Stored {
     std::string key;
     std::uint64_t version = 0;

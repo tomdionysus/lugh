@@ -48,7 +48,8 @@ TEST_F(GenesisTest, RootInAdministratorsWithARandomPassword) {
                 [&](lugh::Executor executor, auto done) { rig.directory->members(administrators->id, kTestDeadline, executor, done); }),
             std::vector<std::string>{root->id});
 
-  EXPECT_TRUE(run(rig.passwords->verify(root->id, copy_of(password.value))));
+  EXPECT_TRUE(
+      read_value<bool>([&](lugh::Executor executor, auto done) { rig.passwords->verify(root->id, copy_of(password.value), kTestDeadline, executor, done); }));
   EXPECT_TRUE(rig.audited("genesis"));
 }
 

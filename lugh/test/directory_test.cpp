@@ -22,9 +22,9 @@ namespace {
 
 class RecordingDependent : public Dependent {
  public:
-  lugh::Task<lugh::Status> forget(lugh::audit::Actor, std::string user_id) override {
+  void forget(lugh::audit::Actor, std::string user_id, lugh::Deadline, lugh::Executor executor, lugh::Done<lugh::Status> done) override {
     forgotten.push_back(user_id);
-    co_return lugh::Status::success();
+    lugh::answer_now<lugh::Status>(executor, std::move(done), lugh::Status::success());
   }
   std::vector<std::string> forgotten;
 };
