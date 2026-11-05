@@ -489,6 +489,11 @@ void Directory::members(std::string group_id, Deadline deadline, Executor execut
   });
 }
 
+void Directory::memberships(Deadline deadline, Executor executor, Done<Outcome<std::vector<Membership>>> done) const {
+  auto answer = answering<std::vector<Membership>>(deadline, executor, std::move(done), kReadLate);
+  _memberships(executor, [answer](Outcome<std::vector<Membership>> memberships) { answer->finish(std::move(memberships)); });
+}
+
 void Directory::groups_of(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<std::vector<std::string>>> done) const {
   using Answer = Outcome<std::vector<std::string>>;
   auto answer = answering<std::vector<std::string>>(deadline, executor, std::move(done), kReadLate);

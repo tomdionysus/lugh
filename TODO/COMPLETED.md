@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-05: LDAP step L4a, the tree and the read operations
+
+- `lugh/ldap/tree.h`: the fixed tree over `Directory`, every entry generated, a filter that pins one entry opening one record and only a general filter reading them all, in a fixed order with page tokens that survive a change. `lugh/ldap/authz.h`: what a bind proves, main password through the authenticator's back-off and an app password cut to its owner's scopes, each refusal the same, and an identity checked again per operation, so a user disabled or an app password revoked stops a connection already bound. `lugh/ldap/operations.h`: search, compare, Who am I?, the rootDSE. No network yet.
+- Readings of the plan, for the maintainer to confirm: everyone bound may search from the fixed containers, which say nothing, though the plan's "may not read is not there" could be taken to hide them, because a client bound as itself has to search from somewhere; and a person whose policy is `pwd` binds with their main password even with a TOTP factor enrolled they need not use.
+- `Directory::memberships`, so a scan reads the memberships once.
+- Tests: 555 to 584, green in the debug, ASan and TSan builds, repeated and shuffled.
+
 ## 2026-11-04: LDAP step L3, the codec
 
 - `lugh/ldap/`: BER (definite lengths, single-byte tags, stream framing with a size cap), LDAPMessage and every request and response of the plan's table with controls, paged results and Password Modify, DNs (RFC 4514, only the forms the tree has) and filters (three-valued, nesting capped at 16 and 1024 items, with the pinned-value lookup the plan wants). No network yet.

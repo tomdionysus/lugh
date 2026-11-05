@@ -334,6 +334,10 @@ bool Authenticator::_live(SignIn& sign_in, SignIn::Stage stage) const {
   return true;
 }
 
+std::optional<std::chrono::seconds> Authenticator::waiting_for(const std::string& user_id, const std::string& source) const {
+  return _waiting(account_key(user_id), address_key(source));
+}
+
 std::optional<std::chrono::seconds> Authenticator::_waiting(const std::string& account, const std::string& address) const {
   const auto now = _time.now();
   const auto by_account = _accounts.wait(account, now);

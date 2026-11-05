@@ -47,6 +47,7 @@ add_executable(lugh_tests
     http_server_test.cpp
     http_tls_context_test.cpp
     ldap_codec_test.cpp
+    ldap_operations_test.cpp
     keys_keyring_format_test.cpp
     keys_keyring_manager_test.cpp
     keys_keyring_test.cpp

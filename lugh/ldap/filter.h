@@ -25,6 +25,8 @@ inline constexpr std::size_t kMostFilterItems = 1024;
 struct Entry {
   std::string dn;
   std::map<std::string, std::vector<std::string>> attributes;
+  // Each attribute's name as a client should see it.
+  std::map<std::string, std::string> spelled;
 
   void add(std::string_view name, std::string value);
 };

@@ -113,6 +113,8 @@ class Directory : public std::enable_shared_from_this<Directory> {
   // User IDs, and group IDs, in order, each once.
   void members(std::string group_id, Deadline deadline, Executor executor, Done<Outcome<std::vector<std::string>>> done) const;
   void groups_of(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<std::vector<std::string>>> done) const;
+  // Every membership there is, for what reads the whole directory at once.
+  void memberships(Deadline deadline, Executor executor, Done<Outcome<std::vector<Membership>>> done) const;
 
  private:
   using Then = std::function<void()>;

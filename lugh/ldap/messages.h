@@ -45,6 +45,7 @@ enum class ResultCode : int {
   no_such_attribute = 16,
   constraint_violation = 19,
   no_such_object = 32,
+  invalid_dn_syntax = 34,
   inappropriate_authentication = 48,
   invalid_credentials = 49,
   insufficient_access_rights = 50,

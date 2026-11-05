@@ -120,6 +120,10 @@ class Authenticator : public std::enable_shared_from_this<Authenticator> {
   // at enrolment (root's first), or complete.
   void password(std::string login, Secret password, std::string source, Deadline deadline, Executor executor, Done<Step> done);
 
+  // How long this account or address must still wait, if it must: for a way of signing in that
+  // has to honour the same back-off without going through password().
+  std::optional<std::chrono::seconds> waiting_for(const std::string& user_id, const std::string& source) const;
+
   void totp(SignIn sign_in, std::string code, std::string source, Deadline deadline, Executor executor, Done<Step> done);
   void recovery(SignIn sign_in, Secret code, std::string source, Deadline deadline, Executor executor, Done<Step> done);
 

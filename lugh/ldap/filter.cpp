@@ -178,7 +178,11 @@ bool substring_matches(const Filter& filter, const std::string& stored) {
 
 }  // namespace
 
-void Entry::add(std::string_view name, std::string value) { attributes[fold(name)].push_back(std::move(value)); }
+void Entry::add(std::string_view name, std::string value) {
+  const auto folded = fold(name);
+  attributes[folded].push_back(std::move(value));
+  spelled.emplace(folded, name);
+}
 
 std::optional<Filter> parse_filter(const ber::Element& element) {
   std::size_t items = 0;
