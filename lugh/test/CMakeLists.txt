@@ -38,6 +38,7 @@ add_executable(lugh_tests
     crypto_argon2_test.cpp
     directory_records_test.cpp
     directory_test.cpp
+    directory_posix_test.cpp
     http_client_address_test.cpp
     http_forms_test.cpp
     http_health_routes_test.cpp

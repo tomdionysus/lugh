@@ -115,6 +115,7 @@ the client reads again. Policies are settings written whole with `PUT`, and memb
 | `PUT`, `DELETE /api/v1/apps/{client_id}/access/{group}` | apps.write | Whether the group's members may sign in to it; answers the application |
 | `PUT /api/v1/apps/{client_id}/roles/{group}` | apps.write | `{roles: [...]}`: the application's role names the group maps to, for its audience only; empty clears |
 | `POST /api/v1/apps/{client_id}/secret` | apps.write | A new client secret, shown once; the one before works for 24 hours more (`previous_secret_expires_at`) |
+| `POST /api/v1/ldap/posix/allocate` | directory.write | Numbers every person and group without a POSIX number, in creation order: `{users, groups}`. Served only when `ldap.posix` is set (`docs/ldap.md`) |
 | `GET /api/v1/keys` | directory.read | The token signing keys, never their private parts: `kid`, `algorithm`, `created_at`, `signing_from`, `retired_at` |
 | `POST /api/v1/keys/rotate` | keys.write | `{algorithm}`, `ES256` or `EdDSA`: a new key, published now and signing in an hour; the one it replaces stays published two hours more. Keys also rotate by themselves after 90 days |
 | `GET /api/v1/audit` | audit.read | `?from=` (default 1) and `?limit=` (default 100, at most 1000): `{entries, next}`, `next` null at the end |

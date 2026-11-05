@@ -21,6 +21,7 @@
 #include "lugh/core/outcome.h"
 #include "lugh/core/status.h"
 #include "lugh/core/task.h"
+#include "lugh/directory/posix_numbers.h"
 #include "lugh/directory/records.h"
 #include "lugh/store/store.h"
 #include "lugh/store/store_calls.h"
@@ -59,6 +60,12 @@ struct GroupChange {
   std::optional<std::string> description;
 };
 
+// What a backfill numbered.
+struct Numbered {
+  std::size_t users = 0;
+  std::size_t groups = 0;
+};
+
 // Users, groups and who is in which, over the store, with every change audited. Names and
 // addresses are checked and folded here, so the store holds them one way only. A write
 // takes the version the caller last saw, for the API's ETags; without one it is made
@@ -76,6 +83,15 @@ class Directory : public std::enable_shared_from_this<Directory> {
 
   // Told, in the order added, when a user is removed. Set up before anything is served.
   void dependent_add(std::shared_ptr<Dependent> dependent);
+
+  // Where POSIX numbers come from, if they are configured: a person or a group gets one when made.
+  // Set up before anything is served.
+  void numbers_set(std::shared_ptr<PosixNumbers> numbers);
+
+  // Every person and group without a number given one, in creation order, in one audited pass.
+  // refused when none are configured. Past its deadline, those done stay done, and running it again
+  // finishes the rest.
+  void allocate_numbers(audit::Actor actor, Deadline deadline, Executor executor, Done<Outcome<Numbered>> done);
 
   // A person starts not enrolled: they set a password and a second factor through an
   // enrolment link before anything else. A service is enrolled at once, having neither.
@@ -140,6 +156,7 @@ class Directory : public std::enable_shared_from_this<Directory> {
   const dannan::contract::WallClock& _wall;
   std::shared_ptr<audit::AuditLog> _audit_log;
   std::vector<std::shared_ptr<Dependent>> _dependents;
+  std::shared_ptr<PosixNumbers> _numbers;
 };
 
 // The store's refusal, as the directory says it.

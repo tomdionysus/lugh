@@ -13,7 +13,7 @@ This document began as the design of 2026-10-18, before any code existed. What i
 | OAuth 2 / OIDC | Allowed applications, browsers, services | Single sign-on, second factor, consent, access/ID/refresh tokens, back-channel logout, token introspection and revocation, discovery and JWKS |
 | Management API | The dashboard, administrators, automation | CRUD over users, groups, applications, factors, keys, policies; sessions; the audit log; cluster health |
 | Dashboard | Administrators | A React admin interface over the management API, served by Lugh itself |
-| LDAP | Legacy software (mail servers, NAS boxes, VPNs, Linux PAM/SSSD) | Simple bind over TLS, search over users and groups, rootDSE; writes mapped onto Lugh's model and Password Modify (planned, `TODO/2026-11-04-ldap.md`) |
+| LDAP | Legacy software (mail servers, NAS boxes, VPNs, Linux PAM/SSSD) | Simple bind over TLS, search over users and groups, rootDSE; writes mapped onto Lugh's model, Password Modify (`docs/ldap.md`) |
 | `lugh` C++ library | C++ projects that add Lugh as a subproject, first of all the Blackraven projects | A drop-in OIDC relying party (sign-in, callback, token verification against cached JWKS, back-channel logout), the other OAuth client flows, and optionally in-process authentication against an embedded store |
 
 Lugh is not a general-purpose LDAP server, a certificate authority for the outside world, or a SAML IdP (SAML stays out unless it is asked for).
@@ -324,10 +324,12 @@ As built (P5), `/api/v1` covers users, groups, memberships, factors, enrolment l
 
 ## LDAP surface
 
+`docs/ldap.md` is what it does.
+
 | Item | Scope |
 |---|---|
 | Operations | `BindRequest` (simple, over TLS only), `SearchRequest`, `CompareRequest`, `AddRequest`, `ModifyRequest`, `DeleteRequest`, `ModifyDNRequest` (a rename, never a move), `AbandonRequest`, `UnbindRequest`, `ExtendedRequest` for StartTLS, "Who am I?" and Password Modify (a user's own, bound with the main password). The paged-results and Assertion controls. Everything else gets `unwillingToPerform`. Writes are mapped onto the directory's own fields and need the API's scopes; the design is `TODO/2026-11-04-ldap.md` (the maintainer, 2026-11-04) |
-| Tree | Fixed and generated from the directory: `dc=<domain>` with `ou=people` and `ou=groups`. Entries use `inetOrgPerson`, `posixAccount` and `groupOfNames` attributes, including `memberOf`. `posixAccount` needs `uidNumber`, `gidNumber` and `homeDirectory`, so Lugh allocates each user and group a stable number from a configured range and never reuses one |
+| Tree | Fixed and generated from the directory: `ldap.base_dn` with `ou=people`, `ou=services` and `ou=groups`. Entries use `inetOrgPerson`, `posixAccount` and `groupOfNames` attributes, including `memberOf`. `posixAccount` needs `uidNumber`, `gidNumber` and `homeDirectory`, so Lugh allocates each user and group a stable number from a configured range and never reuses one |
 | Filters | Equality, presence, substring, and/or/not, with bounded depth and size |
 | Limits | Size, time and paging limits on searches |
 | Access | Anonymous bind is off. Service accounts that may search are granted it explicitly. Users whose policy requires a second factor bind with an app password, never their main password |

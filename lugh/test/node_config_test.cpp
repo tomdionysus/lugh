@@ -309,6 +309,29 @@ TEST(Config, TheLdapListeners) {
   EXPECT_FALSE(Loader().load(with_config(dir.write("e.yaml", "ldap: { port: 636, base_dn: 'dc=x', most_pending: 0 }\n").string())).ok);
 }
 
+TEST(Config, ThePosixNumbers) {
+  EXPECT_FALSE(Loader().load(with_tls()).value.ldap_uid_range);
+  TempDirectory dir;
+  const auto good =
+      dir.write("g.yaml", "ldap: { posix: { uid_range: 10000-19999, gid_range: 20000-29999, primary_group: staff, home: '/srv/{name}', shell: /bin/zsh } }\n");
+  const auto config = Loader().load(with_config(good.string())).value;
+  ASSERT_TRUE(config.ldap_uid_range);
+  EXPECT_EQ(config.ldap_uid_range->first, 10000u);
+  EXPECT_EQ(config.ldap_uid_range->second, 19999u);
+  EXPECT_EQ(config.ldap_gid_range->first, 20000u);
+  EXPECT_EQ(config.ldap_primary_group, "staff");
+  EXPECT_EQ(config.ldap_home, "/srv/{name}");
+  EXPECT_EQ(config.ldap_shell, "/bin/zsh");
+
+  const auto refused = [&](const std::string& name, const std::string& text) { return !Loader().load(with_config(dir.write(name, text).string())).ok; };
+  EXPECT_TRUE(refused("a.yaml", "ldap: { posix: { uid_range: 1-2 } }\n")) << "all three go together";
+  EXPECT_TRUE(refused("b.yaml", "ldap: { posix: { primary_group: staff } }\n"));
+  EXPECT_TRUE(refused("c.yaml", "ldap: { posix: { uid_range: 5-1, gid_range: 1-5, primary_group: staff } }\n")) << "backwards";
+  EXPECT_TRUE(refused("d.yaml", "ldap: { posix: { uid_range: 0-5, gid_range: 1-5, primary_group: staff } }\n")) << "root's is not given out";
+  EXPECT_TRUE(refused("e.yaml", "ldap: { posix: { uid_range: many, gid_range: 1-5, primary_group: staff } }\n"));
+  EXPECT_TRUE(refused("f.yaml", "ldap: { posix: { uid_range: 1-99999999999, gid_range: 1-5, primary_group: staff } }\n"));
+}
+
 TEST(Config, TheMtlsListener) {
   EXPECT_EQ(Loader().load(with_tls()).value.mtls_port, 0);
   TempDirectory dir;

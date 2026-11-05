@@ -80,3 +80,12 @@ ldap:
   # most_pending: 8
   # Seconds a connection may do nothing. Long, since SSSD and mail servers hold one open.
   # idle: 600
+  # POSIX numbers, for posixAccount and posixGroup. A person or a group gets one when made, never
+  # reused; POST /api/v1/ldap/posix/allocate numbers what was made before these were set. Each
+  # range is first-last. All three of these go together.
+  # posix:
+  #   uid_range: 10000-59999
+  #   gid_range: 10000-59999
+  #   primary_group: staff
+  #   home: /home/{name}
+  #   shell: /bin/bash

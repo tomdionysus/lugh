@@ -70,8 +70,11 @@ Directory::Directory(std::shared_ptr<dannan::status::LogSink> log, std::shared_p
 
 void Directory::dependent_add(std::shared_ptr<Dependent> dependent) { _dependents.push_back(std::move(dependent)); }
 
+void Directory::numbers_set(std::shared_ptr<PosixNumbers> numbers) { _numbers = std::move(numbers); }
+
 namespace {
 
+constexpr Deadline kBackfillDeadline = std::chrono::seconds(30);
 constexpr const char* kChangeLate = "the directory did not answer within the deadline; the change may yet be made";
 constexpr const char* kNamePartRule = "a given or family name is printable UTF-8, at most 128 bytes";
 constexpr const char* kReadLate = "the directory was not read within the deadline";
@@ -114,8 +117,17 @@ void Directory::create_user(audit::Actor actor, NewUser fresh, Deadline deadline
       user.given_name = fresh.given_name;
       user.family_name = fresh.family_name;
       user.created = user.updated = (self->_wall.unix_ms() / 1000);
-      self->_put_user(actor, std::move(user), 0, "user.create", fresh.kind == Kind::service ? "service" : "person", executor,
-                      [answer](Answer made) { answer->finish(std::move(made)); });
+      const auto put = [=](User ready) {
+        self->_put_user(actor, std::move(ready), 0, "user.create", fresh.kind == Kind::service ? "service" : "person", executor,
+                        [answer](Answer made) { answer->finish(std::move(made)); });
+      };
+      // A service cannot have a posixAccount, so it spends no number.
+      if (!self->_numbers || fresh.kind == Kind::service) return put(std::move(user));
+      self->_numbers->next_user(executor, [=](Outcome<std::uint32_t> number) mutable {
+        if (!number.ok()) return answer->finish(Answer::from(number));
+        user.posix_number = number.value;
+        put(std::move(user));
+      });
     });
   });
 }
@@ -320,7 +332,15 @@ void Directory::create_group(audit::Actor actor, std::string name, std::string d
     group.name = *normal;
     group.description = description;
     group.created = group.updated = (self->_wall.unix_ms() / 1000);
-    self->_put_group(actor, std::move(group), 0, "group.create", executor, [answer](Answer made) { answer->finish(std::move(made)); });
+    const auto put = [=](Group ready) {
+      self->_put_group(actor, std::move(ready), 0, "group.create", executor, [answer](Answer made) { answer->finish(std::move(made)); });
+    };
+    if (!self->_numbers) return put(std::move(group));
+    self->_numbers->next_group(executor, [=](Outcome<std::uint32_t> number) mutable {
+      if (!number.ok()) return answer->finish(Answer::from(number));
+      group.posix_number = number.value;
+      put(std::move(group));
+    });
   });
 }
 
@@ -486,6 +506,82 @@ void Directory::members(std::string group_id, Deadline deadline, Executor execut
       if (membership.group_id == group_id) out.insert(membership.user_id);
     }
     answer->finish(Answer::success(std::vector<std::string>(out.begin(), out.end())));
+  });
+}
+
+void Directory::allocate_numbers(audit::Actor actor, Deadline deadline, Executor executor, Done<Outcome<Numbered>> done) {
+  using Answer = Outcome<Numbered>;
+  auto answer = answering<Numbered>(deadline, executor, std::move(done), kChangeLate);
+  if (!_numbers) return answer->finish(Answer::failure(Fault::refused, "no POSIX number range is configured"));
+  auto self = shared_from_this();
+  users(kBackfillDeadline, executor, [=](Outcome<std::vector<User>> all_users) {
+    if (!all_users.ok()) return answer->finish(Answer::from(all_users));
+    self->groups(kBackfillDeadline, executor, [=](Outcome<std::vector<Group>> all_groups) {
+      if (!all_groups.ok()) return answer->finish(Answer::from(all_groups));
+      auto people = std::make_shared<std::vector<User>>();
+      for (const auto& one : all_users.value) {
+        if (one.kind == Kind::person && !one.posix_number) people->push_back(one);
+      }
+      auto teams = std::make_shared<std::vector<Group>>();
+      for (const auto& one : all_groups.value) {
+        if (!one.posix_number) teams->push_back(one);
+      }
+      std::stable_sort(people->begin(), people->end(), [](const User& a, const User& b) { return a.created < b.created; });
+      std::stable_sort(teams->begin(), teams->end(), [](const Group& a, const Group& b) { return a.created < b.created; });
+
+      auto counted = std::make_shared<Numbered>();
+      auto failure = std::make_shared<std::optional<Answer>>();
+      const auto finish = [=] {
+        // One entry for the pass, whatever came of it, as well as each record's own.
+        self->_audit(actor, "ldap.posix.allocate", "directory", std::to_string(counted->users) + " users, " + std::to_string(counted->groups) + " groups",
+                     executor, [=] { answer->finish(failure->value_or(Answer::success(*counted))); });
+      };
+      in_turn<User>(
+          people, 0,
+          [=](const User& user, std::function<void()> next) {
+            if (*failure) return next();
+            self->_numbers->next_user(executor, [=](Outcome<std::uint32_t> number) {
+              if (!number.ok()) {
+                *failure = Answer::from(number);
+                return next();
+              }
+              auto numbered = user;
+              numbered.posix_number = number.value;
+              self->_put_user(actor, std::move(numbered), user.version, "user.update", "POSIX number", executor, [=](Outcome<User> put) {
+                if (put.ok()) {
+                  ++counted->users;
+                } else {
+                  *failure = Answer::from(put);
+                }
+                next();
+              });
+            });
+          },
+          [=] {
+            in_turn<Group>(
+                teams, 0,
+                [=](const Group& group, std::function<void()> next) {
+                  if (*failure) return next();
+                  self->_numbers->next_group(executor, [=](Outcome<std::uint32_t> number) {
+                    if (!number.ok()) {
+                      *failure = Answer::from(number);
+                      return next();
+                    }
+                    auto numbered = group;
+                    numbered.posix_number = number.value;
+                    self->_put_group(actor, std::move(numbered), group.version, "group.update", executor, [=](Outcome<Group> put) {
+                      if (put.ok()) {
+                        ++counted->groups;
+                      } else {
+                        *failure = Answer::from(put);
+                      }
+                      next();
+                    });
+                  });
+                },
+                finish);
+          });
+    });
   });
 }
 

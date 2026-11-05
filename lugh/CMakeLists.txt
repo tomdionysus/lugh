@@ -13,6 +13,7 @@ add_library(lugh STATIC
     api/app_routes.cpp
     api/audit_routes.cpp
     api/key_routes.cpp
+    api/ldap_routes.cpp
     api/me_routes.cpp
     api/group_routes.cpp
     api/policy_routes.cpp
@@ -34,6 +35,7 @@ add_library(lugh STATIC
     crypto/aead.cpp
     directory/directory.cpp
     directory/records.cpp
+    directory/posix_numbers.cpp
     http/boost_json.cpp
     http/client_address.cpp
     http/forms.cpp

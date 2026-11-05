@@ -8,6 +8,7 @@
 #include "lugh/node/config.h"
 
 #include <boost/asio/ip/address.hpp>
+#include <charconv>
 #include <stdexcept>
 #include <utility>
 
@@ -60,6 +61,11 @@ std::vector<dannan::config::Setting> ConfigLoader::settings() {
       {"ldap.base_dn", Kind::value, "", "", "a distinguished name"},
       {"ldap.most_pending", Kind::value, "", "", "a number of operations, 1 to 256"},
       {"ldap.idle", Kind::value, "", "", "a number of seconds, 1 to 86400"},
+      {"ldap.posix.uid_range", Kind::value, "", "", "two numbers, first-last, from 1"},
+      {"ldap.posix.gid_range", Kind::value, "", "", "two numbers, first-last, from 1"},
+      {"ldap.posix.primary_group", Kind::value, "", "", "a group's name"},
+      {"ldap.posix.home", Kind::value, "", "", "a path, with {name} for the user's"},
+      {"ldap.posix.shell", Kind::value, "", "", "a path"},
   };
 }
 
@@ -133,6 +139,30 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
     }
     if (const auto pending = read.number("ldap.most_pending", 1, 256)) config.ldap_most_pending = static_cast<std::size_t>(*pending);
     if (const auto idle = read.number("ldap.idle", 1, 86400)) config.ldap_idle_seconds = static_cast<std::uint32_t>(*idle);
+    const auto range_of = [&](const char* key) -> std::optional<std::pair<std::uint32_t, std::uint32_t>> {
+      const auto text = read.text(key);
+      if (!text) return std::nullopt;
+      const auto dash = text->find('-');
+      const auto number = [](std::string_view part) -> std::optional<std::uint32_t> {
+        std::uint32_t out = 0;
+        const auto [at, error] = std::from_chars(part.data(), part.data() + part.size(), out);
+        if (error != std::errc() || at != part.data() + part.size() || out == 0) return std::nullopt;
+        return out;
+      };
+      const auto first = dash == std::string::npos ? std::nullopt : number(std::string_view(*text).substr(0, dash));
+      const auto last = dash == std::string::npos ? std::nullopt : number(std::string_view(*text).substr(dash + 1));
+      if (!first || !last || *first > *last) throw read.refuse(key, "two numbers, first-last, from 1");
+      return std::make_pair(*first, *last);
+    };
+    config.ldap_uid_range = range_of("ldap.posix.uid_range");
+    config.ldap_gid_range = range_of("ldap.posix.gid_range");
+    if (const auto group = read.text("ldap.posix.primary_group")) config.ldap_primary_group = *group;
+    if (const auto home = read.text("ldap.posix.home")) config.ldap_home = *home;
+    if (const auto shell = read.text("ldap.posix.shell")) config.ldap_shell = *shell;
+    const bool any_posix = config.ldap_uid_range || config.ldap_gid_range || !config.ldap_primary_group.empty();
+    if (any_posix && (!config.ldap_uid_range || !config.ldap_gid_range || config.ldap_primary_group.empty())) {
+      return Result<Config>::failure("ldap.posix needs uid_range, gid_range and primary_group together");
+    }
     if ((config.ldap_port != 0 || config.ldap_starttls_port != 0) && config.ldap_base_dn.empty()) {
       return Result<Config>::failure("ldap.base_dn must be set for an LDAP listener: Lugh does not guess the top of the tree");
     }

@@ -154,6 +154,43 @@ TEST_F(NodeProcessLdap, WritesThroughAnAppPasswordThatMay) {
   EXPECT_EQ(client.password_modify(password, "a much better passphrase")->code, static_cast<int>(lugh::ldap::ResultCode::unwilling_to_perform));
 }
 
+// Root was made before anything could number it: the backfill does, and LDAP shows it.
+TEST(NodeProcessLdapPosix, TheBackfillOnTheRealBinary) {
+  Workspace workspace;
+  const Initialised node(workspace);
+  ASSERT_EQ(node.made.status, 0) << node.made.err;
+  const auto ldaps_port = dannan::test::free_port();
+  const auto config = workspace.path("config.yaml");
+  write_file(config, "ldap: { port: " + std::to_string(ldaps_port) + ", base_dn: '" + kBase +
+                         "', posix: { uid_range: 10000-19999, gid_range: 20000-29999, primary_group: administrators, shell: /bin/zsh } }\n");
+  Serving serving(workspace, node.state, node.credentials, std::nullopt, {"--config", config.string()});
+  ASSERT_TRUE(serving.up()) << serving.log();
+  RootBrowser root(serving.port());
+  root.sign_in_and_enrol(root_password(node.made.err));
+  ASSERT_FALSE(HasFatalFailure());
+
+  const auto made = root.api(http::verb::post, "/api/v1/me/app-passwords", R"({"name":"the test"})");
+  ASSERT_TRUE(made);
+  ASSERT_EQ(made->status, 201u) << made->body;
+  Client client(ldaps_port, Client::Mode::ldaps);
+  ASSERT_EQ(client.bind(kRoot, std::string(boost::json::parse(made->body).at("password").as_string()))->code, 0);
+
+  const auto before = client.search(kRoot, 0);
+  ASSERT_EQ(before->entries.size(), 1u);
+  EXPECT_EQ(before->entries[0].attributes.count("uidNumber"), 0u);
+
+  const auto allocated = root.api(http::verb::post, "/api/v1/ldap/posix/allocate", "{}");
+  ASSERT_TRUE(allocated);
+  ASSERT_EQ(allocated->status, 200u) << allocated->body;
+  EXPECT_EQ(boost::json::parse(allocated->body).at("users"), 1);
+
+  const auto after = client.search(kRoot, 0);
+  ASSERT_EQ(after->entries.size(), 1u);
+  EXPECT_EQ(after->entries[0].attributes.at("uidNumber"), (std::vector<std::string>{"10000"}));
+  EXPECT_EQ(after->entries[0].attributes.at("gidNumber").size(), 1u);
+  EXPECT_EQ(after->entries[0].attributes.at("loginShell"), (std::vector<std::string>{"/bin/zsh"}));
+}
+
 TEST(NodeProcessLdapOff, UnconfiguredThereIsNoListener) {
   Workspace workspace;
   const Initialised node(workspace);
@@ -161,4 +198,6 @@ TEST(NodeProcessLdapOff, UnconfiguredThereIsNoListener) {
   Serving serving(workspace, node.state, node.credentials);
   ASSERT_TRUE(serving.up()) << serving.log();
   EXPECT_EQ(serving.log().find("LDAP listening"), std::string::npos);
+  // Nor is the backfill served without a range.
+  EXPECT_EQ(send(serving.port(), http::verb::post, "/api/v1/ldap/posix/allocate")->status, 404u);
 }

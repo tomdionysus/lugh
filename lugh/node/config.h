@@ -9,7 +9,9 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "dannan/config/config.h"
@@ -77,6 +79,13 @@ struct Config {
   std::string ldap_base_dn;
   std::size_t ldap_most_pending = 8;
   std::uint32_t ldap_idle_seconds = 600;
+  // POSIX numbers (TODO/2026-11-04-ldap.md): none until a range is set, and then both ranges and the
+  // primary group are needed. Ranges are "first-last".
+  std::optional<std::pair<std::uint32_t, std::uint32_t>> ldap_uid_range;
+  std::optional<std::pair<std::uint32_t, std::uint32_t>> ldap_gid_range;
+  std::string ldap_primary_group;
+  std::string ldap_home = "/home/{name}";
+  std::string ldap_shell = "/bin/bash";
 
   // A request from one of these is taken at the last X-Forwarded-For entry; everything else
   // at its socket's address. Empty by default: no proxy is trusted until named.

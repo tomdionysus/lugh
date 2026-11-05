@@ -29,6 +29,7 @@
 #include "lugh/api/audit_routes.h"
 #include "lugh/api/group_routes.h"
 #include "lugh/api/key_routes.h"
+#include "lugh/api/ldap_routes.h"
 #include "lugh/api/me_routes.h"
 #include "lugh/api/policy_routes.h"
 #include "lugh/api/scope_routes.h"
@@ -40,6 +41,7 @@
 #include "lugh/authn/genesis.h"
 #include "lugh/core/awaited.h"
 #include "lugh/directory/directory.h"
+#include "lugh/directory/posix_numbers.h"
 #include "lugh/http/client_address.h"
 #include "lugh/http/health_routes.h"
 #include "lugh/http/http_server.h"
@@ -505,11 +507,24 @@ int run(const cli::Options& options) {
   };
   if (backchannel) deliver_logouts();
 
+  // POSIX numbers, whether or not LDAP is listening here.
+  std::unique_ptr<api::LdapRoutes> ldap_routes;
+  if (config.ldap_uid_range) {
+    services.directory->numbers_set(
+        std::make_shared<directory::PosixNumbers>(services.store, directory::PosixNumbers::Range{config.ldap_uid_range->first, config.ldap_uid_range->second},
+                                                  directory::PosixNumbers::Range{config.ldap_gid_range->first, config.ldap_gid_range->second}));
+    ldap_routes = std::make_unique<api::LdapRoutes>(services.directory);
+    ldap_routes->register_routes(*router);
+  }
+
   // LDAP, a second front end on the directory (TODO/2026-11-04-ldap.md).
   std::vector<std::shared_ptr<ldap::LdapServer>> ldap_servers;
   if (config.ldap_port != 0 || config.ldap_starttls_port != 0) {
     ldap::Tree::Settings tree_settings;
     tree_settings.base_dn = config.ldap_base_dn;
+    tree_settings.home = config.ldap_home;
+    tree_settings.shell = config.ldap_shell;
+    tree_settings.primary_group = config.ldap_primary_group;
     auto tree = std::make_shared<ldap::Tree>(services.directory, tree_settings);
     ldap::Operations::Settings operation_settings;
     operation_settings.vendor_version = LUGH_VERSION;

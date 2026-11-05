@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-05: LDAP step L5b, POSIX numbers; LDAP complete
+
+- `lugh/directory/posix_numbers.h`: a counter per range in a new `counters` table, advanced by compare-and-set, so a number is never shared or given twice, whatever becomes of its holder. A person or group gets one when made; a service spends none, since it cannot have a `posixAccount`. `POST /api/v1/ldap/posix/allocate` numbers what came before, in creation order, in one audited pass. `ldap.posix.*`, all three required together, and root's own number shown over LDAP on the real binary.
+- A range used up refuses the creation. A number taken for a creation that then fails is spent, not reused.
+- `docs/ldap.md` written, and `docs/architecture.md`, `docs/api.md` and `ACTIVE.md` brought up to date.
+- Tests: 636 to 651, green in the debug, ASan and TSan builds, repeated and shuffled.
+
 ## 2026-11-05: LDAP step L5a, the writes
 
 - `lugh/ldap/writes.h`: add, modify, delete and rename as the API makes them, so the rules, versions and audit are the same, the actor the bound user and the source `ldap:<address>`. The Assertion control (RFC 4528), with `(lughEntryVersion=<n>)` as `If-Match`. A user's modify is one update, failing entire; a group's changes attributes or members, never both, and a member that names nobody changes nothing. Deleting a user ends their sessions at once, as the API does.
