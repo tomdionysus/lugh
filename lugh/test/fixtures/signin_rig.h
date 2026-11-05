@@ -110,7 +110,7 @@ class SigninRig : public AuthnRig {
     me->register_routes(*router);
     users = std::make_unique<lugh::api::UserRoutes>(directory, factors, authenticator, links, sessions);
     users->register_routes(*router);
-    session_routes = std::make_unique<lugh::api::SessionRoutes>(sessions, directory, passwords);
+    session_routes = std::make_unique<lugh::api::SessionRoutes>(sessions, directory, passwords, authenticator);
     session_routes->register_routes(*router);
     own_app_passwords = std::make_unique<lugh::api::AppPasswordRoutes>(app_passwords);
     own_app_passwords->register_routes(*router);

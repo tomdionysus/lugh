@@ -76,7 +76,7 @@ the client reads again. Policies are settings written whole with `PUT`, and memb
 |---|---|---|
 | `GET /api/v1/me` | any caller | `{user, scopes, session}`: who the caller is, what it holds, and for a session its `acr`, `auth_time` and `csrf_token` |
 | `GET /api/v1/me/sessions`, `DELETE /api/v1/me/sessions/{sid}` | any caller | The caller's own sessions, the one in use marked `current`; ends one, `404` if it is not theirs |
-| `POST /api/v1/me/password` | a session | `{current, new}`: through the person's own session only, never a token. Every other session of theirs ends |
+| `POST /api/v1/me/password` | a session | `{current, new}`: through the person's own session only, never a token, and with the sign-in's back-off (`429` while waiting). Every other session of theirs ends |
 | `GET /api/v1/users/{id}/sessions` | directory.read | A user's live sessions |
 | `DELETE /api/v1/users/{id}/sessions` | sessions.write | Ends them all: `{ended}` |
 | `GET /api/v1/users` | directory.read | Every user; `?name=` or `?email=` for one |

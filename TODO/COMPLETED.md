@@ -2,6 +2,11 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-05: The sign-in's back-off on changing a password
+
+- `/api/v1/me/password` checked the current password with only the router's caller limit, 600 a minute, so a stolen session was a fast way to guess it. It now goes through the authenticator: back-off shared with the sign-in, `429` with `Retry-After` while waiting, and audited.
+- Tests: 651 to 652, green in the debug, ASan and TSan builds, repeated and shuffled.
+
 ## 2026-11-05: LDAP step L5b, POSIX numbers; LDAP complete
 
 - `lugh/directory/posix_numbers.h`: a counter per range in a new `counters` table, advanced by compare-and-set, so a number is never shared or given twice, whatever becomes of its holder. A person or group gets one when made; a service spends none, since it cannot have a `posixAccount`. `POST /api/v1/ldap/posix/allocate` numbers what came before, in creation order, in one audited pass. `ldap.posix.*`, all three required together, and root's own number shown over LDAP on the real binary.

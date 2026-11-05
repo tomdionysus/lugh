@@ -410,7 +410,7 @@ int run(const cli::Options& options) {
   key_routes.register_routes(*router);
   api::MeRoutes me_routes(services.directory, services.sessions);
   me_routes.register_routes(*router);
-  api::SessionRoutes session_routes(services.sessions, services.directory, services.passwords);
+  api::SessionRoutes session_routes(services.sessions, services.directory, services.passwords, services.authenticator);
   session_routes.register_routes(*router);
   api::AppPasswordRoutes app_password_routes(services.app_passwords);
   app_password_routes.register_routes(*router);

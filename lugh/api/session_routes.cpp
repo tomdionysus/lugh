@@ -43,14 +43,15 @@ std::optional<session::Session> current_session(session::Sessions& sessions, con
 }  // namespace
 
 SessionRoutes::SessionRoutes(std::shared_ptr<session::Sessions> sessions, std::shared_ptr<directory::Directory> directory,
-                             std::shared_ptr<authn::Passwords> passwords)
-    : _sessions(std::move(sessions)), _directory(std::move(directory)), _passwords(std::move(passwords)) {}
+                             std::shared_ptr<authn::Passwords> passwords, std::shared_ptr<authn::Authenticator> authenticator)
+    : _sessions(std::move(sessions)), _directory(std::move(directory)), _passwords(std::move(passwords)), _authenticator(std::move(authenticator)) {}
 
 void SessionRoutes::register_routes(http::Router& router) {
   using http::verb;
   const auto sessions = _sessions;
   const auto directory = _directory;
   const auto passwords = _passwords;
+  const auto authenticator = _authenticator;
 
   router.add_authenticated(verb::get, "/api/v1/me/sessions", [sessions](http::RouteContext context) {
     const auto current = current_session(*sessions, context);
@@ -65,7 +66,7 @@ void SessionRoutes::register_routes(http::Router& router) {
     });
   });
 
-  router.add_authenticated(verb::post, "/api/v1/me/password", [sessions, directory, passwords](http::RouteContext context) {
+  router.add_authenticated(verb::post, "/api/v1/me/password", [sessions, directory, passwords, authenticator](http::RouteContext context) {
     // Only the person, through their own session: never an application holding a token.
     const auto session = current_session(*sessions, context);
     if (!session) {
@@ -83,29 +84,40 @@ void SessionRoutes::register_routes(http::Router& router) {
     const auto user_id = session->user_id;
     const auto keep = session->sid;
     auto replacement = std::make_shared<Secret>(text_secret(*fresh));
-    passwords->verify(user_id, text_secret(*current), kRouteDeadline, context.executor,
-                      [context, sessions, directory, passwords, user_id, keep, replacement](Outcome<bool> right) {
-                        if (!right.ok()) return answer_fault(context, right);
-                        if (!right.value) {
-                          http::write_error(context.response, http::status::forbidden, "forbidden", "the current password is not right");
-                          return context.done();
-                        }
-                        directory->user(user_id, kRouteDeadline, context.executor,
-                                        [context, sessions, passwords, user_id, keep, replacement](Outcome<std::optional<directory::User>> user) {
-                                          if (!user.ok()) return answer_fault(context, user);
-                                          if (!user.value) return answer_fault(context, Outcome<>::failure(Fault::not_found, "no such user"));
-                                          passwords->set(actor_of(context), *user.value, Secret(replacement->reveal()), kRouteDeadline, context.executor,
-                                                         [context, sessions, user_id, keep](Outcome<> set) {
-                                                           if (!set.ok()) return answer_fault(context, set);
-                                                           // Someone else holding a session of theirs is shut out with the old password.
-                                                           sessions->end_user(actor_of(context), user_id, keep, "the password was changed", kRouteDeadline,
-                                                                              context.executor, [context](Outcome<std::size_t>) {
-                                                                                http::write_no_content(context.response);
-                                                                                context.done();
-                                                                              });
-                                                         });
-                                        });
-                      });
+    // The current password is checked as a sign-in checks one, with its back-off and audit: a session
+    // someone has stolen must not be a faster way to guess it.
+    auto given = std::make_shared<Secret>(text_secret(*current));
+    directory->user(user_id, kRouteDeadline, context.executor,
+                    [context, sessions, passwords, authenticator, user_id, keep, replacement, given](Outcome<std::optional<directory::User>> user) {
+                      if (!user.ok()) return answer_fault(context, user);
+                      if (!user.value) return answer_fault(context, Outcome<>::failure(Fault::not_found, "no such user"));
+                      const auto found = *user.value;
+                      authenticator->password(found.name, std::move(*given), context.remote, kRouteDeadline, context.executor,
+                                              [context, sessions, passwords, found, user_id, keep, replacement](authn::Step step) {
+                                                if (step.kind == authn::Step::Kind::failed) {
+                                                  return answer_fault(context, Outcome<>::failure(Fault::failed, "the password could not be checked"));
+                                                }
+                                                if (step.kind == authn::Step::Kind::wait) {
+                                                  http::Router::write_too_many(context.response, step.retry_after);
+                                                  return context.done();
+                                                }
+                                                if (step.kind != authn::Step::Kind::next) {
+                                                  http::write_error(context.response, http::status::forbidden, "forbidden",
+                                                                    "the current password is not right");
+                                                  return context.done();
+                                                }
+                                                passwords->set(actor_of(context), found, Secret(replacement->reveal()), kRouteDeadline, context.executor,
+                                                               [context, sessions, user_id, keep](Outcome<> set) {
+                                                                 if (!set.ok()) return answer_fault(context, set);
+                                                                 // Someone else holding a session of theirs is shut out with the old password.
+                                                                 sessions->end_user(actor_of(context), user_id, keep, "the password was changed",
+                                                                                    kRouteDeadline, context.executor, [context](Outcome<std::size_t>) {
+                                                                                      http::write_no_content(context.response);
+                                                                                      context.done();
+                                                                                    });
+                                                               });
+                                              });
+                    });
   });
 
   router.add(verb::get, "/api/v1/users/{id}/sessions", kDirectoryRead,

@@ -103,6 +103,21 @@ TEST_F(SessionRoutesTest, ChangingYourPassword) {
   EXPECT_EQ(rig.sign_in("alice", "a much better passphrase").location(), "/signin/factor");
 }
 
+// A stolen session is no faster a way to guess the password: the sign-in's back-off applies.
+TEST_F(SessionRoutesTest, GuessingThroughASessionBacksOff) {
+  const auto change = [&](const std::string& current) {
+    return rig.json(verb::post, "/api/v1/me/password", R"({"current":")" + current + R"(","new":"a much better passphrase"})");
+  };
+  lugh::authn::Authenticator::Settings defaults;
+  for (std::uint32_t i = 0; i < defaults.account.free_failures; ++i) ASSERT_EQ(change("not it").status, 403u) << i;
+  const auto waiting = change(kPassword);
+  EXPECT_EQ(waiting.status, 429u) << "right, and still waiting";
+  EXPECT_FALSE(waiting.header("Retry-After").empty());
+  EXPECT_TRUE(rig.audited("signin.password.refused"));
+  rig.advance(std::chrono::hours(2));
+  EXPECT_EQ(change(kPassword).status, 204u) << "and when the wait is over, it goes through";
+}
+
 TEST_F(SessionRoutesTest, AnAdministratorsView) {
   EXPECT_EQ(rig.get("/api/v1/users/" + alice.id + "/sessions").status, 403u);
   grant({"lugh:directory.read", "lugh:sessions.write", "lugh:directory.write"});

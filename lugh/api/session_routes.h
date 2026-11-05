@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "lugh/authn/authenticator.h"
 #include "lugh/authn/passwords.h"
 #include "lugh/directory/directory.h"
 #include "lugh/http/router.h"
@@ -28,7 +29,8 @@ namespace lugh::api {
 // A session is shown by its sid, never its handle.
 class SessionRoutes {
  public:
-  SessionRoutes(std::shared_ptr<session::Sessions> sessions, std::shared_ptr<directory::Directory> directory, std::shared_ptr<authn::Passwords> passwords);
+  SessionRoutes(std::shared_ptr<session::Sessions> sessions, std::shared_ptr<directory::Directory> directory, std::shared_ptr<authn::Passwords> passwords,
+                std::shared_ptr<authn::Authenticator> authenticator);
 
   void register_routes(http::Router& router);
 
@@ -36,6 +38,7 @@ class SessionRoutes {
   std::shared_ptr<session::Sessions> _sessions;
   std::shared_ptr<directory::Directory> _directory;
   std::shared_ptr<authn::Passwords> _passwords;
+  std::shared_ptr<authn::Authenticator> _authenticator;
 };
 
 }  // namespace lugh::api
