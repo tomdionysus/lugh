@@ -47,6 +47,7 @@ add_executable(lugh_tests
     http_server_test.cpp
     http_tls_context_test.cpp
     ldap_codec_test.cpp
+    ldap_connection_test.cpp
     ldap_operations_test.cpp
     keys_keyring_format_test.cpp
     keys_keyring_manager_test.cpp
@@ -66,6 +67,7 @@ add_executable(lugh_tests
     node_ioc_check_test.cpp
     node_process_api_test.cpp
     node_process_init_test.cpp
+    node_process_ldap_test.cpp
     node_process_oauth_test.cpp
     node_process_signin_test.cpp
     node_process_shutdown_test.cpp

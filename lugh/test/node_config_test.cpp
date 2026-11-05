@@ -285,6 +285,30 @@ TEST(Config, TheIssuerAndClientSecrets) {
   }
 }
 
+TEST(Config, TheLdapListeners) {
+  const auto none = Loader().load(with_tls()).value;
+  EXPECT_EQ(none.ldap_port, 0);
+  EXPECT_EQ(none.ldap_starttls_port, 0);
+  EXPECT_EQ(none.ldap_most_pending, 8u);
+  EXPECT_EQ(none.ldap_idle_seconds, 600u);
+
+  TempDirectory dir;
+  const auto path = dir.write("config.yaml", "ldap: { port: 636, starttls_port: 389, base_dn: 'dc=example,dc=com', most_pending: 4, idle: 60 }\n");
+  const auto config = Loader().load(with_config(path.string())).value;
+  EXPECT_EQ(config.ldap_port, 636);
+  EXPECT_EQ(config.ldap_starttls_port, 389);
+  EXPECT_EQ(config.ldap_base_dn, "dc=example,dc=com");
+  EXPECT_EQ(config.ldap_most_pending, 4u);
+  EXPECT_EQ(config.ldap_idle_seconds, 60u);
+
+  // A listener needs to know the top of the tree, and is told it properly.
+  EXPECT_FALSE(Loader().load(with_config(dir.write("a.yaml", "ldap: { port: 636 }\n").string())).ok);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("b.yaml", "ldap: { starttls_port: 389 }\n").string())).ok);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("c.yaml", "ldap: { port: 636, base_dn: 'not a dn' }\n").string())).ok);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("d.yaml", "ldap: { port: 70000, base_dn: 'dc=x' }\n").string())).ok);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("e.yaml", "ldap: { port: 636, base_dn: 'dc=x', most_pending: 0 }\n").string())).ok);
+}
+
 TEST(Config, TheMtlsListener) {
   EXPECT_EQ(Loader().load(with_tls()).value.mtls_port, 0);
   TempDirectory dir;

@@ -70,6 +70,14 @@ struct Config {
   // system's when empty. Never a way to stop checking.
   std::string outbound_ca;
 
+  // LDAP (TODO/2026-11-04-ldap.md): LDAPS, and a plaintext port that does nothing but StartTLS and
+  // the rootDSE. Zero: that listener is not there. Either needs base_dn.
+  std::uint16_t ldap_port = 0;
+  std::uint16_t ldap_starttls_port = 0;
+  std::string ldap_base_dn;
+  std::size_t ldap_most_pending = 8;
+  std::uint32_t ldap_idle_seconds = 600;
+
   // A request from one of these is taken at the last X-Forwarded-For entry; everything else
   // at its socket's address. Empty by default: no proxy is trusted until named.
   std::vector<network::Cidr> trusted_proxies;

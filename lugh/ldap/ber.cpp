@@ -133,6 +133,8 @@ void Writer::integer(std::uint8_t tag, std::int64_t value) {
   octets(tag, digits);
 }
 
+void Writer::raw(std::string_view encoded) { _out += encoded; }
+
 void Writer::boolean(std::uint8_t tag, bool value) { octets(tag, value ? std::string_view("\xFF", 1) : std::string_view("\x00", 1)); }
 
 }  // namespace lugh::ldap::ber

@@ -2,6 +2,14 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-05: LDAP step L4b, the listeners
+
+- `lugh/ldap/connection.h`, `ldap_server.h`: LDAPS and StartTLS on Asio, TLS 1.3 only from the same context as HTTPS. Operations answered strictly in turn on a strand, with reads held back past `ldap.most_pending`; abandon acts when read, unbind in its turn; an idle timeout of its own; the HTTP rate limiter, by address until bound and by caller after; a Notice of Disconnection for anything unreadable. Plaintext carries StartTLS and the rootDSE alone, and bytes following a StartTLS end the connection rather than being acted on under TLS. Writes answer `unwillingToPerform` until L5.
+- `ldap.port`, `ldap.starttls_port`, `ldap.base_dn` (required for either), `ldap.most_pending`, `ldap.idle`.
+- `lugh/test/fixtures/ldap_client.h`, and the process test over the real binary. `RootBrowser` moved into `node_browser.h`, shared with the OAuth process test.
+- Not yet: POSIX numbers (the tree shows them if set, but nothing sets them until `counters` and the allocation exist), which comes with L5.
+- Tests: 584 to 612, green in the debug, ASan and TSan builds, repeated and shuffled.
+
 ## 2026-11-05: LDAP step L4a, the tree and the read operations
 
 - `lugh/ldap/tree.h`: the fixed tree over `Directory`, every entry generated, a filter that pins one entry opening one record and only a general filter reading them all, in a fixed order with page tokens that survive a change. `lugh/ldap/authz.h`: what a bind proves, main password through the authenticator's back-off and an app password cut to its owner's scopes, each refusal the same, and an identity checked again per operation, so a user disabled or an app password revoked stops a connection already bound. `lugh/ldap/operations.h`: search, compare, Who am I?, the rootDSE. No network yet.

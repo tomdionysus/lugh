@@ -68,3 +68,15 @@ oauth:
   # outbound_ca: the roots an application's certificate must chain to when Lugh posts a
   # back-channel logout to it; the system's when not set.
   # outbound_ca: /etc/lugh/outbound-roots.pem
+
+ldap:
+  # LDAPS, and a plaintext port that does nothing but StartTLS and the rootDSE. Left out, that
+  # listener is not there. TLS is the same as the HTTPS listener's: 1.3 only.
+  # port: 636
+  # starttls_port: 389
+  # The top of the tree; required for either. Lugh does not guess it.
+  # base_dn: dc=example,dc=com
+  # Operations a connection may have queued before Lugh stops reading it.
+  # most_pending: 8
+  # Seconds a connection may do nothing. Long, since SSSD and mail servers hold one open.
+  # idle: 600

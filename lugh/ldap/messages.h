@@ -49,6 +49,7 @@ enum class ResultCode : int {
   inappropriate_authentication = 48,
   invalid_credentials = 49,
   insufficient_access_rights = 50,
+  busy = 51,
   unavailable = 52,
   unwilling_to_perform = 53,
   not_allowed_on_non_leaf = 66,

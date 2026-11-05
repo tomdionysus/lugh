@@ -48,6 +48,8 @@
 #include "lugh/http/router.h"
 #include "lugh/http/tls_context.h"
 #include "lugh/keys/keyring_manager.h"
+#include "lugh/ldap/ldap_server.h"
+#include "lugh/ldap/operations.h"
 #include "lugh/node/cli.h"
 #include "lugh/node/config.h"
 #include "lugh/oauth/backchannel.h"
@@ -503,17 +505,49 @@ int run(const cli::Options& options) {
   };
   if (backchannel) deliver_logouts();
 
+  // LDAP, a second front end on the directory (TODO/2026-11-04-ldap.md).
+  std::vector<std::shared_ptr<ldap::LdapServer>> ldap_servers;
+  if (config.ldap_port != 0 || config.ldap_starttls_port != 0) {
+    ldap::Tree::Settings tree_settings;
+    tree_settings.base_dn = config.ldap_base_dn;
+    auto tree = std::make_shared<ldap::Tree>(services.directory, tree_settings);
+    ldap::Operations::Settings operation_settings;
+    operation_settings.vendor_version = LUGH_VERSION;
+    operation_settings.extensions = {ldap::kStartTlsOid, ldap::kWhoAmIOid};
+    operation_settings.controls = {ldap::kPagedResultsOid};
+    ldap::ConnectionParts parts;
+    parts.binder = std::make_shared<ldap::Binder>(tree, services.directory, services.authenticator, services.app_passwords, services.grants, services.audit);
+    parts.operations = std::make_shared<ldap::Operations>(tree, operation_settings);
+    parts.tls = tls.value;
+    parts.throttle = throttle;
+    parts.most_pending = config.ldap_most_pending;
+    parts.idle = std::chrono::seconds(config.ldap_idle_seconds);
+    const auto add_listener = [&](std::uint16_t port, bool with_tls) {
+      if (port == 0) return true;
+      auto server = std::make_shared<ldap::LdapServer>(log, io_context, parts, with_tls);
+      if (const auto listening = server->listen(config.address, port); !listening.ok) {
+        logger.error(listening.error);
+        return false;
+      }
+      ldap_servers.push_back(std::move(server));
+      return true;
+    };
+    if (!add_listener(config.ldap_port, true) || !add_listener(config.ldap_starttls_port, false)) return 1;
+  }
+
   boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
   signals.async_wait([&](const boost::system::error_code& ec, int number) {
     if (ec) return;
     logger.info("Stopping on " + signal_name(number));
     server->stop();
     if (mtls_server) mtls_server->stop();
+    for (const auto& one : ldap_servers) one->stop();
     io_context.stop();
   });
 
   server->start();
   if (mtls_server) mtls_server->start();
+  for (const auto& one : ldap_servers) one->start();
 
   std::vector<std::thread> threads;
   for (unsigned i = 1; i < config.threads; ++i) threads.emplace_back([&io_context] { io_context.run(); });

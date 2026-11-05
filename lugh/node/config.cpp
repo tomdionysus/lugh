@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "lugh/ldap/dn.h"
 #include "lugh/oauth/metadata_routes.h"
 
 namespace lugh {
@@ -54,6 +55,11 @@ std::vector<dannan::config::Setting> ConfigLoader::settings() {
       {"oauth.mtls_port", Kind::value, "--mtls-port", "LUGH_MTLS_PORT", "a port, 1 to 65535, or 0 for none"},
       {"tls.client_ca", Kind::value, "", "", "a path"},
       {"oauth.outbound_ca", Kind::value, "", "", "a path"},
+      {"ldap.port", Kind::value, "", "", "a port, 1 to 65535, or 0 for none"},
+      {"ldap.starttls_port", Kind::value, "", "", "a port, 1 to 65535, or 0 for none"},
+      {"ldap.base_dn", Kind::value, "", "", "a distinguished name"},
+      {"ldap.most_pending", Kind::value, "", "", "a number of operations, 1 to 256"},
+      {"ldap.idle", Kind::value, "", "", "a number of seconds, 1 to 86400"},
   };
 }
 
@@ -118,6 +124,18 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
     if (const auto port = read.number("oauth.mtls_port", 0, 65535)) config.mtls_port = static_cast<std::uint16_t>(*port);
     if (const auto ca = read.path_of("tls.client_ca")) config.tls_client_ca = *ca;
     if (const auto ca = read.path_of("oauth.outbound_ca")) config.outbound_ca = *ca;
+    if (const auto port = read.number("ldap.port", 0, 65535)) config.ldap_port = static_cast<std::uint16_t>(*port);
+    if (const auto port = read.number("ldap.starttls_port", 0, 65535)) config.ldap_starttls_port = static_cast<std::uint16_t>(*port);
+    if (const auto base = read.text("ldap.base_dn")) {
+      const auto parsed = ldap::parse_dn(*base);
+      if (!parsed || parsed->empty()) throw read.refuse("ldap.base_dn", "a distinguished name");
+      config.ldap_base_dn = *base;
+    }
+    if (const auto pending = read.number("ldap.most_pending", 1, 256)) config.ldap_most_pending = static_cast<std::size_t>(*pending);
+    if (const auto idle = read.number("ldap.idle", 1, 86400)) config.ldap_idle_seconds = static_cast<std::uint32_t>(*idle);
+    if ((config.ldap_port != 0 || config.ldap_starttls_port != 0) && config.ldap_base_dn.empty()) {
+      return Result<Config>::failure("ldap.base_dn must be set for an LDAP listener: Lugh does not guess the top of the tree");
+    }
     for (const auto& text : read.list("proxy.trusted_networks")) {
       const auto cidr = network::Cidr::parse(text);
       if (!cidr) return Result<Config>::failure(read.find("proxy.trusted_networks")->source + ": proxy.trusted_networks: not a network: " + text);

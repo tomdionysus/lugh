@@ -83,6 +83,8 @@ class Writer {
   void octets(std::uint8_t tag, std::string_view value);
   void integer(std::uint8_t tag, std::int64_t value);
   void boolean(std::uint8_t tag, bool value);
+  // An element already encoded.
+  void raw(std::string_view encoded);
 
   // What has been written. Every begin() must have had its end().
   const std::string& bytes() const { return _out; }

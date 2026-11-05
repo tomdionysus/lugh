@@ -44,8 +44,10 @@ add_library(lugh STATIC
     http/tls_context.cpp
     ldap/authz.cpp
     ldap/ber.cpp
+    ldap/connection.cpp
     ldap/dn.cpp
     ldap/filter.cpp
+    ldap/ldap_server.cpp
     ldap/messages.cpp
     ldap/operations.cpp
     ldap/tree.cpp
