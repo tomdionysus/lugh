@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-04: LDAP step L3, the codec
+
+- `lugh/ldap/`: BER (definite lengths, single-byte tags, stream framing with a size cap), LDAPMessage and every request and response of the plan's table with controls, paged results and Password Modify, DNs (RFC 4514, only the forms the tree has) and filters (three-valued, nesting capped at 16 and 1024 items, with the pinned-value lookup the plan wants). No network yet.
+- One reading of the plan: its "a filter on an attribute the entry does not have is Undefined" holds for comparisons, but presence is false, as RFC 4511 says, so `(!(mail=*))` finds those with none.
+- Fuzz targets `fuzz_ber`, `fuzz_filter`, `fuzz_dn`, syntax-checked only here: this machine has no clang with libFuzzer. So a test puts a fixed sequence of damaged messages through the same parsers under the sanitizers. It is no campaign: those still need running on a machine with libFuzzer.
+- Tests: 527 to 555, green in the debug, ASan and TSan builds, repeated and shuffled.
+
 ## 2026-11-04: P6 step O5b, the TOTP QR code; P6 complete
 
 - `lugh/signin/qr.h`: a QR encoder from ISO/IEC 18004 (byte mode, level M, versions 1 to 40, all eight masks by the standard's penalties) and an inline SVG with no script or style attribute, so it passes the pages' policy. The enrolment page shows it above the key, which stays as text.

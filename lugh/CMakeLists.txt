@@ -42,6 +42,10 @@ add_library(lugh STATIC
     http/outbound.cpp
     http/router.cpp
     http/tls_context.cpp
+    ldap/ber.cpp
+    ldap/dn.cpp
+    ldap/filter.cpp
+    ldap/messages.cpp
     keys/keyring.cpp
     keys/keyring_format.cpp
     keys/keyring_manager.cpp
