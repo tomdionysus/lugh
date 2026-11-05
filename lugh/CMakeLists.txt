@@ -51,6 +51,7 @@ add_library(lugh STATIC
     ldap/messages.cpp
     ldap/operations.cpp
     ldap/tree.cpp
+    ldap/writes.cpp
     keys/keyring.cpp
     keys/keyring_format.cpp
     keys/keyring_manager.cpp

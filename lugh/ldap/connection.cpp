@@ -187,8 +187,19 @@ void Connection::_operation(Message message) {
 
   // A critical control this server does not do is refused; paged results is for a search.
   std::optional<PagedResults> paged;
+  std::optional<Filter> assertion;
+  const bool is_write = std::holds_alternative<ModifyRequest>(message.request) || std::holds_alternative<AddRequest>(message.request) ||
+                        std::holds_alternative<DeleteRequest>(message.request) || std::holds_alternative<ModifyDnRequest>(message.request);
   for (const auto& control : message.controls) {
     const bool is_search = std::holds_alternative<SearchRequest>(message.request);
+    if (control.oid == kAssertionOid && is_write) {
+      const auto value = control.value.value_or("");
+      ber::Reader reader(ber::Bytes(reinterpret_cast<const unsigned char*>(value.data()), value.size()));
+      const auto element = reader.next();
+      if (element && reader.empty()) assertion = parse_filter(*element);
+      if (!assertion) return _refuse(id, message.request, {ResultCode::protocol_error, "", "that assertion control cannot be read"});
+      continue;
+    }
     if (control.oid == kPagedResultsOid && is_search) {
       paged = control.value ? parse_paged_results(*control.value) : std::nullopt;
       if (!paged) return _refuse(id, message.request, {ResultCode::protocol_error, "", "that paged results control cannot be read"});
@@ -214,8 +225,24 @@ void Connection::_operation(Message message) {
       self->_compare(id, std::move(request), std::move(bound));
     });
   }
-  // The writes are the next step's (TODO/2026-11-04-ldap.md, L5).
-  _refuse(id, message.request, {ResultCode::unwilling_to_perform, "", "this directory does not take writes over LDAP yet"});
+  _write_operation(id, std::move(message.request), std::move(assertion));
+}
+
+void Connection::_write_operation(std::int64_t id, Request request, std::optional<Filter> assertion) {
+  // Held: a request may hold a Secret, which does not copy.
+  auto held = std::make_shared<Request>(std::move(request));
+  _with_identity([self = shared_from_this(), id, held, assertion = std::move(assertion)](std::optional<Bound> bound) {
+    if (!bound) return self->_refuse(id, *held, {ResultCode::insufficient_access_rights, "", "bind first"});
+    Writes::Asking asking{std::move(*bound), self->_address, assertion};
+    const auto op = response_to(*held);
+    const auto answered = [self, id, op](Result result) { self->_write(encode_result(id, op, result), [self] { self->_finished(); }); };
+    if (auto* add = std::get_if<AddRequest>(held.get())) return self->_parts.writes->add(std::move(asking), std::move(*add), self->_strand, answered);
+    if (auto* modify = std::get_if<ModifyRequest>(held.get()))
+      return self->_parts.writes->modify(std::move(asking), std::move(*modify), self->_strand, answered);
+    if (auto* remove = std::get_if<DeleteRequest>(held.get()))
+      return self->_parts.writes->remove(std::move(asking), std::move(*remove), self->_strand, answered);
+    self->_parts.writes->rename(std::move(asking), std::get<ModifyDnRequest>(std::move(*held)), self->_strand, answered);
+  });
 }
 
 void Connection::_with_identity(std::function<void(std::optional<Bound>)> then) {
@@ -287,6 +314,17 @@ void Connection::_extended(std::int64_t id, ExtendedRequest request) {
   if (!_tls) return answer({ResultCode::confidentiality_required, "", "StartTLS first"}, std::nullopt, std::nullopt);
   if (request.oid == kWhoAmIOid) {
     return _with_identity([answer](std::optional<Bound> bound) { answer({}, std::nullopt, Operations::who_am_i(bound)); });
+  }
+  if (request.oid == kPasswordModifyOid) {
+    auto parsed = parse_password_modify(request.value.value_or(std::string()));
+    if (!parsed) return answer({ResultCode::protocol_error, "", "that Password Modify cannot be read"}, std::nullopt, std::nullopt);
+    auto held = std::make_shared<PasswordModify>(std::move(*parsed));
+    return _with_identity([self, answer, held](std::optional<Bound> bound) {
+      if (!bound) return answer({ResultCode::insufficient_access_rights, "", "bind first"}, std::nullopt, std::nullopt);
+      Writes::Asking asking{std::move(*bound), self->_address, std::nullopt};
+      self->_parts.writes->password_modify(std::move(asking), std::move(*held), self->_strand,
+                                           [answer](Result result) { answer(std::move(result), std::nullopt, std::nullopt); });
+    });
   }
   answer({ResultCode::protocol_error, "", "an extended operation Lugh does not do"}, std::nullopt, std::nullopt);
 }

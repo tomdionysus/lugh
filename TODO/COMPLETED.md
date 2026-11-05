@@ -2,6 +2,12 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-05: LDAP step L5a, the writes
+
+- `lugh/ldap/writes.h`: add, modify, delete and rename as the API makes them, so the rules, versions and audit are the same, the actor the bound user and the source `ldap:<address>`. The Assertion control (RFC 4528), with `(lughEntryVersion=<n>)` as `If-Match`. A user's modify is one update, failing entire; a group's changes attributes or members, never both, and a member that names nobody changes nothing. Deleting a user ends their sessions at once, as the API does.
+- Password Modify (RFC 3062): the bound user's own, only after a main-password bind, with the old one given and through the sign-in's back-off; every session of theirs ends.
+- Tests: 612 to 636, green in the debug, ASan and TSan builds, repeated and shuffled.
+
 ## 2026-11-05: LDAP step L4b, the listeners
 
 - `lugh/ldap/connection.h`, `ldap_server.h`: LDAPS and StartTLS on Asio, TLS 1.3 only from the same context as HTTPS. Operations answered strictly in turn on a strand, with reads held back past `ldap.most_pending`; abandon acts when read, unbind in its turn; an idle timeout of its own; the HTTP rate limiter, by address until bound and by caller after; a Notice of Disconnection for anything unreadable. Plaintext carries StartTLS and the rootDSE alone, and bytes following a StartTLS end the connection rather than being acted on under TLS. Writes answer `unwillingToPerform` until L5.

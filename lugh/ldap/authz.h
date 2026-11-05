@@ -39,6 +39,10 @@ struct BindAnswer {
   std::optional<Bound> bound;
 };
 
+// Whether a password checked by the authenticator is all this user needs, since LDAP cannot carry a
+// second factor: it completed the sign-in, or stopped at a factor their policy does not ask for.
+bool password_alone_enough(const authn::Step& step);
+
 // What a bind proves (TODO/2026-11-04-ldap.md, "What a bind proves"). A main password goes through
 // the authenticator, with its back-off, lockout and audit, and passes only if that completes the
 // sign-in, since LDAP cannot carry a second factor; an app password is tried first when what was

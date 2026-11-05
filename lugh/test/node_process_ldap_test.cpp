@@ -122,6 +122,38 @@ TEST_F(NodeProcessLdap, RevokingStopsAConnectionAlreadyBound) {
   EXPECT_EQ(client.bind(kRoot, app_password)->code, static_cast<int>(lugh::ldap::ResultCode::invalid_credentials));
 }
 
+// A provisioning tool: an app password that carries directory.write, its changes under its owner.
+TEST_F(NodeProcessLdap, WritesThroughAnAppPasswordThatMay) {
+  const auto made =
+      root.api(http::verb::post, "/api/v1/me/app-passwords", R"({"name":"provisioning","scopes":["lugh:directory.read","lugh:directory.write"]})");
+  ASSERT_TRUE(made);
+  ASSERT_EQ(made->status, 201u) << made->body;
+  const auto writing = std::string(boost::json::parse(made->body).at("password").as_string());
+
+  Client client(ldaps_port, Client::Mode::ldaps);
+  ASSERT_EQ(client.bind(kRoot, writing)->code, 0);
+  const std::string entry = std::string("uid=dana,ou=people,") + kBase;
+  const auto added = client.add(entry, {{"objectClass", {"inetOrgPerson"}}, {"cn", {"Dana"}}, {"sn", {"Dana"}}, {"mail", {"dana@example.com"}}});
+  ASSERT_TRUE(added);
+  ASSERT_EQ(added->code, 0) << added->message;
+  EXPECT_EQ(client.modify(entry, "givenName", "Dana")->code, 0);
+
+  // The API sees what LDAP wrote: one directory, two front ends.
+  const auto listed = root.browser(http::verb::get, "/api/v1/users");
+  ASSERT_TRUE(listed);
+  EXPECT_NE(listed->body.find("dana@example.com"), std::string::npos);
+
+  EXPECT_EQ(client.remove(entry)->code, 0);
+  EXPECT_EQ(root.browser(http::verb::get, "/api/v1/users")->body.find("dana@example.com"), std::string::npos);
+
+  // The read-only one may not.
+  Client reader(ldaps_port, Client::Mode::ldaps);
+  ASSERT_EQ(reader.bind(kRoot, app_password)->code, 0);
+  EXPECT_EQ(reader.modify(kRoot, "cn", "x")->code, static_cast<int>(lugh::ldap::ResultCode::insufficient_access_rights));
+  // And no app password changes the main one.
+  EXPECT_EQ(client.password_modify(password, "a much better passphrase")->code, static_cast<int>(lugh::ldap::ResultCode::unwilling_to_perform));
+}
+
 TEST(NodeProcessLdapOff, UnconfiguredThereIsNoListener) {
   Workspace workspace;
   const Initialised node(workspace);

@@ -239,6 +239,94 @@ class Client {
     return read();
   }
 
+  // A replace of one value; with `assertion`, an Assertion control holding those bytes.
+  std::optional<Response> modify(const std::string& entry, const std::string& attribute, const std::string& value, const std::string& assertion = "") {
+    ber::Writer writer;
+    writer.begin(ber::kSequence);
+    writer.integer(ber::kInteger, next_id());
+    writer.begin(0x66);
+    writer.octets(ber::kOctetString, entry);
+    writer.begin(ber::kSequence);
+    writer.begin(ber::kSequence);
+    writer.integer(ber::kEnumerated, 2);
+    writer.begin(ber::kSequence);
+    writer.octets(ber::kOctetString, attribute);
+    writer.begin(ber::kSet);
+    writer.octets(ber::kOctetString, value);
+    writer.end();
+    writer.end();
+    writer.end();
+    writer.end();
+    writer.end();
+    if (!assertion.empty()) {
+      writer.begin(0xA0);
+      writer.begin(ber::kSequence);
+      writer.octets(ber::kOctetString, lugh::ldap::kAssertionOid);
+      writer.boolean(ber::kBoolean, true);
+      writer.octets(ber::kOctetString, assertion);
+      writer.end();
+      writer.end();
+    }
+    writer.end();
+    send_raw(writer.bytes());
+    return read();
+  }
+
+  std::optional<Response> add(const std::string& entry, const std::vector<std::pair<std::string, std::vector<std::string>>>& attributes) {
+    ber::Writer writer;
+    writer.begin(ber::kSequence);
+    writer.integer(ber::kInteger, next_id());
+    writer.begin(0x68);
+    writer.octets(ber::kOctetString, entry);
+    writer.begin(ber::kSequence);
+    for (const auto& [type, values] : attributes) {
+      writer.begin(ber::kSequence);
+      writer.octets(ber::kOctetString, type);
+      writer.begin(ber::kSet);
+      for (const auto& value : values) writer.octets(ber::kOctetString, value);
+      writer.end();
+      writer.end();
+    }
+    writer.end();
+    writer.end();
+    writer.end();
+    send_raw(writer.bytes());
+    return read();
+  }
+
+  std::optional<Response> rename(const std::string& entry, const std::string& rdn) {
+    ber::Writer writer;
+    writer.begin(ber::kSequence);
+    writer.integer(ber::kInteger, next_id());
+    writer.begin(0x6C);
+    writer.octets(ber::kOctetString, entry);
+    writer.octets(ber::kOctetString, rdn);
+    writer.boolean(ber::kBoolean, true);
+    writer.end();
+    writer.end();
+    send_raw(writer.bytes());
+    return read();
+  }
+
+  std::optional<Response> remove(const std::string& entry) {
+    ber::Writer writer;
+    writer.begin(ber::kSequence);
+    writer.integer(ber::kInteger, next_id());
+    writer.octets(0x4A, entry);
+    writer.end();
+    send_raw(writer.bytes());
+    return read();
+  }
+
+  std::optional<Response> password_modify(const std::string& old_password, const std::string& fresh) {
+    ber::Writer value;
+    value.begin(ber::kSequence);
+    value.octets(0x81, old_password);
+    value.octets(0x82, fresh);
+    value.end();
+    return extended(lugh::ldap::kPasswordModifyOid, value.bytes());
+  }
+
   std::string abandon_bytes(std::int64_t id, std::int64_t target) {
     ber::Writer writer;
     writer.begin(ber::kSequence);

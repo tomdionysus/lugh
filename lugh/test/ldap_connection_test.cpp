@@ -46,7 +46,8 @@ class LdapConnectionTest : public ::testing::Test {
                   rig.directory->add_member(rig.admin, group.id, alice.id, kTestDeadline, executor, done);
                 }).ok());
     ASSERT_TRUE(wait_for<Outcome<lugh::scopes::Granted>>([&](Executor executor, auto done) {
-                  rig.grants->group_set(rig.admin, group.id, {lugh::scopes::kDirectoryRead}, std::nullopt, kTestDeadline, executor, done);
+                  rig.grants->group_set(rig.admin, group.id, {lugh::scopes::kDirectoryRead, lugh::scopes::kDirectoryWrite}, std::nullopt, kTestDeadline,
+                                        executor, done);
                 }).ok());
   }
 
@@ -68,6 +69,8 @@ class LdapConnectionTest : public ::testing::Test {
     ConnectionParts parts;
     parts.binder = std::make_shared<Binder>(tree, rig.directory, rig.authenticator, rig.app_passwords, rig.grants, rig.audit);
     parts.operations = std::make_shared<Operations>(tree, settings);
+    sessions = std::make_shared<lugh::session::Sessions>(rig.store, rig.wall, rig.directory, rig.grants, rig.audit, lugh::session::Sessions::Settings{});
+    parts.writes = std::make_shared<Writes>(tree, rig.directory, sessions, rig.passwords, rig.authenticator);
     parts.tls = tls.value;
     parts.throttle = throttle;
     parts.idle = idle;
@@ -100,6 +103,7 @@ class LdapConnectionTest : public ::testing::Test {
   TestCertificate pair;
   boost::asio::io_context io;
   std::shared_ptr<lugh::http::Throttle> throttle = std::make_shared<lugh::http::Throttle>(rig.time, lugh::http::RateLimits{{10000, 10000}, {10000, 10000}});
+  std::shared_ptr<lugh::session::Sessions> sessions;
   std::shared_ptr<LdapServer> ldaps;
   std::shared_ptr<LdapServer> plain;
   std::uint16_t ldaps_port = 0;
@@ -418,4 +422,63 @@ TEST_F(LdapConnectionTest, StoppingClosesConnections) {
   ASSERT_EQ(client.extended(kWhoAmIOid)->code, 0);
   ldaps->stop();
   EXPECT_TRUE(client.closes());
+}
+
+// The writes over the wire: each answered with its own response, as the bound user.
+TEST_F(LdapConnectionTest, WritesOverTheWire) {
+  start();
+  auto client = secure();
+  EXPECT_EQ(client.modify(kAlice, "cn", "Refused")->code, code(ResultCode::insufficient_access_rights)) << "bind first";
+  ASSERT_EQ(client.bind(kAlice, kPassword)->code, 0);
+
+  const auto changed = client.modify(kAlice, "cn", "Alice Smith");
+  ASSERT_TRUE(changed);
+  EXPECT_EQ(changed->op, 0x67);
+  EXPECT_EQ(changed->code, 0) << changed->message;
+  const auto read = client.search(kAlice, 0, {"cn", "lughEntryVersion"});
+  ASSERT_EQ(read->entries.size(), 1u);
+  EXPECT_EQ(read->entries[0].attributes.at("cn"), (std::vector<std::string>{"Alice Smith"}));
+
+  const auto version = read->entries[0].attributes.at("lughEntryVersion").at(0);
+  EXPECT_EQ(client.modify(kAlice, "cn", "Stale", ldap_client::filter_equal("lughEntryVersion", "1"))->code, code(ResultCode::assertion_failed));
+  EXPECT_EQ(client.modify(kAlice, "cn", "Fresh", ldap_client::filter_equal("lughEntryVersion", version))->code, 0);
+  // An assertion that cannot be read.
+  EXPECT_EQ(client.modify(kAlice, "cn", "Bad", "not ber")->code, code(ResultCode::protocol_error));
+
+  const auto added = client.add("cn=ops,ou=groups,dc=example,dc=com", {{"objectClass", {"groupOfNames"}}, {"member", {kAlice}}});
+  ASSERT_TRUE(added);
+  EXPECT_EQ(added->op, 0x69);
+  EXPECT_EQ(added->code, 0) << added->message;
+  const auto renamed = client.rename("cn=ops,ou=groups,dc=example,dc=com", "cn=operations");
+  ASSERT_TRUE(renamed);
+  EXPECT_EQ(renamed->op, 0x6D);
+  EXPECT_EQ(renamed->code, 0) << renamed->message;
+  const auto removed = client.remove("cn=operations,ou=groups,dc=example,dc=com");
+  ASSERT_TRUE(removed);
+  EXPECT_EQ(removed->op, 0x6B);
+  EXPECT_EQ(removed->code, 0) << removed->message;
+}
+
+TEST_F(LdapConnectionTest, WritesOverPlaintextAreRefused) {
+  start();
+  auto client = plaintext();
+  EXPECT_EQ(client.modify(kAlice, "cn", "x")->code, code(ResultCode::confidentiality_required));
+}
+
+// RFC 3062 over the wire, and a critical assertion is one it does do.
+TEST_F(LdapConnectionTest, PasswordModifyOverTheWire) {
+  start();
+  auto client = secure();
+  EXPECT_EQ(client.password_modify(kPassword, "a much better passphrase")->code, code(ResultCode::insufficient_access_rights));
+  ASSERT_EQ(client.bind(kAlice, kPassword)->code, 0);
+  EXPECT_EQ(client.extended(kPasswordModifyOid, std::string("not ber"))->code, code(ResultCode::protocol_error));
+  const auto changed = client.password_modify(kPassword, "a much better passphrase");
+  ASSERT_TRUE(changed);
+  EXPECT_EQ(changed->op, ldap_client::kExtendedResponse);
+  EXPECT_EQ(changed->code, 0) << changed->message;
+
+  auto fresh = secure();
+  EXPECT_EQ(fresh.bind(kAlice, kPassword)->code, code(ResultCode::invalid_credentials));
+  auto again = secure();
+  EXPECT_EQ(again.bind(kAlice, "a much better passphrase")->code, 0);
 }

@@ -49,6 +49,7 @@ add_executable(lugh_tests
     ldap_codec_test.cpp
     ldap_connection_test.cpp
     ldap_operations_test.cpp
+    ldap_writes_test.cpp
     keys_keyring_format_test.cpp
     keys_keyring_manager_test.cpp
     keys_keyring_test.cpp

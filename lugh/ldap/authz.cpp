@@ -31,6 +31,12 @@ std::vector<std::string> cut_to(const std::vector<std::string>& wanted, const st
 
 }  // namespace
 
+bool password_alone_enough(const authn::Step& step) {
+  if (step.kind != authn::Step::Kind::next) return false;
+  const auto& reached = step.sign_in;
+  return reached.stage == authn::SignIn::Stage::complete || (reached.stage == authn::SignIn::Stage::second_factor && reached.required == authn::Assurance::pwd);
+}
+
 Binder::Binder(std::shared_ptr<Tree> tree, std::shared_ptr<directory::Directory> directory, std::shared_ptr<authn::Authenticator> authenticator,
                std::shared_ptr<authn::AppPasswords> app_passwords, std::shared_ptr<scopes::Grants> grants, std::shared_ptr<audit::AuditLog> audit)
     : _tree(std::move(tree)),
@@ -91,13 +97,7 @@ void Binder::_password(std::string name, std::string dn, std::shared_ptr<Secret>
   auto self = shared_from_this();
   _authenticator->password(std::move(name), std::move(*password), "ldap:" + address, kStepDeadline, executor, [=](authn::Step step) {
     if (step.kind == authn::Step::Kind::failed) return answer->finish(unavailable());
-    if (step.kind != authn::Step::Kind::next) return answer->finish(refused());
-    // LDAP cannot carry a second factor, so stopping at one is a refusal, unless the password alone
-    // is all this user's policy asks for: having enrolled a factor they need not use is no reason.
-    const auto& reached = step.sign_in;
-    const bool enough =
-        reached.stage == authn::SignIn::Stage::complete || (reached.stage == authn::SignIn::Stage::second_factor && reached.required == authn::Assurance::pwd);
-    if (!enough) return answer->finish(refused());
+    if (!password_alone_enough(step)) return answer->finish(refused());
     const auto user_id = step.sign_in.user_id;
     self->_grants->effective(user_id, kStepDeadline, executor, [=](Outcome<std::vector<std::string>> scopes) {
       if (!scopes.ok()) return answer->finish(unavailable());

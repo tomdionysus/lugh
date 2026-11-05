@@ -513,11 +513,12 @@ int run(const cli::Options& options) {
     auto tree = std::make_shared<ldap::Tree>(services.directory, tree_settings);
     ldap::Operations::Settings operation_settings;
     operation_settings.vendor_version = LUGH_VERSION;
-    operation_settings.extensions = {ldap::kStartTlsOid, ldap::kWhoAmIOid};
-    operation_settings.controls = {ldap::kPagedResultsOid};
+    operation_settings.extensions = {ldap::kStartTlsOid, ldap::kWhoAmIOid, ldap::kPasswordModifyOid};
+    operation_settings.controls = {ldap::kPagedResultsOid, ldap::kAssertionOid};
     ldap::ConnectionParts parts;
     parts.binder = std::make_shared<ldap::Binder>(tree, services.directory, services.authenticator, services.app_passwords, services.grants, services.audit);
     parts.operations = std::make_shared<ldap::Operations>(tree, operation_settings);
+    parts.writes = std::make_shared<ldap::Writes>(tree, services.directory, services.sessions, services.passwords, services.authenticator);
     parts.tls = tls.value;
     parts.throttle = throttle;
     parts.most_pending = config.ldap_most_pending;

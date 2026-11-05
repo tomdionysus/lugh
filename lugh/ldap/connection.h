@@ -21,6 +21,7 @@
 #include "lugh/ldap/authz.h"
 #include "lugh/ldap/messages.h"
 #include "lugh/ldap/operations.h"
+#include "lugh/ldap/writes.h"
 
 namespace lugh::ldap {
 
@@ -28,6 +29,7 @@ namespace lugh::ldap {
 struct ConnectionParts {
   std::shared_ptr<Binder> binder;
   std::shared_ptr<Operations> operations;
+  std::shared_ptr<Writes> writes;
   std::shared_ptr<http::ssl::context> tls;
   // The HTTP routes' limits: by address until bound, by caller after.
   std::shared_ptr<http::Throttle> throttle;
@@ -72,6 +74,7 @@ class Connection : public std::enable_shared_from_this<Connection> {
   void _compare(std::int64_t id, CompareRequest request, std::optional<Bound> bound);
   void _extended(std::int64_t id, ExtendedRequest request);
   void _start_tls(std::int64_t id);
+  void _write_operation(std::int64_t id, Request request, std::optional<Filter> assertion);
   // With the identity as it stands now: anonymous if it no longer holds.
   void _with_identity(std::function<void(std::optional<Bound>)> then);
   void _refuse(std::int64_t id, const Request& request, Result result);
