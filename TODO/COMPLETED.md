@@ -2,6 +2,12 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-05: LDAP driven with real clients
+
+- Apple's OpenLDAP 2.4.28 tools (`ldapsearch`, `ldapwhoami`, `ldapadd`, `ldapmodify`, `ldapmodrdn`, `ldapcompare`, `ldapdelete`, `ldappasswd`) against a real `lugh-node`: binds, the whole tree, PAM-style lookups, filters, paging, limits, compare, add, modify, rename, delete, the Assertion control, critical controls refused, and Password Modify, which ended the person's session. All answered as `docs/ldap.md` says, with no secret in the log.
+- Those tools cannot do TLS 1.3, so they went through a scratch stunnel-style shim, not committed. `openssl s_client` tested Lugh's TLS directly: LDAPS and StartTLS on 1.3 verify, and 1.2 is refused. So no one client has done LDAP operations over its own TLS 1.3. A current OpenLDAP could not be built here: running downloaded code was refused by the session's permissions.
+- Found: a stock `ldapsearch -x` with no `-D` is refused at its anonymous bind and stops. Waiting on the maintainer (`ACTIVE.md`). No test added or changed.
+
 ## 2026-11-05: The sign-in's back-off on changing a password
 
 - `/api/v1/me/password` checked the current password with only the router's caller limit, 600 a minute, so a stolen session was a fast way to guess it. It now goes through the authenticator: back-off shared with the sign-in, `429` with `Retry-After` while waiting, and audited.

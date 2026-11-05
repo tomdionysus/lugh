@@ -27,6 +27,7 @@ GitHub's `main` carries one commit this tree was never based on: aaac977 "Update
 
 ## Waiting on the maintainer
 
+- LDAP's anonymous bind. Driven with real clients 2026-11-05 (below): `ldapsearch -x` with no `-D` does an anonymous bind (empty name, empty password) before anything, Lugh refuses it as the plan says, and the client stops, so a stock client cannot read the rootDSE or, on the plaintext port, get far enough to find StartTLS. Recommendation: accept that one form as staying anonymous, which grants nothing new, and keep refusing a name with an empty password.
 - The open questions in `docs/architecture.md`, "Still open": question 2 (single-use grants) is needed by P6 and P8, question 14 (Lugh's hostname) by P13.
 - Nothing from the LDAP plan: its questions and review were decided 2026-11-04 (`2026-11-04-ldap.md`, "Decided").
 - Nothing from the P6 plan: its questions were decided 2026-11-04 (`2026-11-04-oauth.md`, "Decided").
