@@ -73,6 +73,7 @@ class LdapConnectionTest : public ::testing::Test {
     parts.writes = std::make_shared<Writes>(tree, rig.directory, sessions, rig.passwords, rig.authenticator);
     parts.tls = tls.value;
     parts.throttle = throttle;
+    parts.anonymous_bind = anonymous_bind;
     parts.idle = idle;
     parts.most_pending = most_pending;
     ldaps = std::make_shared<LdapServer>(rig.logger, io, parts, true, most_connections);
@@ -106,6 +107,7 @@ class LdapConnectionTest : public ::testing::Test {
   std::shared_ptr<lugh::session::Sessions> sessions;
   std::shared_ptr<LdapServer> ldaps;
   std::shared_ptr<LdapServer> plain;
+  bool anonymous_bind = false;
   std::uint16_t ldaps_port = 0;
   std::uint16_t plain_port = 0;
   std::thread thread;
@@ -481,4 +483,74 @@ TEST_F(LdapConnectionTest, PasswordModifyOverTheWire) {
   EXPECT_EQ(fresh.bind(kAlice, kPassword)->code, code(ResultCode::invalid_credentials));
   auto again = secure();
   EXPECT_EQ(again.bind(kAlice, "a much better passphrase")->code, 0);
+}
+
+// Off by default: the plan's refusal, on either listener.
+TEST_F(LdapConnectionTest, AnAnonymousBindIsRefusedByDefault) {
+  start();
+  auto secured = secure();
+  EXPECT_EQ(secured.bind("", "")->code, code(ResultCode::inappropriate_authentication));
+  auto open = plaintext();
+  EXPECT_EQ(open.bind("", "")->code, code(ResultCode::confidentiality_required));
+}
+
+// What a stock client does first: on, it succeeds on either listener, and the rootDSE follows.
+TEST_F(LdapConnectionTest, AnAnonymousBindWhenAllowed) {
+  anonymous_bind = true;
+  start();
+  auto open = plaintext();
+  const auto bound = open.bind("", "");
+  ASSERT_TRUE(bound);
+  EXPECT_EQ(bound->op, ldap_client::kBindResponse);
+  EXPECT_EQ(bound->code, 0) << bound->message;
+  EXPECT_EQ(open.search("", 0, {"namingContexts"})->entries.size(), 1u);
+  ASSERT_TRUE(open.start_tls()) << "and it still gets to StartTLS";
+  EXPECT_EQ(open.bind(kAlice, kPassword)->code, 0);
+
+  auto secured = secure();
+  EXPECT_EQ(secured.bind("", "")->code, 0);
+  EXPECT_EQ(secured.search("", 0, {"namingContexts"})->entries.size(), 1u);
+}
+
+// It opens nothing: still anonymous, in every way that counts.
+TEST_F(LdapConnectionTest, AnAllowedAnonymousBindOpensNothing) {
+  anonymous_bind = true;
+  start();
+  auto client = secure();
+  ASSERT_EQ(client.bind("", "")->code, 0);
+  EXPECT_EQ(client.extended(kWhoAmIOid)->value, "");
+  EXPECT_EQ(client.search(kBase, 0)->done.code, code(ResultCode::insufficient_access_rights));
+  EXPECT_EQ(client.search(kAlice, 0)->done.code, code(ResultCode::insufficient_access_rights));
+  EXPECT_EQ(client.compare(kAlice, "uid", "alice")->code, code(ResultCode::insufficient_access_rights));
+  EXPECT_EQ(client.modify(kAlice, "cn", "x")->code, code(ResultCode::insufficient_access_rights));
+  EXPECT_EQ(client.password_modify(kPassword, "a much better passphrase")->code, code(ResultCode::insufficient_access_rights));
+
+  auto open = plaintext();
+  ASSERT_EQ(open.bind("", "")->code, 0);
+  EXPECT_EQ(open.search(kBase, 0)->done.code, code(ResultCode::confidentiality_required)) << "and plaintext carries no more";
+}
+
+// A bound connection that binds anonymously gives up who it was (RFC 4513 section 3.1.2).
+TEST_F(LdapConnectionTest, AnAnonymousBindDropsTheIdentity) {
+  anonymous_bind = true;
+  start();
+  auto client = secure();
+  ASSERT_EQ(client.bind(kAlice, kPassword)->code, 0);
+  ASSERT_EQ(client.search(kBase, 0)->done.code, 0);
+  ASSERT_EQ(client.bind("", "")->code, 0);
+  EXPECT_EQ(client.extended(kWhoAmIOid)->value, "");
+  EXPECT_EQ(client.search(kBase, 0)->done.code, code(ResultCode::insufficient_access_rights));
+}
+
+// RFC 4513 section 5.1.2: the dangerous form, a name with no password, is never this.
+TEST_F(LdapConnectionTest, ANameWithNoPasswordIsNeverAnonymous) {
+  anonymous_bind = true;
+  start();
+  auto client = secure();
+  EXPECT_EQ(client.bind(kAlice, "")->code, code(ResultCode::inappropriate_authentication));
+  EXPECT_EQ(client.extended(kWhoAmIOid)->value, "");
+  EXPECT_EQ(client.bind(" ", "")->code, code(ResultCode::inappropriate_authentication)) << "blank is not empty";
+  EXPECT_EQ(client.bind("", kPassword)->code, code(ResultCode::invalid_credentials));
+  auto open = plaintext();
+  EXPECT_EQ(open.bind(kAlice, "")->code, code(ResultCode::confidentiality_required));
 }

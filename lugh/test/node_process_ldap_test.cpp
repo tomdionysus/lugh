@@ -191,6 +191,27 @@ TEST(NodeProcessLdapPosix, TheBackfillOnTheRealBinary) {
   EXPECT_EQ(after->entries[0].attributes.at("loginShell"), (std::vector<std::string>{"/bin/zsh"}));
 }
 
+// The setting reaches the listeners on the real binary.
+TEST(NodeProcessLdapAnonymous, TheSetting) {
+  const auto with = [](const std::string& setting, int expected) {
+    Workspace workspace;
+    const Initialised node(workspace);
+    ASSERT_EQ(node.made.status, 0) << node.made.err;
+    const auto plain_port = dannan::test::free_port();
+    const auto config = workspace.path("config.yaml");
+    write_file(config, "ldap: { starttls_port: " + std::to_string(plain_port) + ", base_dn: '" + kBase + "'" + setting + " }\n");
+    Serving serving(workspace, node.state, node.credentials, std::nullopt, {"--config", config.string()});
+    ASSERT_TRUE(serving.up()) << serving.log();
+    Client client(plain_port, Client::Mode::plaintext);
+    const auto bound = client.bind("", "");
+    ASSERT_TRUE(bound);
+    EXPECT_EQ(bound->code, expected) << setting;
+  };
+  with("", static_cast<int>(lugh::ldap::ResultCode::confidentiality_required));
+  with(", anonymous_bind: false", static_cast<int>(lugh::ldap::ResultCode::confidentiality_required));
+  with(", anonymous_bind: true", 0);
+}
+
 TEST(NodeProcessLdapOff, UnconfiguredThereIsNoListener) {
   Workspace workspace;
   const Initialised node(workspace);

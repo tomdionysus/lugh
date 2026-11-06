@@ -61,6 +61,7 @@ std::vector<dannan::config::Setting> ConfigLoader::settings() {
       {"ldap.base_dn", Kind::value, "", "", "a distinguished name"},
       {"ldap.most_pending", Kind::value, "", "", "a number of operations, 1 to 256"},
       {"ldap.idle", Kind::value, "", "", "a number of seconds, 1 to 86400"},
+      {"ldap.anonymous_bind", Kind::toggle, "", "", "true or false"},
       {"ldap.posix.uid_range", Kind::value, "", "", "two numbers, first-last, from 1"},
       {"ldap.posix.gid_range", Kind::value, "", "", "two numbers, first-last, from 1"},
       {"ldap.posix.primary_group", Kind::value, "", "", "a group's name"},
@@ -139,6 +140,7 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
     }
     if (const auto pending = read.number("ldap.most_pending", 1, 256)) config.ldap_most_pending = static_cast<std::size_t>(*pending);
     if (const auto idle = read.number("ldap.idle", 1, 86400)) config.ldap_idle_seconds = static_cast<std::uint32_t>(*idle);
+    if (const auto anonymous = read.toggle("ldap.anonymous_bind")) config.ldap_anonymous_bind = *anonymous;
     const auto range_of = [&](const char* key) -> std::optional<std::pair<std::uint32_t, std::uint32_t>> {
       const auto text = read.text(key);
       if (!text) return std::nullopt;

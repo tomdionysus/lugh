@@ -79,6 +79,8 @@ struct Config {
   std::string ldap_base_dn;
   std::size_t ldap_most_pending = 8;
   std::uint32_t ldap_idle_seconds = 600;
+  // Whether a bind with no name and no password succeeds, staying anonymous (the maintainer, 2026-11-06).
+  bool ldap_anonymous_bind = false;
   // POSIX numbers (TODO/2026-11-04-ldap.md): none until a range is set, and then both ranges and the
   // primary group are needed. Ranges are "first-last".
   std::optional<std::pair<std::uint32_t, std::uint32_t>> ldap_uid_range;

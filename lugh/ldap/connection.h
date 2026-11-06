@@ -33,6 +33,9 @@ struct ConnectionParts {
   std::shared_ptr<http::ssl::context> tls;
   // The HTTP routes' limits: by address until bound, by caller after.
   std::shared_ptr<http::Throttle> throttle;
+  // `ldap.anonymous_bind`: whether a bind with no name and no password succeeds, leaving the
+  // connection as anonymous as it was. It opens nothing a connection could not already read.
+  bool anonymous_bind = false;
   // Operations queued before the connection stops reading (`ldap.most_pending`).
   std::size_t most_pending = 8;
   // A connection with nothing happening closes after this (`ldap.idle`): SSSD and mail servers hold

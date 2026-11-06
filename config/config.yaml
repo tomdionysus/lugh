@@ -80,6 +80,9 @@ ldap:
   # most_pending: 8
   # Seconds a connection may do nothing. Long, since SSSD and mail servers hold one open.
   # idle: 600
+  # Whether a bind with no name and no password succeeds, as a stock client's first step does even
+  # to read the rootDSE. It stays anonymous, which reads the rootDSE and nothing else.
+  # anonymous_bind: false
   # POSIX numbers, for posixAccount and posixGroup. A person or a group gets one when made, never
   # reused; POST /api/v1/ldap/posix/allocate numbers what was made before these were set. Each
   # range is first-last. All three of these go together.

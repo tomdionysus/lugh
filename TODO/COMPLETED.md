@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-06: `ldap.anonymous_bind`, and LDAP driven by a current client
+
+- `ldap.anonymous_bind` (the maintainer, 2026-11-06), default false. On, a bind with no name and no password succeeds on either listener and leaves the connection anonymous, reading the rootDSE and nothing else; a bound connection that does it gives up its identity. A name with an empty password stays refused, whatever the setting. It amends the plan's `BindRequest` row.
+- OpenLDAP 2.6.13's tools against a real `lugh-node`, doing their own TLS 1.3 with the certificate checked, over LDAPS and over StartTLS: the same forty cases as Apple's 2.4.28, and the same answers on both, apart from allocated numbers and the order of `member` values, which has none. Main-password binds and `ldappasswd` too. With the setting on, a stock `ldapsearch -x` reads the rootDSE, including over plaintext.
+- For clients: OpenLDAP's library swaps the name `localhost` for the machine's hostname before checking the certificate, so it fails on a certificate naming only `localhost`. Not Lugh's, noted in `docs/ldap.md`.
+- Tests: 652 to 658, green in the debug, ASan and TSan builds, repeated and shuffled.
+
 ## 2026-11-05: LDAP driven with real clients
 
 - Apple's OpenLDAP 2.4.28 tools (`ldapsearch`, `ldapwhoami`, `ldapadd`, `ldapmodify`, `ldapmodrdn`, `ldapcompare`, `ldapdelete`, `ldappasswd`) against a real `lugh-node`: binds, the whole tree, PAM-style lookups, filters, paging, limits, compare, add, modify, rename, delete, the Assertion control, critical controls refused, and Password Modify, which ended the person's session. All answered as `docs/ldap.md` says, with no secret in the log.

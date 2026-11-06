@@ -15,6 +15,7 @@ why it is so are in `TODO/2026-11-04-ldap.md`.
 | `ldap.base_dn` | The top of the tree, such as `dc=example,dc=com`. Required for either |
 | `ldap.most_pending` | Operations a connection may have queued before Lugh stops reading it. 8 by default |
 | `ldap.idle` | Seconds a connection may do nothing. 600 by default, since SSSD and mail servers hold one open |
+| `ldap.anonymous_bind` | Whether a bind with no name and no password succeeds. Off by default |
 | `ldap.posix.uid_range`, `gid_range` | Where POSIX numbers come from, each `first-last`. Left out, nothing is numbered |
 | `ldap.posix.primary_group` | The group whose number is every person's `gidNumber`. Required with the ranges |
 | `ldap.posix.home`, `shell` | `homeDirectory`, with `{name}` for the user's, and `loginShell`: `/home/{name}` and `/bin/bash` by default. Neither is stored |
@@ -53,8 +54,16 @@ creation; a wider range goes on from where the counter is.
 ## Binding
 
 Simple bind only, with a DN from the tree, over TLS only. SASL is `authMethodNotSupported`, and an
-empty password `inappropriateAuthentication`, never an anonymous bind. Every other refusal is
-`invalidCredentials` with the same message, after the same work.
+empty password `inappropriateAuthentication`. Every other refusal is `invalidCredentials` with the
+same message, after the same work.
+
+**Anonymous bind.** A stock client such as `ldapsearch -x` with no `-D` binds with no name and no
+password before anything else, even to read the rootDSE, and stops when that is refused. Off by
+default, it is refused, as `inappropriateAuthentication` over TLS and `confidentialityRequired` on
+the plaintext port. With `ldap.anonymous_bind` on, that one form succeeds on either listener, since
+it carries no credential, and leaves the connection anonymous: the rootDSE and nothing else, and on
+a connection that was bound, the identity is gone. It is not audited, since it proves nobody. A name
+with an empty password is never anonymous, whatever the setting.
 
 - **A person whose policy is `pwd`** may bind with their main password. It goes through the sign-in's
   back-off, lockout and audit, and wrong guesses count at the sign-in pages too.
@@ -143,8 +152,16 @@ that follow a StartTLS before the handshake end the connection rather than being
 Requests are limited as HTTP's are, by address until bound and by caller after (`busy`). A critical
 control Lugh does not do is `unavailableCriticalExtension`, and a non-critical one is ignored.
 
+## Clients
+
+Driven with OpenLDAP's tools, 2.6.13 directly and Apple's 2.4.28 through a proxy, since Apple's
+cannot do TLS 1.3. To read the rootDSE, `ldapsearch -x` with no `-D` needs `ldap.anonymous_bind`.
+OpenLDAP's library swaps the name `localhost` for the machine's hostname before checking the
+certificate, so name the host the certificate names, or an address in its SAN. SSSD, PAM and mail
+servers have not been tried.
+
 ## Not built
 
 Operator schema or custom attributes, arbitrary DNs, `newSuperior`, aliases, referrals, LDAP ACLs,
-SASL, server-side sort, VLV, persistent search, syncrepl, anonymous reads, `userPassword` in either
+SASL, server-side sort, VLV, persistent search, syncrepl, anonymous reads beyond the rootDSE, `userPassword` in either
 direction, and writing `memberOf`, `uidNumber`, `gidNumber` or `objectClass`.

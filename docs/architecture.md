@@ -332,7 +332,7 @@ As built (P5), `/api/v1` covers users, groups, memberships, factors, enrolment l
 | Tree | Fixed and generated from the directory: `ldap.base_dn` with `ou=people`, `ou=services` and `ou=groups`. Entries use `inetOrgPerson`, `posixAccount` and `groupOfNames` attributes, including `memberOf`. `posixAccount` needs `uidNumber`, `gidNumber` and `homeDirectory`, so Lugh allocates each user and group a stable number from a configured range and never reuses one |
 | Filters | Equality, presence, substring, and/or/not, with bounded depth and size |
 | Limits | Size, time and paging limits on searches |
-| Access | Anonymous bind is off. Service accounts that may search are granted it explicitly. Users whose policy requires a second factor bind with an app password, never their main password |
+| Access | Anonymous bind is off unless `ldap.anonymous_bind` turns it on, and then reads the rootDSE alone. Service accounts that may search are granted it explicitly. Users whose policy requires a second factor bind with an app password, never their main password |
 
 ## Configuration
 

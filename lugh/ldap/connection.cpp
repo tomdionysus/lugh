@@ -270,6 +270,9 @@ void Connection::_bind(std::int64_t id, BindRequest request) {
   _bound.reset();
   if (request.version != 3) return answer({ResultCode::protocol_error, "", "LDAP version 3 only"});
   if (!request.password) return answer({ResultCode::auth_method_not_supported, "", "simple bind only"});
+  // Before the TLS check: it carries no credential, and it is how a stock client starts, even to
+  // read the rootDSE that tells it StartTLS is there.
+  if (_parts.anonymous_bind && request.name.empty() && request.password->reveal().empty()) return answer({});
   if (!_tls) return answer({ResultCode::confidentiality_required, "", "StartTLS first"});
   _parts.binder->bind(std::move(request.name), std::move(*request.password), _address, kBindDeadline, _strand, [self, answer](BindAnswer bound) {
     self->_bound = std::move(bound.bound);

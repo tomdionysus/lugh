@@ -291,6 +291,7 @@ TEST(Config, TheLdapListeners) {
   EXPECT_EQ(none.ldap_starttls_port, 0);
   EXPECT_EQ(none.ldap_most_pending, 8u);
   EXPECT_EQ(none.ldap_idle_seconds, 600u);
+  EXPECT_FALSE(none.ldap_anonymous_bind) << "off unless asked for";
 
   TempDirectory dir;
   const auto path = dir.write("config.yaml", "ldap: { port: 636, starttls_port: 389, base_dn: 'dc=example,dc=com', most_pending: 4, idle: 60 }\n");
@@ -300,6 +301,9 @@ TEST(Config, TheLdapListeners) {
   EXPECT_EQ(config.ldap_base_dn, "dc=example,dc=com");
   EXPECT_EQ(config.ldap_most_pending, 4u);
   EXPECT_EQ(config.ldap_idle_seconds, 60u);
+  EXPECT_TRUE(Loader().load(with_config(dir.write("on.yaml", "ldap: { anonymous_bind: true }\n").string())).value.ldap_anonymous_bind);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("off.yaml", "ldap: { anonymous_bind: false }\n").string())).value.ldap_anonymous_bind);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("bad.yaml", "ldap: { anonymous_bind: perhaps }\n").string())).ok);
 
   // A listener needs to know the top of the tree, and is told it properly.
   EXPECT_FALSE(Loader().load(with_config(dir.write("a.yaml", "ldap: { port: 636 }\n").string())).ok);

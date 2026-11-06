@@ -536,6 +536,7 @@ int run(const cli::Options& options) {
     parts.writes = std::make_shared<ldap::Writes>(tree, services.directory, services.sessions, services.passwords, services.authenticator);
     parts.tls = tls.value;
     parts.throttle = throttle;
+    parts.anonymous_bind = config.ldap_anonymous_bind;
     parts.most_pending = config.ldap_most_pending;
     parts.idle = std::chrono::seconds(config.ldap_idle_seconds);
     const auto add_listener = [&](std::uint16_t port, bool with_tls) {
