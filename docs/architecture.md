@@ -388,6 +388,6 @@ The conventions are the stack's, in `CONTRIBUTING.md`: C++20, `.clang-format` (G
 9. ~~**Second factor for everyone:**~~ `mfa` is the default for every person, with `phr` (WebAuthn, P11) for infrastructure admin apps (the maintainer, 2026-11-13).
 10. **T.O.M.S sites:** sites run plain HTTP over WireGuard. Do they get TLS for the OIDC redirect, or does T.O.M.S sign in through Lugh only at the hub?
 11. ~~**Break-glass accounts:**~~ One local break-glass account per project, local login off for everyone else (the maintainer, 2026-11-13).
-12. **Macha:** the client gets a Lugh token and exchanges it at a node for a Macha session (proposed), or Macha accepts Lugh access tokens directly on every request?
-13. **AthenaSIP subscribers:** leave SIP Digest entirely outside Lugh (proposed), or have Lugh hold and provision SIP credentials later?
-14. **Where Lugh lives:** one public hostname for the whole fleet (e.g. `id.blackraven.co.nz`)? Each Blackraven app's redirect URI and the `iss` claim depend on it.
+12. ~~**Macha:**~~ The client gets a Lugh token and exchanges it once at a node for a Macha session (the maintainer, 2026-11-13); Macha's per-request path stays its own.
+13. ~~**AthenaSIP subscribers:**~~ SIP Digest stays entirely outside Lugh (the maintainer, 2026-11-13); Lugh covers AthenaSIP's admin sign-in only.
+14. ~~**Where Lugh lives:**~~ A hostname per site, each site's Lugh its own issuer (the maintainer, 2026-11-13). So an app that spans sites trusts several issuers, and `lugh_client` (P10) must verify against more than one issuer and its keys.
