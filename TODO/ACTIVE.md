@@ -25,6 +25,10 @@ Not yet tried on Linux: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DON
 
 GitHub's `main` carries one commit this tree was never based on: aaac977 "Update" (the maintainer, 2026-10-29), Lugh building under Alpine (musl, GCC 15) for Raven, the maintainer's planned Alpine distribution, which every project of the stack will run under. It adds `deploy/openrc/` (the init script, its conf.d, and `lugh-master-key`, sealing the master key under the arm64 build node's OTP device key in place of `systemd-creds`), `GNUInstallDirs` so a package at `/usr` reads `/etc/lugh`, `deploy/lugh.service.in`, `LUGH_INSTALL_SYSTEMD` and `LUGH_INSTALL_OPENRC`, the installed config path in the version header, three GCC 15 `co_await` workarounds (no longer applicable above the frozen layers) and four test tweaks. It is on the old `src/` layout; a trial merge gave ten conflicts, mostly docs, CMake and the deleted coroutine files. The maintainer, 2026-11-04: real, leave it there, not important now. So local `main` (the 0.1.0 tag, pushed) is not pushed, since it would not fast-forward; when the time comes, merge `origin/main` into `develop` on the new layout, test in all three trees, fast-forward `main`, push.
 
+## The stack serving Lugh (2026-11-13)
+
+The maintainer, 2026-11-13: Dannan and Dagda must support Macha, Lugh and Lir as first-class citizens, "the purpose of splitting out the technologies". Lugh's needs, each with what was found in the other trees and what would show it, are `2026-11-13-lugh-needs-of-the-stack.md`, sent to the Dagda and Dannan sessions (Lir and Macha copied). Waiting on their answers: Dagda's plan and dates for the items not built (G2, G4 to G12, G14), and Dannan's answers to N1, N6, N8 and Alpine.
+
 ## Waiting on the maintainer
 
 - The open questions in `docs/architecture.md`, "Still open": question 2 (single-use grants) is needed by P6 and P8, question 14 (Lugh's hostname) by P13.

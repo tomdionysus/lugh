@@ -1,0 +1,69 @@
+# What Lugh needs of Dannan and Dagda
+
+The maintainer, 2026-11-13: Dannan and Dagda must support Macha, Lugh and Lir as first-class citizens, "not as afterthoughts"; that was the
+purpose of splitting the technologies out. This is Lugh's side of that: every need, what Lugh does with it, what I found in the
+other trees on 2026-11-13, and what would show it works. The stack document (`../dagda/TODO/2026-11-03-stack.md`) is the design;
+this is the checklist against it. Status is my reading of the code and capability reports (Dagda `0.1.4`, its report of
+2026-11-10; Dannan `0.5.3`, its report of 2026-11-06), for the owning session to correct.
+
+Lugh today keeps everything in its own sealed store, frozen until Dagda carries its spaces (the maintainer: "Keep the store until Dagda"). P8
+moves it. What follows is what P8 cannot be done without.
+
+## The shape of Lugh's data
+
+| What | Where | Size, to plan for | Writes |
+|---|---|---|---|
+| Users, groups, memberships, scope grants, applications, policies, consents | `lugh/scope`, every node a member | 10,000 users, 1,000 groups, 1,000 applications; records under 4 KiB | A few a minute; bursts of hundreds when provisioning over LDAP or the API |
+| Password hashes, factors, recovery codes, app passwords, signing keys, refresh-token families, sessions | `lugh/secrets`, Lugh nodes only, others blind at most | As above, plus up to 50,000 live sessions and their refresh families | Sign-in storms: up to 50 commits a second cluster-wide for a minute; steady about 1 a second. A session's last-seen is written at most once a minute |
+| Authorisation codes, PAR URIs, device codes, TOTP last-used steps | Node-local, one space per Lugh node | Thousands live; each lives 60 s to 10 min | Tens a second at peak; every one short-lived |
+| The audit chain | One per node (node-local, or a head space per node, append-only by Lugh's merge) | Grows for ever, exported | One entry per change and sign-in |
+| Published signing keys (JWKS) | A retained value in `lugh/scope` (the maintainer, P6 decision 3), for Lir and others | Under 8 KiB | On rotation, every 90 days |
+
+Every HTTP request and every LDAP operation resolves its caller from memory without waiting; Lugh keeps derived indexes (name,
+email, sessions by handle) in memory, rebuilt from the spaces.
+
+## Of Dagda
+
+| # | Need | Why Lugh needs it | Found 2026-11-13 | Would show it |
+|---|---|---|---|---|
+| G1 | An every-node head space under the domain `lugh/scope` | Scope must be readable on every node that counts toward a write floor | Built: every-node spaces (C10) | A Lugh-shaped space on the neutral owner, three nodes |
+| G2 | A space only Lugh nodes can read: `lugh/secrets` | Password hashes and factor secrets must not be readable off Lugh nodes (Decided 6) | **Not built.** `replicas: N` is refused (C9, "L2"); blind replicas and several domains are L8 | A secret written on a Lugh node, held blind (or not held) on a Macha-only node, readable on another Lugh node |
+| G3 | The owner's merge, with the common ancestor | Lugh's merge: LWW attributes, versioned credentials, grow-only tombstones, duplicate names resolved deterministically (requirement e) | Built: `Merge::merge(base, heads)` (`heads/space.h:124`) | Two nodes split; both create "alice", one removes a user the other edits; after the merge one alice, the removal stands |
+| G4 | A conditional write on one node (Lugh's ETags, Decided 17), in Dannan's shape: deadline, caller's executor, `done` | Every API write is If-Match; the whole of Lugh is callback style | `mutate` exists (`space.h:430`), synchronous with retries. **Is there the Context noun in callback shape?** | A stale version refused, a fresh one taken, completion posted on the caller's executor |
+| G5 | The Replicated level with k per space | Credential changes and revocations are Replicated (Decided, Lugh's `ACTIVE.md`); Lugh answers "applied, n nodes pending" from the evidence | **Not built** (L3) | A Replicated write on five nodes with one away: success with that node named pending, then cleared |
+| G6 | Reading without waiting, and learning what changed | Lugh's indexes must follow every change on any node: a disabled user stops at once everywhere | `current()` reads nothing (C13); `entries(...)` pages a tree. **A notice when a space's head moves, and the keys that changed between two views, at the cost of what changed?** Not found | A change on node A seen on node B by a notice, with the changed keys, without walking the tree |
+| G7 | Node-local spaces, never rolled back | Single-use grants (codes are redeemed once), TOTP steps (a replayed code must fail), the audit chain (requirement b, c, h) | **Not built** (L5, L9) | A code redeemed once survives a crash and is refused the second time; nothing of it leaves the node; an old commit restored is refused |
+| G8 | Churn of short-lived records | Grants live 60 s to 10 min; tombstones must go after their window, not grow for ever | Unknown for node-local spaces | Ten thousand grants made and expired; the space stays bounded |
+| G9 | Retained values | JWKS in `lugh/scope` for Lir's token checks (P6 decision 3) | **Not built** (L7) | A rotated key seen by a subscriber on another node |
+| G10 | Per-origin counters | Sign-in back-off and lockout across nodes; today per node | **Not built** (E10, marked "Lugh's") | Wrong passwords on two nodes counted together |
+| G11 | A lease, for single-writer jobs | Only one node rotates signing keys at a time | Lease template built (E1 to E9); head-backed leases **not built** (L1) | Two nodes due to rotate; one does |
+| G12 | The domain catalogue | `lugh/scope` and `lugh/secrets` made at genesis; `lugh/secrets` wrapped to a node when it advertises `lugh`, and unwrapped when it stops | **Not built** (L8) | A node gains and loses the `lugh` capability and its access follows |
+| G13 | The scope check on the write floor | A non-node principal's write decided by Lugh's `ScopeSource` | Built (H29; `StoreScope.*`) | Already shown |
+| G14 | A multi-node test fixture with Dagda nodes and heads on, stepped time | Lugh's multi-node tests (rule 3: no fixture of Lugh's own) | **Unknown.** Dannan's in-process cluster exists | Lugh's P8 tests written against it |
+| G15 | The load above | Every row of the table | Not measured for Lugh's shape | A measurement at the numbers above |
+
+## Of Dannan
+
+| # | Need | Found 2026-11-13 |
+|---|---|---|
+| N1 | `ScopeSource` and `install_scope_source` | Built (`contract/scope.h:40`, `node_test.cpp:908`). **Question:** which writers carry a non-node principal today? If none, the seam is unexercised outside its test |
+| N2 | Node key custody, `derive_local`, for node-local domain keys | Built (`context.h:257`, `node_test.cpp:759`) |
+| N3 | CA-signed node revocation, closing sessions at once (requirement f) | Built (`identity/certificate.h:81`) |
+| N4 | Placement with the caller's salt, and a call to the owning node that fails closed, for TOTP | Built (`placement::Scheme`, `context.h:128`; `Routes::call` with deadlines) |
+| N5 | A `lugh` capability advert | Built (adverts) |
+| N6 | Work classes for Argon2id, so hashing cannot starve the node | `sched/` built. **Question:** the class to use, and whether Lugh's own HTTP and LDAP io_context should run on the node's threads |
+| N7 | Readiness planes for Lugh's spaces | Built (`Readiness`) |
+| N8 | Lugh moves from Dannan 0.4.1 to the 0.5.x Dagda pins | **Question:** anything in 0.4 to 0.5 that changes what Lugh links (crypto, signing, settings reader, percent-encoding) |
+| N9 | One Dannan version across the stack (Lir's N4) | Lugh links both libraries, so Dagda's pin is Lugh's; a release train of Dannan, then Dagda, then Lugh and Lir |
+| N10 | A partition view, majority or minority side (Lir's N3) | Wanted, not needed for P8: under the accepted partition bound (requirement d) Lugh serves on both sides, but it should say so, in Status and the audit log, rather than count the roster itself |
+
+## Of both
+
+- **Alpine (musl, GCC 15)** for Raven: every project must build and pass there. Has either been built on Alpine?
+- **Evidence, not booleans**: each of the above shown by a named case, as the capability reports do for Macha.
+
+## Order
+
+Dagda's plan put every Lugh item (its L1 to L9) after Macha's port. Under the maintainer's ruling they are not afterthoughts. What Lugh asks
+for is a plan, from the Dagda session, that carries G2, G4 to G12 and G14 alongside Macha's work, and the date each lands, so P8
+can start on the first of them rather than waiting for all.
