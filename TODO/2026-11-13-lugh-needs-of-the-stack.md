@@ -74,7 +74,10 @@ Proposals to the maintainer where marked; nothing changes in Dannan until he rul
   view is below.
 - **N8:** nothing Lugh links changed from 0.4.1 to 0.5.6 (identity, signing, Argon2, custody, config and encoding identical); `context.h`
   only gains. To know: a call is watched for progress only if it asks, and call deadlines follow injected time.
-- **Alpine:** never built before; an amd64 musl build and test run is under way. arm64 needs real hardware or CI.
+- **Alpine:** passes on amd64 with no source change (2026-11-13: Alpine 3.24.2, musl, GCC 15.2.0, Alpine's own Boost, OpenSSL, yaml-cpp
+  and GoogleTest; 646 passed, 1 skipped as root, as on Debian). arm64 not shown: emulation misreports `posix_spawn`, so Dannan proposes
+  an Alpine step in hosted CI on both architectures. Raven runs on the arm64 build node (the maintainer's Alpine commit `aaac977` seals under its OTP key),
+  so arm64 is the proof Lugh waits for.
 - **N9:** **proposal to the maintainer:** patch releases keep the ABI (abidiff in CI), SONAME at major.minor, so any 0.5.x patch loads under one
   Dagda tag. Until then, pin the Dannan the Dagda tag was built on.
 - **N10:** one reading on `Nodes`, measured against the roster as last agreed (shrunk only by an operator's retire, never by absence),
