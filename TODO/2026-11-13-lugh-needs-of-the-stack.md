@@ -36,7 +36,7 @@ email, sessions by handle) in memory, rebuilt from the spaces.
 | G8 | Churn of short-lived records | Grants live 60 s to 10 min; tombstones must go after their window, not grow for ever | Unknown for node-local spaces | Ten thousand grants made and expired; the space stays bounded |
 | G9 | Retained values | JWKS in `lugh/scope` for Lir's token checks (P6 decision 3) | **Not built** (L7) | A rotated key seen by a subscriber on another node |
 | G10 | Per-origin counters | Sign-in back-off and lockout across nodes; today per node | **Not built** (E10, marked "Lugh's") | Wrong passwords on two nodes counted together |
-| G11 | A lease, for single-writer jobs | Only one node rotates signing keys at a time | Lease template built (E1 to E9); head-backed leases **not built** (L1) | Two nodes due to rotate; one does |
+| G11 | A lease, for single-writer jobs and per user | Only one node rotates signing keys at a time; and every TOTP check holds that user's lease (the maintainer, 2026-11-13), so at sign-in rates | Lease template built (E1 to E9); head-backed leases **not built** (L1) | Two nodes due to rotate; one does |
 | G12 | The domain catalogue | `lugh/scope` and `lugh/secrets` made at genesis; `lugh/secrets` wrapped to a node when it advertises `lugh`, and unwrapped when it stops | **Not built** (L8) | A node gains and loses the `lugh` capability and its access follows |
 | G13 | The scope check on the write floor | A non-node principal's write decided by Lugh's `ScopeSource` | Built, across replicas: `StoreScope.AnInstalledSourceRefusesOnePrefixOnEveryReplica` | Shown |
 | G14 | A multi-node test fixture with Dagda nodes and heads on, stepped time | Lugh's multi-node tests (rule 3: no fixture of Lugh's own) | **Unknown.** Dannan's in-process cluster exists | Lugh's P8 tests written against it |
@@ -132,7 +132,8 @@ member, so sign-in fails there until then.
   abidiff in CI); the partition reading (an even split is a minority; joins add to the agreed roster, only a retire removes); the
   shared listener below the protocols with Lugh's nine requirements; CPU admission in a class-aware pool. Dannan's order: the ABI
   promise, Macha's items, the partition reading, CPU admission, the listener.
-- **Alpine, not now**, for Dannan and Dagda alike. arm64 musl, which Raven needs, stays unproven until the maintainer revisits it.
+- **Alpine, not now**, for Dannan and Dagda alike; and Raven is dropped from all of Lugh's development for now (the maintainer, 2026-11-13).
+- **TOTP replay under a per-user Dagda lease** (the maintainer, 2026-11-13), not the owning node's node-local space: leases are then on the sign-in path, at sign-in rates (told to Dagda).
 
 ## Of both
 

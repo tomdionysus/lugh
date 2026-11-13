@@ -378,14 +378,14 @@ The conventions are the stack's, in `CONTRIBUTING.md`: C++20, `.clang-format` (G
 ## Still open
 
 1. ~~**Node identity**~~: Dannan's, per-node certificates from a cluster CA over keys in key custody, with CA-signed revocation (Dannan step 10, 09a525f).
-2. **Single-use grants:** node-local or under a Dagda lease (the maintainer, 2026-11-04, "Lugh's design"). Which, for each kind of grant, is still to be designed with P6.
+2. ~~**Single-use grants:**~~ Codes, device codes and refresh tokens are settled by the P6 design (`TODO/2026-11-04-oauth.md`). The TOTP last-used step is under a per-user Dagda lease (the maintainer, 2026-11-13): whichever node checks a code holds that user's lease, and the step lives in `lugh/secrets`, so a sign-in survives a node going down.
 3. ~~**OIDC:** in scope from the start, or plain OAuth 2 first?~~ From the start (the maintainer, 2026-11-04; the P6 design is `TODO/2026-11-04-oauth.md`, which also settles question 2 for codes, device codes and refresh tokens).
 4. **The C++ library's embedded mode:** the client side (`RelyingParty`, token verification, flows) is now required for SSO. Is the embedded mode, which holds a replica of the directory in the host process, still wanted? Full replication makes it simpler, but it puts every sealed credential into that process.
 5. ~~**LDAP:** read-only bind and search, or writes?~~ Writable, mapped onto Lugh's model, with Password Modify for a user's own password (the maintainer, 2026-11-04, "level 2"; `TODO/2026-11-04-ldap.md`). Still open there: TLS 1.2 for old LDAP clients, and five smaller questions.
 6. **Federation:** should Lugh sign users in through upstream identity providers (Google, Microsoft, another OIDC provider)? It is not planned here.
 7. **Certificates:** ACME for the public TLS certificate, or operator-supplied files only?
-8. **Target platform:** Linux (Ubuntu 26.04, GCC 15) as for blackraven-admin, with macOS for development only?
-9. **Second factor for everyone:** `mfa` as the default for every person, with `phr` (WebAuthn) for infrastructure admin apps (proposed)? Or optional for some groups?
+8. ~~**Target platform:**~~ Linux with macOS for development; Raven (Alpine on the arm64 build node) is dropped from all development for now (the maintainer, 2026-11-13).
+9. ~~**Second factor for everyone:**~~ `mfa` is the default for every person, with `phr` (WebAuthn, P11) for infrastructure admin apps (the maintainer, 2026-11-13).
 10. **T.O.M.S sites:** sites run plain HTTP over WireGuard. Do they get TLS for the OIDC redirect, or does T.O.M.S sign in through Lugh only at the hub?
 11. **Break-glass accounts:** one local account per project with local login off for everyone else (proposed), or keep local login available as well?
 12. **Macha:** the client gets a Lugh token and exchanges it at a node for a Macha session (proposed), or Macha accepts Lugh access tokens directly on every request?

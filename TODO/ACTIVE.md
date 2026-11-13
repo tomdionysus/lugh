@@ -4,7 +4,7 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here
 
-2026-11-05: **P6 and LDAP are done** on `develop`: OAuth and OIDC (`docs/oauth.md`, plan `2026-11-04-oauth.md`) and writable LDAP (`docs/ldap.md`, plan `2026-11-04-ldap.md`), each passing on the real binary. Next is P8 (hosting on Dannan's Context and Dagda), which waits on Dagda's heads. `lugh_tests` count and their history are in `COMPLETED.md`. Tests are run repeated and shuffled in the debug, ASan and TSan builds before a commit (the maintainer, 2026-11-04: "No flaky tests"). Commits since `0.1.0` are on `develop` and not pushed.
+2026-11-05: **P6 and LDAP are done** on `develop`: OAuth and OIDC (`docs/oauth.md`, plan `2026-11-04-oauth.md`) and writable LDAP (`docs/ldap.md`, plan `2026-11-04-ldap.md`), each passing on the real binary. Next is P8 (hosting on Dannan's Context and Dagda), which waits on Dagda's heads. `lugh_tests` count and their history are in `COMPLETED.md`. Tests are run repeated and shuffled in the debug, ASan and TSan builds before a commit (the maintainer, 2026-11-04: "No flaky tests"). `develop` is pushed (2026-11-13, at `9cc513b`); `main` is not, for the reason below.
 
 Confirmed by the maintainer (2026-11-13), all as built: a session's scopes are read again within a minute rather than at once; CSRF only on requests that may change something; role mapping in the ID token and userinfo, not access tokens; an application with no audiences gets its `client_id` as `aud`; mTLS on its own optional listener (`oauth.mtls_port`); back-channel logouts waiting and what stands behind an opaque access token are in memory until P8; leaving Lugh after a form goes by a page rather than a 303 (not yet tried in a real browser); everyone bound may search from LDAP's fixed containers; a person whose policy is `pwd` binds with their main password even with a factor enrolled; HTTP's rate limits apply to LDAP. The LDAP fuzz targets have only been syntax-checked, since this machine has no libFuzzer.
 
@@ -20,6 +20,8 @@ What was next, in order:
 3. `docs/architecture.md` rewritten around the stack.
 
 Not yet tried on Linux: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DONTDUMP` are written for Ubuntu 26.04's systemd and kernel, and only the macOS paths have run. Check them on the first node.
+
+Raven (Alpine on the arm64 build node) is dropped from all development for now (the maintainer, 2026-11-13); the commit below stays where it is.
 
 ## Not merged yet: Alpine and OpenRC (origin/main aaac977)
 
