@@ -29,6 +29,10 @@ GitHub's `main` carries one commit this tree was never based on: aaac977 "Update
 
 The maintainer, 2026-11-13: Dannan and Dagda must support Macha, Lugh and Lir as first-class citizens, "the purpose of splitting out the technologies". Lugh's needs, each with what was found in the other trees and what would show it, are `2026-11-13-lugh-needs-of-the-stack.md`, sent to the Dagda and Dannan sessions (Lir and Macha copied). Waiting on their answers: Dagda's plan and dates for the items not built (G2, G4 to G12, G14), and Dannan's answers to N1, N6, N8 and Alpine.
 
+## Waiting on Dannan
+
+- Orphaned test nodes (the maintainer, 2026-11-13: fix it). A `lugh_tests` run that crashes or is killed leaves the `lugh-node` processes its tests started running (five were found, a day old). The launcher is Dannan's `dannan/test/fixtures/child_process.h`, whose destructor never runs then; Dagda and Lir share it. Asked of the Dannan session: a reaper per child that ends it when the test process dies, any way. Lugh takes it at Dannan's next tag.
+
 ## Waiting on the maintainer
 
 - The open questions in `docs/architecture.md`, "Still open": question 2 (single-use grants) is needed by P6 and P8, question 14 (Lugh's hostname) by P13.
