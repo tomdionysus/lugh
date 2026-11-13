@@ -57,6 +57,37 @@ email, sessions by handle) in memory, rebuilt from the spaces.
 | N9 | One Dannan version across the stack (Lir's N4) | Lugh links both libraries, so Dagda's pin is Lugh's; a release train of Dannan, then Dagda, then Lugh and Lir |
 | N10 | A partition view, majority or minority side (Lir's N3) | Wanted, not needed for P8: under the accepted partition bound (requirement d) Lugh serves on both sides, but it should say so, in Status and the audit log, rather than count the roster itself |
 
+### Dannan's answers (2026-11-13)
+
+Proposals to the maintainer where marked; nothing changes in Dannan until he rules.
+
+- **N1:** no writer carries a non-node principal; the seam's only exercise is its own one-node test. The cross-node case belongs in
+  Dagda, where writes are stored: a directory principal's write decided by the source on the storing replica, refused when the scope
+  says no, with the generation as evidence. Dannan would add a two-node test that each node's source decides for calls arriving there
+  (if the maintainer agrees). Lugh is to be the seam's first real user.
+- **N6:** hashing is foreground work, bounded by memory: reserve each hash's `memory_kib` through `Context::budget().reserve(foreground)`
+  first and answer "try later" at once when there is no room, so a storm costs at most the foreground budget. Hash on Lugh's own
+  worker threads registered with `Context::threads()`, never the node's executor. Gap: Dannan admits by memory, not CPU; Dagda has
+  Macha's CPU pacing. **Proposal to the maintainer:** a class-aware worker pool with CPU pacing moves into Dannan. Listeners: Lugh keeps its own
+  io_context for HTTPS and LDAP for now. **Proposal to the maintainer:** a shared public listener in Dannan (accept and per-source limits, TLS),
+  since Lir needs MQTT listeners and AthenaSIP SIP. This touches the maintainer's decision 9 ("HTTP stays each hosted system's own"): Lugh's
+  view is below.
+- **N8:** nothing Lugh links changed from 0.4.1 to 0.5.6 (identity, signing, Argon2, custody, config and encoding identical); `context.h`
+  only gains. To know: a call is watched for progress only if it asks, and call deadlines follow injected time.
+- **Alpine:** never built before; an amd64 musl build and test run is under way. arm64 needs real hardware or CI.
+- **N9:** **proposal to the maintainer:** patch releases keep the ABI (abidiff in CI), SONAME at major.minor, so any 0.5.x patch loads under one
+  Dagda tag. Until then, pin the Dannan the Dagda tag was built on.
+- **N10:** one reading on `Nodes`, measured against the roster as last agreed (shrunk only by an operator's retire, never by absence),
+  so neither side of a split calls itself the majority.
+
+**What a shared listener must cover for Lugh**, sent to Dannan: an operator-provided certificate and key per listener (browsers and
+LDAP clients check a public name, not the cluster CA), TLS 1.3 only; a second listener that asks for client certificates against a
+configured CA and hands the certificate's subject and thumbprint up (mTLS, RFC 8705); a plaintext listener whose connection upgrades
+to TLS in place on the hosted system's word (LDAP StartTLS), with nothing read past the upgrade request until the handshake; the peer
+address, and trusted proxies' X-Forwarded-For for HTTP; per-address limits before a credential and per-caller limits after, shared
+across listeners; connection caps and idle and handshake deadlines per listener; and a stop that closes what is open. The protocol
+(HTTP, LDAP) stays Lugh's, as the maintainer decided; a shared accept-and-TLS layer under it is welcome if it covers the above.
+
 ## Of both
 
 - **Alpine (musl, GCC 15)** for Raven: every project must build and pass there. Has either been built on Alpine?
