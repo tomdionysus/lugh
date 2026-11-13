@@ -39,6 +39,10 @@ The maintainer, 2026-11-13: Dannan and Dagda must support Macha, Lugh and Lir as
 
 Dannan's identity step (step 10, Dannan 09a525f, design in `../dannan/TODO/2026-11-04-identity.md`) gives what Lugh fills when it hosts on Dannan: the scope seam, `dannan/contract/scope.h` (`contract::Principal`, `contract::ScopeDecision`, and `ScopeSource::may_write(principal, prefix)`, answered from memory and never waiting), installed with `context.identity().install_scope_source(...)`; without a source the cluster's own nodes may write and nobody else. Single-node revocation is CA-signed, kept by every node and gossiped, closing the revoked node's sessions at once. Node keys live in Dannan's key custody, like Lugh's master key. Not tagged; whether to cut 0.3.0 is the maintainer's.
 
+## For P10, from Lir (2026-11-13)
+
+Lir's plugin sees only its `TokenVerifier` seam (`lir/auth/tokens.h`); `lugh_client` is to be that verifier, and Lir parses no JOSE and fetches no keys. Lir asks two things of `lugh_client`, agreed: keep where the signing keys come from behind it (retained values in `lugh/scope` once Dagda has them, HTTPS JWKS until then); and keep HTTPS working for a node whose cluster has no Lugh node or is not a member of `lugh/scope`, since Lir must also serve as an ordinary relying party.
+
 ## For P6, from Lir
 
 The maintainer decided Lir's authorisation (2026-11-04, via the Lir session): MQTT topic permissions are scopes carried in the Lugh token, publish and subscribe topic filters, checked through Dannan's scope check; Lir keeps no ACL. A client presents the token as the MQTT CONNECT password, and an MQTT 5 client may re-authenticate with the enhanced authentication method "lugh". The grammar of those scopes is Lugh's to define, in P6 with the rest of the scope model (group-to-scope grants, app-defined scopes), and Lir waits on it. Also from the maintainer, via Lir: the repositories are the sources of truth; the Claude Docs the projects started from are starters only and will be deleted, not read for direction or edited.
