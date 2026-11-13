@@ -380,14 +380,14 @@ The conventions are the stack's, in `CONTRIBUTING.md`: C++20, `.clang-format` (G
 1. ~~**Node identity**~~: Dannan's, per-node certificates from a cluster CA over keys in key custody, with CA-signed revocation (Dannan step 10, 09a525f).
 2. ~~**Single-use grants:**~~ Codes, device codes and refresh tokens are settled by the P6 design (`TODO/2026-11-04-oauth.md`). The TOTP last-used step is under a per-user Dagda lease (the maintainer, 2026-11-13): whichever node checks a code holds that user's lease, and the step lives in `lugh/secrets`, so a sign-in survives a node going down.
 3. ~~**OIDC:** in scope from the start, or plain OAuth 2 first?~~ From the start (the maintainer, 2026-11-04; the P6 design is `TODO/2026-11-04-oauth.md`, which also settles question 2 for codes, device codes and refresh tokens).
-4. **The C++ library's embedded mode:** the client side (`RelyingParty`, token verification, flows) is now required for SSO. Is the embedded mode, which holds a replica of the directory in the host process, still wanted? Full replication makes it simpler, but it puts every sealed credential into that process.
+4. ~~**The C++ library's embedded mode:**~~ Dropped (the maintainer, 2026-11-13). `lugh_client` is a relying party and token verifier only; no credential leaves a Lugh node.
 5. ~~**LDAP:** read-only bind and search, or writes?~~ Writable, mapped onto Lugh's model, with Password Modify for a user's own password (the maintainer, 2026-11-04, "level 2"; `TODO/2026-11-04-ldap.md`). Still open there: TLS 1.2 for old LDAP clients, and five smaller questions.
-6. **Federation:** should Lugh sign users in through upstream identity providers (Google, Microsoft, another OIDC provider)? It is not planned here.
-7. **Certificates:** ACME for the public TLS certificate, or operator-supplied files only?
+6. ~~**Federation:**~~ Not planned (the maintainer, 2026-11-13): Lugh is the identity provider and defers to none.
+7. ~~**Certificates:**~~ Operator-supplied files only (the maintainer, 2026-11-13), renewed by whatever the host runs; Lugh holds no ACME account.
 8. ~~**Target platform:**~~ Linux with macOS for development; Raven (Alpine on the arm64 build node) is dropped from all development for now (the maintainer, 2026-11-13).
 9. ~~**Second factor for everyone:**~~ `mfa` is the default for every person, with `phr` (WebAuthn, P11) for infrastructure admin apps (the maintainer, 2026-11-13).
 10. **T.O.M.S sites:** sites run plain HTTP over WireGuard. Do they get TLS for the OIDC redirect, or does T.O.M.S sign in through Lugh only at the hub?
-11. **Break-glass accounts:** one local account per project with local login off for everyone else (proposed), or keep local login available as well?
+11. ~~**Break-glass accounts:**~~ One local break-glass account per project, local login off for everyone else (the maintainer, 2026-11-13).
 12. **Macha:** the client gets a Lugh token and exchanges it at a node for a Macha session (proposed), or Macha accepts Lugh access tokens directly on every request?
 13. **AthenaSIP subscribers:** leave SIP Digest entirely outside Lugh (proposed), or have Lugh hold and provision SIP credentials later?
 14. **Where Lugh lives:** one public hostname for the whole fleet (e.g. `id.blackraven.co.nz`)? Each Blackraven app's redirect URI and the `iss` claim depend on it.

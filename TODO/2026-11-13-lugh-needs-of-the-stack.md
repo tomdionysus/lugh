@@ -133,7 +133,7 @@ member, so sign-in fails there until then.
   shared listener below the protocols with Lugh's nine requirements; CPU admission in a class-aware pool. Dannan's order: the ABI
   promise, Macha's items, the partition reading, CPU admission, the listener.
 - **Alpine, not now**, for Dannan and Dagda alike; and Raven is dropped from all of Lugh's development for now (the maintainer, 2026-11-13).
-- **TOTP replay under a per-user Dagda lease** (the maintainer, 2026-11-13), not the owning node's node-local space: leases are then on the sign-in path, at sign-in rates (told to Dagda).
+- **TOTP replay under a per-user Dagda lease** (the maintainer, 2026-11-13), not the owning node's node-local space: leases are then on the sign-in path, at sign-in rates (told to Dagda). Dagda: one lease space keyed by user; an acquire is one replicated commit, so it is in slice 0's measurement (50 a second over 10,000 keys, p50 and p99). Consequence, stated: during a split a node that cannot reach the lease space's replicas cannot grant the lease, so a TOTP sign-in on that side fails closed ("try again shortly") rather than risk a replay. Recovery codes are single-use too and take the same lease.
 
 ## Of both
 
