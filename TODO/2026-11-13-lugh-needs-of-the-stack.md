@@ -29,7 +29,7 @@ email, sessions by handle) in memory, rebuilt from the spaces.
 | G1 | An every-node head space under the domain `lugh/scope` | Scope must be readable on every node that counts toward a write floor | Built: every-node spaces (C10) | A Lugh-shaped space on the neutral owner, three nodes |
 | G2 | A space only Lugh nodes can read: `lugh/secrets` | Password hashes and factor secrets must not be readable off Lugh nodes (Decided 6) | **Not built.** `replicas: N` is refused (C9, "L2"); blind replicas and several domains are L8 | A secret written on a Lugh node, held blind (or not held) on a Macha-only node, readable on another Lugh node |
 | G3 | The owner's merge, with the common ancestor | Lugh's merge: LWW attributes, versioned credentials, grow-only tombstones, duplicate names resolved deterministically (requirement e) | Built: `Merge::merge(base, heads)` (`heads/space.h:124`) | Two nodes split; both create "alice", one removes a user the other edits; after the merge one alice, the removal stands |
-| G4 | A conditional write on one node (Lugh's ETags, Decided 17), in Dannan's shape: deadline, caller's executor, `done` | Every API write is If-Match; the whole of Lugh is callback style | `mutate` exists (`space.h:430`), synchronous with retries. **Is there the Context noun in callback shape?** | A stale version refused, a fresh one taken, completion posted on the caller's executor |
+| G4 | A conditional write on one node (Lugh's ETags, Decided 17), in Dannan's shape: deadline, caller's executor, `done` | Every API write is If-Match; the whole of Lugh is callback style | Built: `Context::Heads::mutate` (`context.h:302`) is callback-shaped; corrected by Dagda | A stale version refused, a fresh one taken, completion posted on the caller's executor |
 | G5 | The Replicated level with k per space | Credential changes and revocations are Replicated (Decided, Lugh's `ACTIVE.md`); Lugh answers "applied, n nodes pending" from the evidence | **Not built** (L3) | A Replicated write on five nodes with one away: success with that node named pending, then cleared |
 | G6 | Reading without waiting, and learning what changed | Lugh's indexes must follow every change on any node: a disabled user stops at once everywhere | `current()` reads nothing (C13); `entries(...)` pages a tree. **A notice when a space's head moves, and the keys that changed between two views, at the cost of what changed?** Not found | A change on node A seen on node B by a notice, with the changed keys, without walking the tree |
 | G7 | Node-local spaces, never rolled back | Single-use grants (codes are redeemed once), TOTP steps (a replayed code must fail), the audit chain (requirement b, c, h) | **Not built** (L5, L9) | A code redeemed once survives a crash and is refused the second time; nothing of it leaves the node; an old commit restored is refused |
@@ -38,7 +38,7 @@ email, sessions by handle) in memory, rebuilt from the spaces.
 | G10 | Per-origin counters | Sign-in back-off and lockout across nodes; today per node | **Not built** (E10, marked "Lugh's") | Wrong passwords on two nodes counted together |
 | G11 | A lease, for single-writer jobs | Only one node rotates signing keys at a time | Lease template built (E1 to E9); head-backed leases **not built** (L1) | Two nodes due to rotate; one does |
 | G12 | The domain catalogue | `lugh/scope` and `lugh/secrets` made at genesis; `lugh/secrets` wrapped to a node when it advertises `lugh`, and unwrapped when it stops | **Not built** (L8) | A node gains and loses the `lugh` capability and its access follows |
-| G13 | The scope check on the write floor | A non-node principal's write decided by Lugh's `ScopeSource` | Built (H29; `StoreScope.*`) | Already shown |
+| G13 | The scope check on the write floor | A non-node principal's write decided by Lugh's `ScopeSource` | Built, across replicas: `StoreScope.AnInstalledSourceRefusesOnePrefixOnEveryReplica` | Shown |
 | G14 | A multi-node test fixture with Dagda nodes and heads on, stepped time | Lugh's multi-node tests (rule 3: no fixture of Lugh's own) | **Unknown.** Dannan's in-process cluster exists | Lugh's P8 tests written against it |
 | G15 | The load above | Every row of the table | Not measured for Lugh's shape | A measurement at the numbers above |
 
@@ -91,6 +91,25 @@ across listeners; connection caps and idle and handshake deadlines per listener;
 Dannan agreed (2026-11-13): the proposal is only that layer, so Decided 9 holds; the nine points are its requirements. Limits
 after a credential are a shared object Lugh charges and the listener consults at accept. Ports come from an inherited socket when
 one is given (systemd), otherwise bound with `CAP_NET_BIND_SERVICE` (OpenRC, Raven).
+
+### Dagda's design, and Lugh's review (2026-11-13)
+
+Dagda answered with one design for Macha, Lugh and Lir: `../dagda/TODO/2026-11-13-three-systems-design.md`, in slices, going to
+The maintainer after Lugh and Lir review it. Its corrections, checked in the code: G4 is built (`Context::Heads::mutate`, `context.h:302`, takes a
+deadline, executor and `done`), and so is G13 across replicas (`StoreScope.AnInstalledSourceRefusesOnePrefixOnEveryReplica`,
+`store_scope_test.cpp:124`; claims at `:179`). Slice 1 (node-local spaces, the change notice, the installed fixture) lets P8 start.
+
+Where Lugh found it short, sent to Dagda:
+
+1. Placement is not confidentiality: `lugh/secrets` needs a domain key only Lugh nodes hold in slice 2, not slice 5's catalogue.
+2. Every Lugh node must hold `lugh/secrets`, not N of them: callers are resolved from memory on whichever node a client reached.
+3. The audit log never drops an entry: an entry goes only on export's acknowledgement; at the bound an append is refused; no rollback.
+4. The per-origin counter must forget: slots expire after the owner's window, or a locked account stays locked.
+5. The rate measurement includes Lugh's shape, and the time from a commit on A to `watch` and `changed` on B.
+6. A named churn case for node-local spaces, with numbers.
+7. Each slice's tag keeps what the last gave, since Lugh builds on slices before v2 is frozen.
+
+Lugh agrees with the design's five questions for the maintainer.
 
 ## Of both
 
