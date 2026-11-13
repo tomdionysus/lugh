@@ -88,6 +88,10 @@ address, and trusted proxies' X-Forwarded-For for HTTP; per-address limits befor
 across listeners; connection caps and idle and handshake deadlines per listener; and a stop that closes what is open. The protocol
 (HTTP, LDAP) stays Lugh's, as the maintainer decided; a shared accept-and-TLS layer under it is welcome if it covers the above.
 
+Dannan agreed (2026-11-13): the proposal is only that layer, so Decided 9 holds; the nine points are its requirements. Limits
+after a credential are a shared object Lugh charges and the listener consults at accept. Ports come from an inherited socket when
+one is given (systemd), otherwise bound with `CAP_NET_BIND_SERVICE` (OpenRC, Raven).
+
 ## Of both
 
 - **Alpine (musl, GCC 15)** for Raven: every project must build and pass there. Has either been built on Alpine?
