@@ -111,6 +111,14 @@ Where Lugh found it short, sent to Dagda:
 
 Lugh agrees with the design's five questions for the maintainer.
 
+Dagda took all seven into the draft, each with a case (checked 2026-11-13): slice 2 opens `lugh/secrets` under a domain whose key is
+wrapped only to configured members, with a new `capable(capability)` policy so every Lugh node holds it; an audit log refuses at its
+bound and goes only by `retire` on export, with no rollback; the counter map forgets after the owner's window; Lugh's shape is in the
+measurement; the churn case is named; each slice tag keeps what the last gave or says what changed. Lir's review moved the v2 freeze
+to slice 4 and put the catalogue in v3. Lugh has nothing else short; one stale sentence (placement read as meeting G2) was sent back.
+For the operator until slice 5: a node newly advertising `lugh` holds `lugh/secrets` but cannot open it until configuration names it a
+member, so sign-in fails there until then.
+
 ## Of both
 
 - **Alpine (musl, GCC 15)** for Raven: every project must build and pass there. Has either been built on Alpine?
