@@ -386,7 +386,7 @@ The conventions are the stack's, in `CONTRIBUTING.md`: C++20, `.clang-format` (G
 7. ~~**Certificates:**~~ Operator-supplied files only (the maintainer, 2026-11-13), renewed by whatever the host runs; Lugh holds no ACME account.
 8. ~~**Target platform:**~~ Linux with macOS for development; Raven (Alpine on the arm64 build node) is dropped from all development for now (the maintainer, 2026-11-13).
 9. ~~**Second factor for everyone:**~~ `mfa` is the default for every person, with `phr` (WebAuthn, P11) for infrastructure admin apps (the maintainer, 2026-11-13).
-10. **T.O.M.S sites:** sites run plain HTTP over WireGuard. Do they get TLS for the OIDC redirect, or does T.O.M.S sign in through Lugh only at the hub?
+10. **T.O.M.S sites** (to be decided at P13, the maintainer 2026-11-13): sites run plain HTTP over WireGuard. Do they get TLS for the OIDC redirect, or does T.O.M.S sign in through Lugh only at the hub?
 11. ~~**Break-glass accounts:**~~ One local break-glass account per project, local login off for everyone else (the maintainer, 2026-11-13).
 12. ~~**Macha:**~~ The client gets a Lugh token and exchanges it once at a node for a Macha session (the maintainer, 2026-11-13); Macha's per-request path stays its own.
 13. ~~**AthenaSIP subscribers:**~~ SIP Digest stays entirely outside Lugh (the maintainer, 2026-11-13); Lugh covers AthenaSIP's admin sign-in only.
