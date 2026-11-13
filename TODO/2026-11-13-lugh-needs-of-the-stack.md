@@ -122,6 +122,18 @@ to slice 4 and put the catalogue in v3. Lugh has nothing else short; one stale s
 For the operator until slice 5: a node newly advertising `lugh` holds `lugh/secrets` but cannot open it until configuration names it a
 member, so sign-in fails there until then.
 
+## Ruled (the maintainer, 2026-11-13)
+
+- **Dagda's three-systems design, all as proposed** (Dagda `a058df9`, "Ruled"): logs a Dagda noun; the register-map merge (carrying
+  the JWKS) and the counter map with forgetting slots; the advert aggregate in Dagda; slice 0 first, then slices 1 to 5; contract v1
+  frozen at `0.1.4`, v2 at slice 4, the catalogue as v3; the 10-minute tombstone window for Lir's QoS 2 as a stated limit. From
+  Macha's review, `0.1.5` (Dannan 0.5.7, the ABI-promise release, and the Debian packages) leads slice 0. P8 starts on slice 1.
+- **Dannan's proposals** (`../dannan/TODO/2026-11-13-stack-needs.md`): the ABI promise (`libdannan.so.0.5`, SameMinorVersion,
+  abidiff in CI); the partition reading (an even split is a minority; joins add to the agreed roster, only a retire removes); the
+  shared listener below the protocols with Lugh's nine requirements; CPU admission in a class-aware pool. Dannan's order: the ABI
+  promise, Macha's items, the partition reading, CPU admission, the listener.
+- **Alpine, not now**, for Dannan and Dagda alike. arm64 musl, which Raven needs, stays unproven until the maintainer revisits it.
+
 ## Of both
 
 - **Alpine (musl, GCC 15)** for Raven: every project must build and pass there. Has either been built on Alpine?
