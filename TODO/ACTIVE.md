@@ -33,7 +33,7 @@ The maintainer, 2026-11-13: Dannan and Dagda must support Macha, Lugh and Lir as
 
 ## Waiting on Dannan
 
-- Orphaned test nodes (the maintainer, 2026-11-13: fix it). A `lugh_tests` run that crashes or is killed leaves the `lugh-node` processes its tests started running (five were found, a day old). The launcher is Dannan's `dannan/test/fixtures/child_process.h`, whose destructor never runs then; Dagda and Lir share it. Asked of the Dannan session: a reaper per child that ends it when the test process dies, any way. Accepted by Dannan as its defect, for 0.5.7, with its refinements (the reaper closes every other descriptor; exit seen with `waitid(..., WNOWAIT)` before the done byte, so a freed pid is never signalled); Lugh reviews the branch and takes it at 0.5.7.
+- Orphaned test nodes (the maintainer, 2026-11-13: fix it). A `lugh_tests` run that crashes or is killed leaves the `lugh-node` processes its tests started running (five were found, a day old). The launcher is Dannan's `dannan/test/fixtures/child_process.h`, whose destructor never runs then; Dagda and Lir share it. Asked of the Dannan session: a reaper per child that ends it when the test process dies, any way. Accepted by Dannan as its defect, for 0.5.7, with its refinements (the reaper closes every other descriptor; exit seen with `waitid(..., WNOWAIT)` before the done byte, so a freed pid is never signalled); Reviewed 2026-11-13 (Dannan `6746869`): approved for 0.5.7 on condition it is shown under TSan and ASan, since Lugh's process tests run there and the reaper is a fork from a threaded test; a residual pid-reuse window (child exited but unwaited when the test dies) to be stated; `pipe2(O_CLOEXEC)` where it exists. Lugh takes 0.5.7 once that is green.
 
 ## Waiting on the maintainer
 
