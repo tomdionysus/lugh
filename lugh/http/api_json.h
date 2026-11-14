@@ -23,22 +23,22 @@ namespace lugh::http {
 //
 // Clients branch on the code, which never changes; the message is for a person, and never
 // carries a secret or anything a caller typed.
-inline void write_error(const std::shared_ptr<HttpResponse>& response, status status, std::string code, std::string message) {
-  boost::json::object error;
-  error["code"] = std::move(code);
-  error["message"] = std::move(message);
+inline void write_error(const std::shared_ptr<HttpResponse>& response, status result, std::string code, std::string message) {
+  boost::json::object detail;
+  detail["code"] = std::move(code);
+  detail["message"] = std::move(message);
 
   boost::json::object body;
-  body["error"] = std::move(error);
+  body["error"] = std::move(detail);
 
-  response->result(status);
+  response->result(result);
   response->set(field::content_type, "application/json");
   response->set(field::cache_control, "no-store");
   response->body() = boost::json::serialize(body);
 }
 
-inline void write_json(const std::shared_ptr<HttpResponse>& response, status status, const boost::json::value& value) {
-  response->result(status);
+inline void write_json(const std::shared_ptr<HttpResponse>& response, status result, const boost::json::value& value) {
+  response->result(result);
   response->set(field::content_type, "application/json");
   response->set(field::cache_control, "no-store");
   response->body() = boost::json::serialize(value);

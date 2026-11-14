@@ -2,6 +2,11 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-14: Lugh on Linux, first build and run
+
+- The first build of Lugh on Linux: Debian 13 arm64, GCC 14, on the shared arm64 build node node-b, with Dannan 0.6.0 (the pin is the next commit, since Dannan 0.4.1 needs Boost 1.87 and Debian has 1.83). GCC's `-Wshadow` is stricter than clang's (a local shadowing an enclosing lambda's local, or a namespace name such as `http::status`), and `-Werror` made each fatal; it also asks for braces round an assertion under an `if` (`-Wdangling-else`) and every member of a designated initialiser. All fixed by renames and braces, no behaviour changed: 16 files.
+- 666 of 666 pass there, plain; ASan on node-b is in hand. The same 666 pass on the Mac.
+
 ## 2026-11-14: P8's merge, ahead of Dagda's slices
 
 - `lugh/merge/record_merge.h`: the merge the maintainer ruled for Lugh's shared spaces (P8 plan, "The merge"), as pure functions: the record envelope (version, writing node, tombstone) and its codec, `winner` (a removal over any edit; then the higher version, then the higher writer), `merge` over any number of heads, commutative, associative and idempotent; `writable` (a removed key never again); and `UniqueIndex`, which keeps two records of one name and reports the name ambiguous. Ready for Dagda's `Merge` at slice 1. Fuzz target `fuzz_envelope`, syntax-checked only.

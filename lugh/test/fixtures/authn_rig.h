@@ -117,12 +117,12 @@ class AuthnRig {
     auto setup = wait_for<lugh::Outcome<lugh::authn::TotpSetup>>(
         [&](lugh::Executor executor, auto done) { authenticator->enrol_begin(redeemed.sign_in, "192.0.2.1", kTestDeadline, executor, done); });
     EXPECT_TRUE(setup.ok()) << setup.message;
-    auto done = wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+    auto finished = wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
       authenticator->enrol_confirm(redeemed.sign_in, setup.value.factor_id, code_for(setup.value.secret), "192.0.2.1", kTestDeadline, executor, done);
     });
-    EXPECT_EQ(done.kind, lugh::authn::Step::Kind::next);
+    EXPECT_EQ(finished.kind, lugh::authn::Step::Kind::next);
     secret = copy_of(setup.value.secret);
-    recovery = std::move(done.recovery_codes);
+    recovery = std::move(finished.recovery_codes);
     // Past the step the confirming code used, so the next code is a new one.
     advance(std::chrono::seconds(30));
     return *read_value<std::optional<lugh::directory::User>>(

@@ -84,10 +84,10 @@ void create(const std::shared_ptr<authn::AppPasswords>& passwords, http::RouteCo
   passwords->create(actor_of(context), std::move(user_id), name.value_or(""), std::move(wanted), std::move(networks), kRouteDeadline, context.executor,
                     [context](Outcome<authn::AppPasswords::Made> made) {
                       if (!made.ok()) return answer_fault(context, made);
-                      auto body = info_json(made.value.info);
+                      auto shown = info_json(made.value.info);
                       // Shown this once; only its hash is kept.
-                      body["password"] = std::string(secret_text(made.value.password));
-                      answer_json(context, http::status::created, body);
+                      shown["password"] = std::string(secret_text(made.value.password));
+                      answer_json(context, http::status::created, shown);
                     });
 }
 

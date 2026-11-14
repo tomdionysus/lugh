@@ -38,9 +38,9 @@ std::optional<std::map<std::string, std::string>> parse_form(std::string_view bo
 
 std::optional<std::string> cookie(const HttpRequest& request, std::string_view name) {
   std::optional<std::string> found;
-  for (const auto& field : request.base()) {
-    if (field.name() != http::field::cookie) continue;
-    const auto header = std::string_view(field.value());
+  for (const auto& one : request.base()) {
+    if (one.name() != http::field::cookie) continue;
+    const auto header = std::string_view(one.value());
     std::size_t start = 0;
     while (start < header.size()) {
       const auto end = std::min(header.find(';', start), header.size());

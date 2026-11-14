@@ -166,13 +166,13 @@ inline std::optional<Answer> request(std::uint16_t port, boost::beast::http::ver
   http::response<http::string_body> in;
   bool answered = false;
   const net::ip::tcp::endpoint where(net::ip::make_address("127.0.0.1"), port);
-  stream.next_layer().async_connect(where, [&](beast::error_code ec) {
-    if (ec) return;
-    stream.async_handshake(net::ssl::stream_base::client, [&](beast::error_code ec) {
-      if (ec) return;
-      http::async_write(stream, out, [&](beast::error_code ec, std::size_t) {
-        if (ec) return;
-        http::async_read(stream, buffer, in, [&](beast::error_code ec, std::size_t) { answered = !ec; });
+  stream.next_layer().async_connect(where, [&](beast::error_code connected) {
+    if (connected) return;
+    stream.async_handshake(net::ssl::stream_base::client, [&](beast::error_code shaken) {
+      if (shaken) return;
+      http::async_write(stream, out, [&](beast::error_code written, std::size_t) {
+        if (written) return;
+        http::async_read(stream, buffer, in, [&](beast::error_code read, std::size_t) { answered = !read; });
       });
     });
   });
@@ -230,13 +230,13 @@ inline std::optional<Reply> send(std::uint16_t port, boost::beast::http::verb me
   http::response<http::string_body> in;
   bool answered = false;
   const net::ip::tcp::endpoint where(net::ip::make_address("127.0.0.1"), port);
-  stream.next_layer().async_connect(where, [&](beast::error_code ec) {
-    if (ec) return;
-    stream.async_handshake(net::ssl::stream_base::client, [&](beast::error_code ec) {
-      if (ec) return;
-      http::async_write(stream, out, [&](beast::error_code ec, std::size_t) {
-        if (ec) return;
-        http::async_read(stream, buffer, in, [&](beast::error_code ec, std::size_t) { answered = !ec; });
+  stream.next_layer().async_connect(where, [&](beast::error_code connected) {
+    if (connected) return;
+    stream.async_handshake(net::ssl::stream_base::client, [&](beast::error_code shaken) {
+      if (shaken) return;
+      http::async_write(stream, out, [&](beast::error_code written, std::size_t) {
+        if (written) return;
+        http::async_read(stream, buffer, in, [&](beast::error_code read, std::size_t) { answered = !read; });
       });
     });
   });

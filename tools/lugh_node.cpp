@@ -541,12 +541,12 @@ int run(const cli::Options& options) {
     parts.idle = std::chrono::seconds(config.ldap_idle_seconds);
     const auto add_listener = [&](std::uint16_t port, bool with_tls) {
       if (port == 0) return true;
-      auto server = std::make_shared<ldap::LdapServer>(log, io_context, parts, with_tls);
-      if (const auto listening = server->listen(config.address, port); !listening.ok) {
+      auto listener = std::make_shared<ldap::LdapServer>(log, io_context, parts, with_tls);
+      if (const auto listening = listener->listen(config.address, port); !listening.ok) {
         logger.error(listening.error);
         return false;
       }
-      ldap_servers.push_back(std::move(server));
+      ldap_servers.push_back(std::move(listener));
       return true;
     };
     if (!add_listener(config.ldap_port, true) || !add_listener(config.ldap_starttls_port, false)) return 1;

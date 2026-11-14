@@ -259,7 +259,9 @@ TEST(Qr, EveryVersionReadsBack) {
     EXPECT_EQ(code->size, version * 4 + 17);
     EXPECT_EQ(read_back(text), text) << version;
     // One byte more needs the next version.
-    if (version < 40) EXPECT_EQ(qr_encode(text + "x")->version, version + 1) << version;
+    if (version < 40) {
+      EXPECT_EQ(qr_encode(text + "x")->version, version + 1) << version;
+    }
   }
 }
 

@@ -99,13 +99,13 @@ TEST_F(GenesisTest, RootsFirstSignInIsEnrolment) {
   const auto setup = wait_for<lugh::Outcome<lugh::authn::TotpSetup>>(
       [&](lugh::Executor executor, auto done) { auth->enrol_begin(first.sign_in, kSource, kTestDeadline, executor, done); });
   ASSERT_TRUE(setup.ok());
-  const auto done = wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+  const auto finished = wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
     auth->enrol_confirm(first.sign_in, setup.value.factor_id, rig.code_for(setup.value.secret), kSource, kTestDeadline, executor, done);
   });
-  ASSERT_EQ(done.kind, Kind::next);
-  EXPECT_EQ(done.sign_in.stage, Stage::complete);
-  EXPECT_EQ(done.sign_in.reached, Assurance::mfa);
-  EXPECT_EQ(done.recovery_codes.size(), Factors::kRecoveryCodes);
+  ASSERT_EQ(finished.kind, Kind::next);
+  EXPECT_EQ(finished.sign_in.stage, Stage::complete);
+  EXPECT_EQ(finished.sign_in.reached, Assurance::mfa);
+  EXPECT_EQ(finished.recovery_codes.size(), Factors::kRecoveryCodes);
   EXPECT_TRUE(read_value<std::optional<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
                 rig.directory->user_by_name("root", kTestDeadline, executor, done);
               })->enrolled);

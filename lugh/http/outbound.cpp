@@ -45,18 +45,18 @@ class Post : public std::enable_shared_from_this<Post> {
     if (SSL_set_tlsext_host_name(_stream.native_handle(), _where.host.c_str()) != 1) return _failed("the host name cannot be used");
     _stream.set_verify_mode(ssl::verify_peer);
     _stream.set_verify_callback(ssl::host_name_verification(_where.host));
-    _resolver.async_resolve(_where.host, _where.port, [self = shared_from_this()](boost::system::error_code ec, tcp::resolver::results_type found) {
-      if (ec) return self->_failed("the name did not resolve");
+    _resolver.async_resolve(_where.host, _where.port, [self = shared_from_this()](boost::system::error_code resolved, tcp::resolver::results_type found) {
+      if (resolved) return self->_failed("the name did not resolve");
       beast::get_lowest_layer(self->_stream).expires_after(self->_deadline);
-      beast::get_lowest_layer(self->_stream).async_connect(found, [self](boost::system::error_code ec, const tcp::endpoint&) {
-        if (ec) return self->_failed("the connection failed");
-        self->_stream.async_handshake(ssl::stream_base::client, [self](boost::system::error_code ec) {
-          if (ec) return self->_failed("the TLS handshake or the certificate failed");
-          beast::http::async_write(self->_stream, self->_request, [self](boost::system::error_code ec, std::size_t) {
-            if (ec) return self->_failed("the request could not be written");
+      beast::get_lowest_layer(self->_stream).async_connect(found, [self](boost::system::error_code connected, const tcp::endpoint&) {
+        if (connected) return self->_failed("the connection failed");
+        self->_stream.async_handshake(ssl::stream_base::client, [self](boost::system::error_code shaken) {
+          if (shaken) return self->_failed("the TLS handshake or the certificate failed");
+          beast::http::async_write(self->_stream, self->_request, [self](boost::system::error_code written, std::size_t) {
+            if (written) return self->_failed("the request could not be written");
             self->_parser.body_limit(kMostAnswerBytes);
-            beast::http::async_read(self->_stream, self->_buffer, self->_parser, [self](boost::system::error_code ec, std::size_t) {
-              if (ec) return self->_failed("no answer came");
+            beast::http::async_read(self->_stream, self->_buffer, self->_parser, [self](boost::system::error_code answered, std::size_t) {
+              if (answered) return self->_failed("no answer came");
               self->_answer->finish(Outcome<unsigned>::success(self->_parser.get().result_int()));
             });
           });

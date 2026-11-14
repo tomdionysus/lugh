@@ -142,9 +142,15 @@ TEST(SealedStore, EveryTornLengthRecoversToAPrefix) {
     // What survives is always what was written, in order, up to some frame.
     const auto a = run(store.value->get("groups", "a"));
     const auto b = run(store.value->get("groups", "b"));
-    if (b) EXPECT_TRUE(a);
-    if (a && a->version == 2) EXPECT_EQ(text(a->value), "3");
-    if (a && a->version == 1) EXPECT_EQ(text(a->value), "1");
+    if (b) {
+      EXPECT_TRUE(a);
+    }
+    if (a && a->version == 2) {
+      EXPECT_EQ(text(a->value), "3");
+    }
+    if (a && a->version == 1) {
+      EXPECT_EQ(text(a->value), "1");
+    }
     rig.file_set("groups", saved);
   }
 }
@@ -269,7 +275,7 @@ TEST(SealedStore, RotationResealsUnderTheNewEpoch) {
   EXPECT_EQ(header->header.epoch, 2u);
   std::size_t frames = 0;
   for (std::size_t at = header->length; at < file.size();) {
-    dannan::net::Reader reader(std::span(file).subspan(at + 4, 8));
+    dannan::net::Reader reader(std::span<const unsigned char>(file.data(), file.size()).subspan(at + 4, 8));
     EXPECT_EQ(reader.u32(), 2u);
     at += lugh::store::kFrameHeaderBytes + reader.u32();
     ++frames;

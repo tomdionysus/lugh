@@ -104,8 +104,7 @@ std::optional<session::Session> session_of(const Shared& shared, const RouteCont
 
 // Where an authorisation request goes next: to sign in, to consent, or back with its code.
 void decide(const std::shared_ptr<Shared>& shared, const RouteContext& context, Pending pending) {
-  const auto& request = pending.request;
-  shared->parts.apps->app(request.client_id, kStepDeadline, context.executor, [shared, context, pending](Outcome<std::optional<apps::App>> found) {
+  shared->parts.apps->app(pending.request.client_id, kStepDeadline, context.executor, [shared, context, pending](Outcome<std::optional<apps::App>> found) {
     const auto& request = pending.request;
     if (!found.ok()) return error_back(*shared, context, request, "server_error", "the application could not be read");
     if (!found.value || found.value->state != apps::State::enabled) return error_page(context, "This application is not allowed to sign anyone in.");
@@ -135,22 +134,21 @@ void decide(const std::shared_ptr<Shared>& shared, const RouteContext& context, 
     // Who may use it: its groups' members, and nobody else.
     shared->parts.directory->groups_of(
         session->user_id, kStepDeadline, context.executor, [shared, context, pending, app, session](Outcome<std::vector<std::string>> groups) {
-          const auto& request = pending.request;
-          if (!groups.ok()) return error_back(*shared, context, request, "server_error", "your groups could not be read");
+          const auto& asked = pending.request;
+          if (!groups.ok()) return error_back(*shared, context, asked, "server_error", "your groups could not be read");
           const bool allowed = std::any_of(app.access.begin(), app.access.end(), [&](const std::string& group) { return has(groups.value, group); });
-          if (!allowed) return error_back(*shared, context, request, "access_denied", "you are not allowed to use this application");
-          if (app.first_party) return issue_code(shared, context, request, *session);
+          if (!allowed) return error_back(*shared, context, asked, "access_denied", "you are not allowed to use this application");
+          if (app.first_party) return issue_code(shared, context, asked, *session);
 
           shared->parts.consents->scopes(
               session->user_id, app.client_id, kStepDeadline, context.executor, [shared, context, pending, session](Outcome<std::vector<std::string>> given) {
-                const auto& request = pending.request;
-                if (!given.ok()) return error_back(*shared, context, request, "server_error", "consent could not be read");
-                const bool covered =
-                    std::all_of(request.scopes.begin(), request.scopes.end(), [&](const std::string& scope) { return has(given.value, scope); });
-                if (covered && request.prompt.find("consent") == std::string::npos) {
-                  return issue_code(shared, context, request, *session);
+                const auto& wanted = pending.request;
+                if (!given.ok()) return error_back(*shared, context, wanted, "server_error", "consent could not be read");
+                const bool covered = std::all_of(wanted.scopes.begin(), wanted.scopes.end(), [&](const std::string& scope) { return has(given.value, scope); });
+                if (covered && wanted.prompt.find("consent") == std::string::npos) {
+                  return issue_code(shared, context, wanted, *session);
                 }
-                if (request.prompt == "none") return error_back(*shared, context, request, "consent_required", "consent is needed");
+                if (wanted.prompt == "none") return error_back(*shared, context, wanted, "consent_required", "consent is needed");
                 const auto id = shared->pending.put(pending);
                 signin::write_redirect(context.response, "/oauth2/consent?id=" + encoded(id));
                 context.done();

@@ -166,7 +166,9 @@ TEST_F(UserRoutesTest, FactorsAreListedWithoutSecrets) {
     const auto id = std::string(factor.at("id").as_string());
     EXPECT_EQ(id.find('/'), std::string::npos);
     EXPECT_EQ(id.find(alice.id), std::string::npos);
-    if (factor.at("kind") == "recovery") EXPECT_EQ(factor.at("remaining"), 10);
+    if (factor.at("kind") == "recovery") {
+      EXPECT_EQ(factor.at("remaining"), 10);
+    }
   }
   const auto body = answer.response->body();
   EXPECT_EQ(body.find(std::string(lugh::secret_text(rig.secret))), std::string::npos);

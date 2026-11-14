@@ -25,7 +25,7 @@
 // the same files to see what survived.
 class SealedStoreRig {
  public:
-  explicit SealedStoreRig(std::vector<lugh::store::TableSpec> tables) : tables(std::move(tables)) {
+  explicit SealedStoreRig(std::vector<lugh::store::TableSpec> specs) : tables(std::move(specs)) {
     lugh::keys::KeyringHeader header;
     header.id = dannan::identity::random_bytes(lugh::keys::kKeyringIdBytes);
     keyring = lugh::keys::Keyring::create(header, lugh::Bytes(lugh::keys::kMasterKeyBytes, 0x5a)).value;

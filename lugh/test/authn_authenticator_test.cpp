@@ -77,12 +77,12 @@ TEST_F(AuthenticatorTest, EnrolmentFromALink) {
   ASSERT_TRUE(setup.ok());
   EXPECT_NE(lugh::secret_text(setup.value.uri).find("Lugh:alice"), std::string::npos);
 
-  const auto done = enrol_confirm(setup.value.factor_id, rig.code_for(setup.value.secret));
-  ASSERT_EQ(done.kind, Kind::next);
+  const auto finished = enrol_confirm(setup.value.factor_id, rig.code_for(setup.value.secret));
+  ASSERT_EQ(finished.kind, Kind::next);
   EXPECT_EQ(sign_in.stage, Stage::complete);
   EXPECT_EQ(sign_in.reached, Assurance::mfa);
   EXPECT_EQ(sign_in.amr, (std::vector<std::string>{"pwd", "otp"}));
-  EXPECT_EQ(done.recovery_codes.size(), Factors::kRecoveryCodes);
+  EXPECT_EQ(finished.recovery_codes.size(), Factors::kRecoveryCodes);
   EXPECT_TRUE(read_value<std::optional<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
                 rig.directory->user(alice.id, kTestDeadline, executor, done);
               })->enrolled);
@@ -212,8 +212,8 @@ TEST_F(AuthenticatorTest, AStolenPasswordCannotEnrol) {
   // A person who set a password through a link and stopped there.
   const auto alice = rig.person("alice");
   wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
-    auth->redeem(wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
-                   rig.links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+    auth->redeem(wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor inner, auto issued) {
+                   rig.links->issue(rig.admin, alice.id, kTestDeadline, inner, issued);
                  }).value,
                  text_secret(kPassword), kSource, kTestDeadline, executor, done);
   });
