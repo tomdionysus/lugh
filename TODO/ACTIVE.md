@@ -6,7 +6,7 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 P6 (OAuth and OIDC) and P9 (writable LDAP) are done; P8 is planned and its first steps wait on Dagda. The Linux pass is green and committed (2026-11-14): debug, ASan with leak detection and TSan, 666 tests each, on the build nodes. The maintainer, 2026-11-14: **no builds or tests on the Mac**, only on the build node cluster (below).
 
-Lugh is on Dannan 0.7.0 (2026-11-14). `develop` is not yet pushed past `9cc513b`: the push of these commits was refused by the session's permission check, so the maintainer pushes it. Next: wait for Dagda's slice 1 tag to start P8.0 to P8.4 (`2026-11-13-p8-plan.md`). node-a is the stack's TSan build node (clang 19, 4K pages; `config.txt.pre-4k` restores the 16K kernel); Lugh's TSan tree is `~/lugh/build-tsan` there, built with `clang++-19`; node-b keeps `~/lugh/build` and `~/lugh/build-asan` (GCC 14).
+Lugh is on Dannan 0.7.0 (2026-11-14); `develop` pushed at `7b0c717`. Now: **P10, `lugh_client`** (the maintainer, 2026-11-14: the work while Dagda's slice 1 is awaited), planned first in `TODO/` from `docs/architecture.md` and Lir's needs (its `TokenVerifier`: HTTPS JWKS now, several issuers, one per site, the key source behind an interface for `lugh/scope` later). P8.0 to P8.4 start on slice 1's tag (`2026-11-13-p8-plan.md`). node-a is the stack's TSan build node (clang 19, 4K pages; `config.txt.pre-4k` restores the 16K kernel); Lugh's TSan tree is `~/lugh/build-tsan` there, built with `clang++-19`; node-b keeps `~/lugh/build` and `~/lugh/build-asan` (GCC 14).
 
 ## The build node cluster
 
@@ -16,8 +16,8 @@ node-a `.11`, node-b `.12`, node-c `.13` (Debian 13 arm64, GCC 14, Boost 1.83), 
 
 - **Dagda's slice 1 tag**: P8.0 to P8.4 start on it (`2026-11-13-p8-plan.md`).
 - **Dannan 0.7.0 is tagged** (2026-11-14; `Nodes::partition()`, `watch_partition`, against `members()` and `retire()`; SONAME `libdannan.so.0.7`; .debs wait on the maintainer's publish). Lugh is pinned to it; the partition in Status and the audit log lands with P8.1, when `lugh-node` becomes a Dannan node.
-- **Dagda slice 2, follower lag on the build node**: on node-a a second node saw Lugh-shaped commits at p50 10 s, p99 22 s and growing (Mac: 103 ms); P8.5 waits until the lag is bounded near a second (`2026-11-13-lugh-needs-of-the-stack.md`, "The build node").
-- **The maintainer**: `docs/architecture.md`, "Still open": question 2 (single-use grants) for P8, question 14 (Lugh's hostname) for P13.
+- **Dagda slice 2, follower lag on the build node**: on node-a a second node saw Lugh-shaped commits at p50 10 s, p99 22 s and growing (Mac: 103 ms); P8.5 does not land until a follower keeps up at Lugh's rates on a build node, a disable seen elsewhere within about a second (the maintainer ruled, 2026-11-14; `2026-11-13-lugh-needs-of-the-stack.md`, "The build node").
+- **The maintainer, at P13**: `docs/architecture.md` question 10 (TLS for T.O.M.S sites, or sign-in only at the hub). Questions 2 and 14 are settled there.
 - **Not merged, by the maintainer's choice**: GitHub's `main` carries aaac977 (Alpine and OpenRC for Raven), never merged here; Raven is dropped for now (the maintainer, 2026-11-13). Local `main` (tag 0.1.0) is not pushed since it would not fast-forward. When Raven returns: merge `origin/main` into `develop` on the new layout (about ten conflicts), test, fast-forward `main`, push.
 - **Not yet tried on Linux**: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DONTDUMP` (written for systemd; only macOS paths have run). The LDAP and envelope fuzz targets are syntax-checked only (no libFuzzer on the Mac; clang 19 on node-a will have it).
 

@@ -168,6 +168,8 @@ that is measured.
   started during one, can give both sides a majority, so a node is joined to a whole cluster. Lugh's operator documentation says so.
 - **A Lugh node on the minority side reports it and keeps serving** (Status and the audit log); TOTP still fails closed there by
   the lease.
+- **P8.5's gate is the follower's lag** (2026-11-14): credentials and sessions do not move onto `lugh/secrets` until a follower
+  keeps up with Lugh's rates on a build node and a disable or revocation is seen on another node within about a second.
 - **TSan on one build node** set up with clang 19 and a 4K-page kernel, shared by the projects that need it; builds never on the Mac. Lugh's
   "every phase green under ASan and TSan" rule stands. Which build node is being agreed with the Macha session, which keeps the schedule.
 
