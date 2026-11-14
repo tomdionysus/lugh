@@ -178,6 +178,17 @@ entry (about 7.8 s), and only then the accept on B, when B's head moves; about a
 accounted for. Slice 2 starts by timing the rounds from inside, then batching: claims per round rather than per commit, the
 push told what the peer holds, the accept sent once the peer's history lands. Lugh's bound of about a second is its target.
 
+## Dannan's shared public listener (P3), reviewed 2026-11-14
+
+Dannan's design (`../dannan/TODO/2026-11-14-p3-public-listener.md`, 128b228): `dannan::listen`, a stream listener (TCP, TLS,
+StartTLS) with certificate reload, per-listener TLS policy, deadlines, limits, `forwarded_for()` and socket activation; the stream
+side for 0.8.0, DTLS for 0.9.0. Lugh's answers: the line holds; a reload Lugh calls on SIGHUP is enough, covering the client-CA
+bundle and naming the path that failed. Two needs: with client certificates optional, the stream carries any certificate's
+thumbprint and subject and whether its chain verified (and why not), since certificate-bound tokens bind to self-signed
+certificates too; and trusted proxy peers are exempt from the per-address bucket at accept, which Lugh applies itself per request
+to `forwarded_for()`'s answer. No per-caller callback at accept: Lugh limits per account and session per request. Lugh moves its
+HTTPS, mTLS and LDAP listeners onto it after 0.8.0, in its own step.
+
 ## Ruled (the maintainer, 2026-11-14)
 
 - **Group commit for heads in Dagda**, not owners batching (one node tops out near 85 to 90 head commits a second today). Lugh keeps
