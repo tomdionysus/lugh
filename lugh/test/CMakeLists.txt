@@ -78,6 +78,7 @@ add_executable(lugh_tests
     node_config_test.cpp
     node_ioc_check_test.cpp
     node_process_api_test.cpp
+    node_process_client_test.cpp
     node_process_init_test.cpp
     node_process_ldap_test.cpp
     node_process_oauth_test.cpp

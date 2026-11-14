@@ -267,10 +267,12 @@ inline bool wait_until_up(dannan::test::ChildProcess& child, std::uint16_t port,
 // and credentials, stopped (SIGTERM) when it goes.
 class Serving {
  public:
+  // `port`, when given, is the one to listen on: for a configuration that must name it first
+  // (an issuer's URL).
   Serving(const Workspace& workspace, const std::filesystem::path& state, std::optional<std::filesystem::path> credentials,
-          std::optional<std::string> input = std::nullopt, const std::vector<std::string>& arguments = {})
+          std::optional<std::string> input = std::nullopt, const std::vector<std::string>& arguments = {}, std::optional<std::uint16_t> port = std::nullopt)
       : _log(workspace.path("serve-" + std::to_string(++_sequence) + ".log")),
-        _port(dannan::test::free_port()),
+        _port(port.value_or(dannan::test::free_port())),
         _child(command_line(workspace, state, _port, arguments), _log, {.environment = environment(credentials), .input = std::move(input)}) {}
 
   // Whether it came up, within 15 seconds.
