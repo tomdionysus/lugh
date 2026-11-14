@@ -13,6 +13,7 @@
 #include <string>
 
 #include "dannan/identity/crypto.h"
+#include "lugh/client/dpop.h"
 #include "lugh/client/jose.h"
 #include "lugh/core/encoding.h"
 
@@ -22,13 +23,7 @@ class DpopClient {
  public:
   explicit DpopClient(lugh::client::SigningAlgorithm algorithm = lugh::client::SigningAlgorithm::es256) : key(lugh::client::SigningKey::generate(algorithm)) {}
 
-  boost::json::object jwk() const {
-    auto out = *lugh::client::public_jwk({"unused", key.algorithm(), key.public_key()});
-    out.erase("kid");
-    out.erase("use");
-    out.erase("alg");
-    return out;
-  }
+  boost::json::object jwk() const { return lugh::client::dpop_jwk(key); }
 
   // A proof; `header` and `claims` changed by the caller to make bad ones.
   std::string proof(const std::string& method, const std::string& url, std::uint64_t iat, const std::optional<std::string>& access_token = std::nullopt,
@@ -43,10 +38,7 @@ class DpopClient {
     if (access_token && !claims.contains("ath")) {
       claims["ath"] = lugh::encoding::base64url(dannan::identity::sha256(lugh::byte_span(*access_token)).bytes);
     }
-    const auto header_text = boost::json::serialize(header);
-    const auto claims_text = boost::json::serialize(claims);
-    const auto input = lugh::encoding::base64url(lugh::byte_span(header_text)) + "." + lugh::encoding::base64url(lugh::byte_span(claims_text));
-    return input + "." + lugh::encoding::base64url(key.sign(lugh::byte_span(input)));
+    return lugh::client::jws_sign_with(key, std::move(header), claims);
   }
 
   lugh::client::SigningKey key;

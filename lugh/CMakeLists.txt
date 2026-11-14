@@ -12,6 +12,7 @@
 add_library(lugh_client STATIC
     client/access_token.cpp
     client/boost_json.cpp
+    client/dpop.cpp
     client/https.cpp
     client/id_token.cpp
     client/jose.cpp

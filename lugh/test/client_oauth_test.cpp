@@ -26,6 +26,7 @@
 #include "lugh/client/jose.h"
 #include "lugh/client/oauth_client.h"
 #include "lugh/core/encoding.h"
+#include "lugh/oauth/dpop.h"
 
 using namespace lugh::client;
 using dannan::identity::Secret;
@@ -490,4 +491,29 @@ TEST_F(OAuthTest, PollingStopsWhenTheCodeExpires) {
   EXPECT_EQ(out->fault, lugh::Fault::refused);
   EXPECT_EQ(out->message.rfind("expired_token:", 0), 0u);
   EXPECT_EQ(https.sent_to(token_url()), 2u);
+}
+
+// RFC 9449: a client with a DPoP key proves it on every token request, so its tokens are bound to
+// the key; and proves it with the token's hash at a resource. The issuer's own checker judges.
+TEST_F(OAuthTest, AClientWithADpopKeyProvesItOnEveryTokenRequest) {
+  dannan::test::SteppedTime checker_time;
+  lugh::oauth::DpopChecker checker{checker_time, wall};
+  auto identity = public_client();
+  auto key = std::make_shared<SigningKey>(SigningKey::generate(SigningAlgorithm::es256));
+  identity.dpop_key = key;
+  auto oauth = client(identity);
+  https.answer(token_url(), 200, {{"access_token", "at-1"}, {"token_type", "DPoP"}});
+  const Secret old(lugh::byte_span("rt-1"));
+  ASSERT_TRUE(wait<TokenSet>([&](auto done) { oauth.refresh(old, {}, std::chrono::seconds(5), io.get_executor(), done); }).ok());
+  const auto proof = https.header(0, "DPoP");
+  ASSERT_FALSE(proof.empty());
+  const auto checked = checker.check(proof, "POST", token_url());
+  ASSERT_TRUE(checked.ok()) << checked.message;
+  EXPECT_EQ(checked.value.jkt, lugh::oauth::jwk_thumbprint({"", SigningAlgorithm::es256, key->public_key()}));
+
+  const std::string userinfo = std::string(kIssuer) + "/oauth2/userinfo";
+  const auto resource = oauth.dpop_proof_for("GET", userinfo, "at-1");
+  ASSERT_TRUE(resource);
+  EXPECT_TRUE(checker.check(*resource, "GET", userinfo, "at-1").ok());
+  EXPECT_FALSE(client(public_client()).dpop_proof_for("GET", userinfo, "at-1"));
 }

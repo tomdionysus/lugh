@@ -64,6 +64,9 @@ struct ClientIdentity {
   std::string kid;
   // client_secret_basic.
   std::shared_ptr<const dannan::identity::Secret> secret;
+  // With a key, every token request carries a DPoP proof by it (RFC 9449), so the tokens are bound
+  // to it and good only with proofs by it.
+  std::shared_ptr<const dannan::identity::SigningKey> dpop_key;
 };
 
 // What the browser is sent to, and what the client keeps until it comes back.
@@ -143,6 +146,11 @@ class OAuthClient {
   // (refused, expired_token). `time` decides the waits; each poll may take `deadline`.
   void device_tokens(const DeviceAuthorization& started, const dannan::contract::TimeSource& time, Deadline deadline, Executor executor,
                      Done<Outcome<TokenSet>> done);
+
+  // The DPoP header's value for a request to a resource carrying `access_token` (RFC 9449 section
+  // 7), by the client's DPoP key; nothing for a client without one. The request then sends
+  // `Authorization: DPoP <token>`.
+  std::optional<std::string> dpop_proof_for(std::string_view method, std::string_view url, std::string_view access_token) const;
 
  private:
   friend class DevicePoll;

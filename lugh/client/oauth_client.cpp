@@ -15,6 +15,7 @@
 #include "dannan/encoding/percent.h"
 #include "dannan/identity/crypto.h"
 #include "lugh/client/claims.h"
+#include "lugh/client/dpop.h"
 #include "lugh/client/jose.h"
 #include "lugh/core/encoding.h"
 
@@ -298,6 +299,11 @@ void OAuthClient::device_tokens(const DeviceAuthorization& started, const dannan
   std::make_shared<DevicePoll>(*this, started, time, deadline, std::move(executor), std::move(done))->wait();
 }
 
+std::optional<std::string> OAuthClient::dpop_proof_for(std::string_view method, std::string_view url, std::string_view access_token) const {
+  if (!_identity.dpop_key) return std::nullopt;
+  return dpop_proof(*_identity.dpop_key, method, url, _wall.unix_ms() / 1000, access_token);
+}
+
 void OAuthClient::_authenticate(Form& form, HttpsRequest& request) const {
   switch (_identity.method) {
     case ClientIdentity::Method::none:
@@ -330,6 +336,7 @@ void OAuthClient::_token(Form form, std::optional<std::string> nonce, Deadline d
   post.url = _endpoints.token;
   post.content_type = "application/x-www-form-urlencoded";
   post.headers.emplace_back("Accept", "application/json");
+  if (_identity.dpop_key) post.headers.emplace_back("DPoP", dpop_proof(*_identity.dpop_key, "POST", _endpoints.token, _wall.unix_ms() / 1000));
   _authenticate(form, post);
   post.body = form_body(form);
   _https.send(std::move(post), deadline, executor, [this, done = std::move(done), nonce = std::move(nonce)](Outcome<HttpsResponse> answered) {
