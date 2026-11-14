@@ -66,7 +66,11 @@ Proposals to the maintainer where marked; nothing changes in Dannan until he rul
   says no, with the generation as evidence. Dannan would add a two-node test that each node's source decides for calls arriving there
   (if the maintainer agrees). Lugh is to be the seam's first real user.
 - **N6:** hashing is foreground work, bounded by memory: reserve each hash's `memory_kib` through `Context::budget().reserve(foreground)`
-  first and answer "try later" at once when there is no room, so a storm costs at most the foreground budget. Hash on Lugh's own
+  first and answer "try later" at once when there is no room, so a storm costs at most the foreground budget. (2026-11-14: Dannan's
+  P4 design, `../dannan/TODO/2026-11-14-p4-worker-pool.md`, `sched::WorkerPool`: per-class bounded queue refusing at once, a
+  per-class cap, `Context::workers()`. Lugh answered that this meets N6 and asked for a queued task whose deadline passes to be
+  dropped unrun and told so, for the refusal's reason (queue, cap, budget), and for a Lugh-set cap below cores on the node's pool.)
+  Hash on Lugh's own
   worker threads registered with `Context::threads()`, never the node's executor. Gap: Dannan admits by memory, not CPU; Dagda has
   Macha's CPU pacing. **Proposal to the maintainer:** a class-aware worker pool with CPU pacing moves into Dannan. Listeners: Lugh keeps its own
   io_context for HTTPS and LDAP for now. **Proposal to the maintainer:** a shared public listener in Dannan (accept and per-source limits, TLS),
