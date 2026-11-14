@@ -195,7 +195,10 @@ optional and off by default (Lir's review); nothing is built until the maintaine
 Built on Dannan's `feature/public-listener` (68c3cc5); Lugh's code review: it fits (Stream under Beast, StartTLS taking Lugh's
 encoded ExtendedResponse, any certificate with its verdict), with three findings sent: `Limits`' per-address, per-caller and
 tie maps are never pruned (a must, against the no-unbounded rule); trusted proxies should be CIDR prefixes, as Lugh configures
-them; and the contract should say how `start_tls` meets bytes queued by `send()`.
+them; and the contract should say how `start_tls` meets bytes queued by `send()`. All three answered in 0940e73: the limits'
+maps bounded by `max_tracked` (10,000; full buckets dropped first, then the oldest, counted in `evicted()`); trusted proxies as
+`listen::Prefix` ranges (v4-mapped peers matched as v4), in `forwarded_for()` and the accept-side exemption; `start_tls` refused
+while anything is queued. From Lir's review, `close()` writes what `send()` queued before close_notify.
 
 ## Ruled (the maintainer, 2026-11-14)
 
