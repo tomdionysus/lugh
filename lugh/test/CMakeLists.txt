@@ -37,6 +37,7 @@ add_executable(lugh_tests
     client_jose_test.cpp
     client_key_source_test.cpp
     client_oauth_test.cpp
+    client_testing_test.cpp
     client_verifier_test.cpp
     core_async_test.cpp
     core_encoding_test.cpp

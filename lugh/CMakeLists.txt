@@ -19,6 +19,7 @@ add_library(lugh_client STATIC
     client/jose.cpp
     client/key_source.cpp
     client/oauth_client.cpp
+    client/testing.cpp
     client/verifier.cpp
 )
 add_library(lugh::client ALIAS lugh_client)
