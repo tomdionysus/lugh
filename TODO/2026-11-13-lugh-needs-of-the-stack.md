@@ -169,6 +169,13 @@ slice 2 beside group commit, to be profiled on a build node. Lugh's need, sent: 
 the build node, so a disable or revocation is seen elsewhere within about a second; P8.5 (sign-in on the stack) does not land before
 that is measured.
 
+Profiled on node-a (Dagda, 2026-11-14; reproduced at p50 11 s, p99 26 s): not B's import, which blocked under a second in all,
+with the process at about 0.4 of a core. The wait is on A, in the space's single replicator thread: a synchronous round per
+owed commit to retain its claims on the peers, in order (about 14.5 s blocked), then a history push asking the peer entry by
+entry (about 7.8 s), and only then the accept on B, when B's head moves; about a third of that thread's time is not yet
+accounted for. Slice 2 starts by timing the rounds from inside, then batching: claims per round rather than per commit, the
+push told what the peer holds, the accept sent once the peer's history lands. Lugh's bound of about a second is its target.
+
 ## Ruled (the maintainer, 2026-11-14)
 
 - **Group commit for heads in Dagda**, not owners batching (one node tops out near 85 to 90 head commits a second today). Lugh keeps
