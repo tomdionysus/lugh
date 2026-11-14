@@ -20,10 +20,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Executables at the top of the build tree: ./build/lugh_tests, ./build/lugh-node.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 
-option(LUGH_BUILD_TESTING "Build the test binary and register the tests" ON)
+# Off, only lugh_client is built: what a relying party that fetches Lugh into its own build
+# wants (Lir's Lugh plugin). The tests and fuzz targets need the node, so they go with it.
+option(LUGH_BUILD_NODE "Build lugh-node, its library, its tests and its install; off builds lugh_client alone" ON)
+include(CMakeDependentOption)
+cmake_dependent_option(LUGH_BUILD_TESTING "Build the test binary and register the tests" ON "LUGH_BUILD_NODE" OFF)
 option(LUGH_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
 option(LUGH_HARDEN "Compiler and linker hardening on every target" ON)
-option(LUGH_BUILD_FUZZING "Build the libFuzzer targets in lugh/fuzz; needs a clang that ships libFuzzer" OFF)
+cmake_dependent_option(LUGH_BUILD_FUZZING "Build the libFuzzer targets in lugh/fuzz; needs a clang that ships libFuzzer" OFF "LUGH_BUILD_NODE" OFF)
 set(LUGH_SANITIZE "none" CACHE STRING "none, address (with undefined) or thread")
 set_property(CACHE LUGH_SANITIZE PROPERTY STRINGS none address thread)
 
@@ -57,10 +61,14 @@ elseif (LUGH_SANITIZE STREQUAL "thread")
     add_compile_options(-fsanitize=thread)
     add_link_options(-fsanitize=thread)
 endif()
-include(FetchContent)
-FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_REF}")
-set(DANNAN_BUILD_TESTING OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(dannan)
+# Fetched into another build (lugh_client in a relying party), Lugh takes the Dannan that build
+# already has: one process, one Dannan. The consumer's pin must be one Lugh's commit is tested on.
+if (NOT TARGET dannan::dannan)
+    include(FetchContent)
+    FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_REF}")
+    set(DANNAN_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(dannan)
+endif()
 
 # ---------------------------------------------------------------- hardening
 #
@@ -136,6 +144,9 @@ endfunction()
 configure_file(lugh/include/lugh/version.h.in "${PROJECT_BINARY_DIR}/generated/lugh/version.h")
 
 add_subdirectory(lugh)
+if (NOT LUGH_BUILD_NODE)
+    return()
+endif()
 add_subdirectory(tools)
 
 # ------------------------------------------------------------------- tests

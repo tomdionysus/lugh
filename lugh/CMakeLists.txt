@@ -5,6 +5,37 @@
 # Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 #
 
+# lugh_client (P10): what a relying party links to verify Lugh's tokens and speak to a Lugh
+# cluster, exported as lugh::client. It depends on Dannan, Boost and OpenSSL and nothing of
+# the node's, and it carries Boost.JSON's definitions for every target that links it (the maintainer,
+# 2026-11-14), so they live in this library and not in an object library that would drop out.
+add_library(lugh_client STATIC
+    client/boost_json.cpp
+    client/jose.cpp
+)
+add_library(lugh::client ALIAS lugh_client)
+
+target_include_directories(lugh_client
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/generated>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
+)
+
+target_link_libraries(lugh_client
+    PUBLIC
+        dannan::dannan
+        Boost::headers
+        OpenSSL::Crypto
+        Threads::Threads
+)
+
+lugh_flags(lugh_client)
+
+if (NOT LUGH_BUILD_NODE)
+    return()
+endif()
+
 # The library: the service minus its main(), linked by lugh-node, the tests and the fuzz
 # targets. Listed, not globbed: a file added without a line here should fail to link, not
 # be found by accident. Included from the repository root as "lugh/<subsystem>/x.h".
@@ -32,8 +63,6 @@ add_library(lugh STATIC
     authn/passwords.cpp
     authn/policy.cpp
     authn/totp.cpp
-    client/boost_json.cpp
-    client/jose.cpp
     crypto/aead.cpp
     directory/directory.cpp
     directory/records.cpp
@@ -97,6 +126,7 @@ target_include_directories(lugh
 
 target_link_libraries(lugh
     PUBLIC
+        lugh_client
         dannan::dannan
         Boost::headers
         OpenSSL::SSL
