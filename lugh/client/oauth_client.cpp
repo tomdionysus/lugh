@@ -88,6 +88,18 @@ std::variant<Endpoints, std::string> Endpoints::from_discovery(const boost::json
   out.introspection = take("introspection_endpoint");
   out.revocation = take("revocation_endpoint");
   out.end_session = take("end_session_endpoint");
+  if (const auto aliases = discovery.if_contains("mtls_endpoint_aliases"); aliases && aliases->is_object()) {
+    const auto& named = aliases->as_object();
+    const auto alias = [&](const char* name) {
+      auto url = string_claim(named, name).value_or("");
+      return https(url) ? url : std::string();
+    };
+    out.mtls.token = alias("token_endpoint");
+    out.mtls.pushed_authorization = alias("pushed_authorization_request_endpoint");
+    out.mtls.introspection = alias("introspection_endpoint");
+    out.mtls.revocation = alias("revocation_endpoint");
+    out.mtls.userinfo = alias("userinfo_endpoint");
+  }
   if (!https(out.authorization) || !https(out.token)) return std::string("the discovery document has no https authorization or token endpoint");
   return out;
 }
@@ -131,7 +143,8 @@ void OAuthClient::pushed_authorization(const std::string& redirect_uri, const st
   Form fields(form.begin(), form.end());
   HttpsRequest post;
   post.method = "POST";
-  post.url = _endpoints.pushed_authorization;
+  post.url = _identity.presents_certificate() && !_endpoints.mtls.pushed_authorization.empty() ? _endpoints.mtls.pushed_authorization
+                                                                                               : _endpoints.pushed_authorization;
   post.content_type = "application/x-www-form-urlencoded";
   _authenticate(fields, post);
   post.body = form_body(fields);
@@ -299,6 +312,72 @@ void OAuthClient::device_tokens(const DeviceAuthorization& started, const dannan
   std::make_shared<DevicePoll>(*this, started, time, deadline, std::move(executor), std::move(done))->wait();
 }
 
+void OAuthClient::_post(const std::string& url, const std::string& alias, Form form, Deadline deadline, Executor executor, Done<Outcome<HttpsResponse>> done) {
+  HttpsRequest post;
+  post.method = "POST";
+  post.url = _identity.presents_certificate() && !alias.empty() ? alias : url;
+  post.content_type = "application/x-www-form-urlencoded";
+  post.headers.emplace_back("Accept", "application/json");
+  _authenticate(form, post);
+  post.body = form_body(form);
+  _https.send(std::move(post), deadline, std::move(executor), std::move(done));
+}
+
+void OAuthClient::introspect(const Secret& token, Deadline deadline, Executor executor, Done<Outcome<Introspection>> done) {
+  using Answer = Outcome<Introspection>;
+  if (_endpoints.introspection.empty())
+    return answer_now(executor, std::move(done), Answer::failure(Fault::invalid, "the issuer has no introspection endpoint"));
+  const auto& bytes = token.reveal();
+  _post(_endpoints.introspection, _endpoints.mtls.introspection, {{"token", std::string(bytes.begin(), bytes.end())}}, deadline, executor,
+        [done = std::move(done)](Outcome<HttpsResponse> answered) {
+          if (!answered.ok()) return done(Answer::from(answered));
+          boost::system::error_code ec;
+          const auto parsed = boost::json::parse(answered.value.body, ec);
+          if (ec || !parsed.is_object()) return done(Answer::failure(Fault::failed, "the introspection answer is not JSON"));
+          const auto& body = parsed.as_object();
+          if (answered.value.status != 200) {
+            return done(
+                Answer::failure(Fault::refused, string_claim(body, "error").value_or("refused") + ": " + string_claim(body, "error_description").value_or("")));
+          }
+          const auto active = body.if_contains("active");
+          if (!active || !active->is_bool()) return done(Answer::failure(Fault::failed, "the introspection answer says nothing of active"));
+          Introspection out;
+          out.claims = body;
+          out.active = active->as_bool();
+          out.token_type = string_claim(body, "token_type").value_or("");
+          out.subject = string_claim(body, "sub").value_or("");
+          out.client_id = string_claim(body, "client_id").value_or("");
+          out.expires = seconds_claim(body, "exp").value_or(0);
+          if (const auto scope = string_claim(body, "scope")) {
+            std::string_view rest(*scope);
+            while (!rest.empty()) {
+              const auto space = rest.find(' ');
+              if (const auto piece = rest.substr(0, space); !piece.empty()) out.scopes.emplace_back(piece);
+              if (space == std::string_view::npos) break;
+              rest.remove_prefix(space + 1);
+            }
+          }
+          done(Answer::success(std::move(out)));
+        });
+}
+
+void OAuthClient::revoke(const Secret& token, Deadline deadline, Executor executor, Done<Outcome<>> done) {
+  using Answer = Outcome<>;
+  if (_endpoints.revocation.empty()) return answer_now(executor, std::move(done), Answer::failure(Fault::invalid, "the issuer has no revocation endpoint"));
+  const auto& bytes = token.reveal();
+  _post(_endpoints.revocation, _endpoints.mtls.revocation, {{"token", std::string(bytes.begin(), bytes.end())}}, deadline, executor,
+        [done = std::move(done)](Outcome<HttpsResponse> answered) {
+          if (!answered.ok()) return done(Answer::from(answered));
+          if (answered.value.status == 200) return done(Answer::success());
+          boost::system::error_code ec;
+          const auto parsed = boost::json::parse(answered.value.body, ec);
+          if (ec || !parsed.is_object())
+            return done(Answer::failure(Fault::failed, "the revocation endpoint answered " + std::to_string(answered.value.status)));
+          done(Answer::failure(Fault::refused, string_claim(parsed.as_object(), "error").value_or("refused") + ": " +
+                                                   string_claim(parsed.as_object(), "error_description").value_or("")));
+        });
+}
+
 std::optional<std::string> OAuthClient::dpop_proof_for(std::string_view method, std::string_view url, std::string_view access_token) const {
   if (!_identity.dpop_key) return std::nullopt;
   return dpop_proof(*_identity.dpop_key, method, url, _wall.unix_ms() / 1000, access_token);
@@ -307,6 +386,7 @@ std::optional<std::string> OAuthClient::dpop_proof_for(std::string_view method, 
 void OAuthClient::_authenticate(Form& form, HttpsRequest& request) const {
   switch (_identity.method) {
     case ClientIdentity::Method::none:
+    case ClientIdentity::Method::tls_client_auth:
       form.emplace_back("client_id", _identity.client_id);
       return;
     case ClientIdentity::Method::client_secret_basic: {
@@ -333,10 +413,11 @@ void OAuthClient::_token(Form form, std::optional<std::string> nonce, Deadline d
   using Answer = Outcome<TokenSet>;
   HttpsRequest post;
   post.method = "POST";
-  post.url = _endpoints.token;
+  // RFC 8705 section 5: a client presenting its certificate calls the mTLS alias when there is one.
+  post.url = _identity.presents_certificate() && !_endpoints.mtls.token.empty() ? _endpoints.mtls.token : _endpoints.token;
   post.content_type = "application/x-www-form-urlencoded";
   post.headers.emplace_back("Accept", "application/json");
-  if (_identity.dpop_key) post.headers.emplace_back("DPoP", dpop_proof(*_identity.dpop_key, "POST", _endpoints.token, _wall.unix_ms() / 1000));
+  if (_identity.dpop_key) post.headers.emplace_back("DPoP", dpop_proof(*_identity.dpop_key, "POST", post.url, _wall.unix_ms() / 1000));
   _authenticate(form, post);
   post.body = form_body(form);
   _https.send(std::move(post), deadline, executor, [this, done = std::move(done), nonce = std::move(nonce)](Outcome<HttpsResponse> answered) {

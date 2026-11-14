@@ -48,6 +48,17 @@ struct Endpoints {
   std::string revocation;
   std::string end_session;
 
+  // RFC 8705 section 5: where a client that presents its certificate calls instead, when the
+  // issuer serves mTLS on endpoints of their own. Empty when it does not.
+  struct Aliases {
+    std::string token;
+    std::string pushed_authorization;
+    std::string introspection;
+    std::string revocation;
+    std::string userinfo;
+  };
+  Aliases mtls;
+
   // The endpoints of `discovery`, which must be `issuer`'s own, with https authorisation and token
   // endpoints; or why not.
   static std::variant<Endpoints, std::string> from_discovery(const boost::json::object& discovery, std::string_view issuer);
@@ -55,7 +66,9 @@ struct Endpoints {
 
 // Who the client is and how it proves it.
 struct ClientIdentity {
-  enum class Method { none, private_key_jwt, client_secret_basic };
+  // tls_client_auth (RFC 8705 section 2): the certificate the client's HttpsClient presents is its
+  // credential, and only its client_id goes in the form.
+  enum class Method { none, private_key_jwt, client_secret_basic, tls_client_auth };
 
   std::string client_id;
   Method method = Method::none;
@@ -67,6 +80,12 @@ struct ClientIdentity {
   // With a key, every token request carries a DPoP proof by it (RFC 9449), so the tokens are bound
   // to it and good only with proofs by it.
   std::shared_ptr<const dannan::identity::SigningKey> dpop_key;
+  // A client registered for certificate-bound tokens (RFC 8705 section 3) that authenticates some
+  // other way: like tls_client_auth, it calls the mTLS aliases, so its certificate binds the tokens.
+  bool certificate_bound = false;
+
+  // Whether it calls the issuer's mTLS aliases.
+  bool presents_certificate() const noexcept { return method == Method::tls_client_auth || certificate_bound; }
 };
 
 // What the browser is sent to, and what the client keeps until it comes back.
@@ -100,6 +119,18 @@ struct DeviceAuthorization {
   std::string verification_uri_complete;
   std::uint32_t expires_in = 0;
   std::uint32_t interval = 5;
+};
+
+// What introspection says of a token (RFC 7662 section 2.2).
+struct Introspection {
+  bool active = false;
+  // As the issuer gave them, active included.
+  boost::json::object claims;
+  std::string token_type;
+  std::string subject;
+  std::string client_id;
+  std::vector<std::string> scopes;
+  std::uint64_t expires = 0;
 };
 
 class DevicePoll;
@@ -147,6 +178,15 @@ class OAuthClient {
   void device_tokens(const DeviceAuthorization& started, const dannan::contract::TimeSource& time, Deadline deadline, Executor executor,
                      Done<Outcome<TokenSet>> done);
 
+  // Whether `token` (an access token, opaque or not, or a refresh token) is active, as the issuer
+  // says (RFC 7662): what an API asks of a token it cannot verify itself. A token the client may not
+  // see is inactive; a public client may not ask (refused, invalid_client).
+  void introspect(const dannan::identity::Secret& token, Deadline deadline, Executor executor, Done<Outcome<Introspection>> done);
+
+  // `token` revoked (RFC 7009): a refresh token ends its family, an access token is refused until
+  // it expires. The issuer answers the same whether or not it knew the token.
+  void revoke(const dannan::identity::Secret& token, Deadline deadline, Executor executor, Done<Outcome<>> done);
+
   // The DPoP header's value for a request to a resource carrying `access_token` (RFC 9449 section
   // 7), by the client's DPoP key; nothing for a client without one. The request then sends
   // `Authorization: DPoP <token>`.
@@ -157,6 +197,10 @@ class OAuthClient {
 
   // The form's client authentication, and the header it may need.
   void _authenticate(std::vector<std::pair<std::string, std::string>>& form, HttpsRequest& request) const;
+  // `form`, authenticated, posted to `url`, or to `alias` when the client presents its certificate
+  // and there is one.
+  void _post(const std::string& url, const std::string& alias, std::vector<std::pair<std::string, std::string>> form, Deadline deadline, Executor executor,
+             Done<Outcome<HttpsResponse>> done);
   void _token(std::vector<std::pair<std::string, std::string>> form, std::optional<std::string> nonce, Deadline deadline, Executor executor,
               Done<Outcome<TokenSet>> done);
 

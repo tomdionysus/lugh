@@ -72,6 +72,7 @@ class Exchange : public std::enable_shared_from_this<Exchange> {
               response.status = message.result_int();
               response.content_type = std::string(message[beast::http::field::content_type]);
               response.cache_control = std::string(message[beast::http::field::cache_control]);
+              response.etag = std::string(message[beast::http::field::etag]);
               response.body = std::move(message.body());
               self->_answer->finish(Outcome<HttpsResponse>::success(std::move(response)));
             });
@@ -123,7 +124,8 @@ std::optional<HttpsTarget> https_target(std::string_view url) {
   return out;
 }
 
-HttpsClient::HttpsClient(boost::asio::io_context& io_context, const std::string& ca_path) : _io_context(io_context), _tls(ssl::context::tls_client) {
+HttpsClient::HttpsClient(boost::asio::io_context& io_context, const std::string& ca_path, std::optional<Certificate> certificate)
+    : _io_context(io_context), _tls(ssl::context::tls_client) {
   SSL_CTX_set_min_proto_version(_tls.native_handle(), TLS1_2_VERSION);
   boost::system::error_code ec;
   if (ca_path.empty()) {
@@ -133,6 +135,15 @@ HttpsClient::HttpsClient(boost::asio::io_context& io_context, const std::string&
   }
   if (ec) throw std::runtime_error("cannot load the roots for outbound TLS: " + ec.message());
   _tls.set_verify_mode(ssl::verify_peer);
+  if (certificate) {
+    _tls.use_certificate_chain_file(certificate->chain_path, ec);
+    if (ec) throw std::runtime_error("cannot read the client certificate " + certificate->chain_path + ": " + ec.message());
+    _tls.use_private_key_file(certificate->key_path, ssl::context::pem, ec);
+    if (ec) throw std::runtime_error("cannot read the client key " + certificate->key_path + ": " + ec.message());
+    if (SSL_CTX_check_private_key(_tls.native_handle()) != 1) {
+      throw std::runtime_error("the client key " + certificate->key_path + " is not the key of " + certificate->chain_path);
+    }
+  }
 }
 
 void HttpsClient::send(HttpsRequest request, Deadline deadline, Executor executor, Done<Outcome<HttpsResponse>> done) {
@@ -140,11 +151,18 @@ void HttpsClient::send(HttpsRequest request, Deadline deadline, Executor executo
   auto answer = Completion<Answer>::start(deadline, executor, std::move(done), [] { return Answer::failure(Fault::failed, "no answer within the deadline"); });
   auto where = https_target(request.url);
   if (!where) return answer->finish(Answer::failure(Fault::failed, "not an https URL"));
+  // The methods Lugh's endpoints and API take, and nothing else.
   beast::http::verb method;
   if (request.method == "GET") {
     method = beast::http::verb::get;
   } else if (request.method == "POST") {
     method = beast::http::verb::post;
+  } else if (request.method == "PATCH") {
+    method = beast::http::verb::patch;
+  } else if (request.method == "PUT") {
+    method = beast::http::verb::put;
+  } else if (request.method == "DELETE") {
+    method = beast::http::verb::delete_;
   } else {
     return answer->finish(Answer::failure(Fault::failed, "not a method this client sends: " + request.method));
   }

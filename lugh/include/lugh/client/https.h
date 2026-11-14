@@ -36,7 +36,7 @@ struct HttpsTarget {
 std::optional<HttpsTarget> https_target(std::string_view url);
 
 struct HttpsRequest {
-  // GET or POST.
+  // GET, POST, PATCH, PUT or DELETE.
   std::string method = "GET";
   std::string url;
   std::vector<std::pair<std::string, std::string>> headers;
@@ -49,6 +49,7 @@ struct HttpsResponse {
   unsigned status = 0;
   std::string content_type;
   std::string cache_control;
+  std::string etag;
   std::string body;
 };
 
@@ -68,9 +69,17 @@ class HttpsClient final : public Https {
   // The largest answer body read.
   static constexpr std::size_t kMostAnswerBytes = 64 * 1024;
 
+  // A certificate chain and its key, in PEM, that the client presents when a server asks (RFC 8705:
+  // tls_client_auth, and tokens bound to the certificate).
+  struct Certificate {
+    std::string chain_path;
+    std::string key_path;
+  };
+
   // The roots servers' certificates are checked against: `ca_path` if given, otherwise the
-  // system's. Throws std::runtime_error for roots that cannot be read.
-  explicit HttpsClient(boost::asio::io_context& io_context, const std::string& ca_path = "");
+  // system's; and the client's own certificate, if it has one. Throws std::runtime_error for roots,
+  // a chain or a key that cannot be read, or a key that is not the certificate's, naming the path.
+  explicit HttpsClient(boost::asio::io_context& io_context, const std::string& ca_path = "", std::optional<Certificate> certificate = std::nullopt);
 
   void send(HttpsRequest request, Deadline deadline, Executor executor, Done<Outcome<HttpsResponse>> done) override;
 

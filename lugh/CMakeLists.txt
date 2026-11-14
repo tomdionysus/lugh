@@ -11,6 +11,7 @@
 # 2026-11-14), so they live in this library and not in an object library that would drop out.
 add_library(lugh_client STATIC
     client/access_token.cpp
+    client/api_client.cpp
     client/boost_json.cpp
     client/dpop.cpp
     client/https.cpp

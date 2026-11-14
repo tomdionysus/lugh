@@ -27,82 +27,16 @@
 #include "lugh/client/oauth_client.h"
 #include "lugh/core/encoding.h"
 #include "lugh/oauth/dpop.h"
+#include "lugh/test/fixtures/recording_https.h"
 
 using namespace lugh::client;
 using dannan::identity::Secret;
-using Fields = std::map<std::string, std::string>;
 
 namespace {
 
 constexpr std::uint64_t kNow = 1'800'000'000;
 constexpr const char* kIssuer = "https://lugh.example";
 constexpr const char* kRedirect = "https://app.example/back";
-
-Fields fields_of(std::string_view text) {
-  Fields out;
-  while (!text.empty()) {
-    const auto amp = text.find('&');
-    const auto pair = text.substr(0, amp);
-    const auto equals = pair.find('=');
-    out[dannan::encoding::percent_decode(pair.substr(0, equals), dannan::encoding::Decoding::form)] =
-        dannan::encoding::percent_decode(pair.substr(equals + 1), dannan::encoding::Decoding::form);
-    if (amp == std::string_view::npos) break;
-    text.remove_prefix(amp + 1);
-  }
-  return out;
-}
-
-std::string text_of(const Secret& secret) { return std::string(secret.reveal().begin(), secret.reveal().end()); }
-
-// An HTTPS that keeps each request and answers from a table, on the caller's executor.
-class RecordingHttps final : public Https {
- public:
-  void send(HttpsRequest request, lugh::Deadline, lugh::Executor executor, lugh::Done<lugh::Outcome<HttpsResponse>> done) override {
-    auto answer = lugh::Outcome<HttpsResponse>::failure(lugh::Fault::failed, "the connection failed");
-    if (auto queue = queued.find(request.url); queue != queued.end() && !queue->second.empty()) {
-      answer = queue->second.front();
-      queue->second.pop_front();
-    } else if (const auto found = answers.find(request.url); found != answers.end()) {
-      answer = found->second;
-    }
-    sent.push_back(std::move(request));
-    boost::asio::post(executor, [done = std::move(done), answer = std::move(answer)] { done(answer); });
-  }
-
-  void answer(const std::string& url, unsigned status, const boost::json::object& body) {
-    HttpsResponse response;
-    response.status = status;
-    response.content_type = "application/json";
-    response.body = boost::json::serialize(body);
-    answers[url] = lugh::Outcome<HttpsResponse>::success(std::move(response));
-  }
-
-  // The next answer for `url`, before the table's.
-  void queue(const std::string& url, unsigned status, const boost::json::object& body) {
-    HttpsResponse response;
-    response.status = status;
-    response.content_type = "application/json";
-    response.body = boost::json::serialize(body);
-    queued[url].push_back(lugh::Outcome<HttpsResponse>::success(std::move(response)));
-  }
-
-  std::size_t sent_to(const std::string& url) const {
-    std::size_t count = 0;
-    for (const auto& one : sent) count += one.url == url ? 1 : 0;
-    return count;
-  }
-
-  std::string header(std::size_t index, const std::string& name) const {
-    for (const auto& [key, value] : sent.at(index).headers) {
-      if (key == name) return value;
-    }
-    return {};
-  }
-
-  std::map<std::string, lugh::Outcome<HttpsResponse>> answers;
-  std::map<std::string, std::deque<lugh::Outcome<HttpsResponse>>> queued;
-  std::vector<HttpsRequest> sent;
-};
 
 boost::json::object discovery() {
   return {{"issuer", kIssuer},
@@ -114,7 +48,9 @@ boost::json::object discovery() {
           {"introspection_endpoint", std::string(kIssuer) + "/oauth2/introspect"},
           {"revocation_endpoint", std::string(kIssuer) + "/oauth2/revoke"},
           {"end_session_endpoint", std::string(kIssuer) + "/oauth2/logout"},
-          {"jwks_uri", std::string(kIssuer) + "/oauth2/jwks"}};
+          {"jwks_uri", std::string(kIssuer) + "/oauth2/jwks"},
+          {"mtls_endpoint_aliases",
+           {{"token_endpoint", "https://lugh.example:8443/oauth2/token"}, {"pushed_authorization_request_endpoint", "https://lugh.example:8443/oauth2/par"}}}};
 }
 
 class OAuthTest : public ::testing::Test {
@@ -516,4 +452,98 @@ TEST_F(OAuthTest, AClientWithADpopKeyProvesItOnEveryTokenRequest) {
   ASSERT_TRUE(resource);
   EXPECT_TRUE(checker.check(*resource, "GET", userinfo, "at-1").ok());
   EXPECT_FALSE(client(public_client()).dpop_proof_for("GET", userinfo, "at-1"));
+}
+
+// RFC 8705: a client presenting its certificate calls the issuer's mTLS aliases; with
+// tls_client_auth the certificate is its credential and only its client_id goes in the form; a
+// client bound to its certificate that authenticates otherwise calls the aliases too.
+TEST_F(OAuthTest, AClientPresentingItsCertificateCallsTheMtlsAliases) {
+  const auto endpoints = std::get<Endpoints>(Endpoints::from_discovery(discovery(), kIssuer));
+  EXPECT_EQ(endpoints.mtls.token, "https://lugh.example:8443/oauth2/token");
+  EXPECT_EQ(endpoints.mtls.pushed_authorization, "https://lugh.example:8443/oauth2/par");
+  EXPECT_TRUE(endpoints.mtls.introspection.empty());
+
+  auto tls = public_client();
+  tls.method = ClientIdentity::Method::tls_client_auth;
+  auto oauth = client(tls);
+  https.answer("https://lugh.example:8443/oauth2/token", 200, {{"access_token", "at-1"}, {"token_type", "Bearer"}});
+  ASSERT_TRUE(wait<TokenSet>([&](auto done) { oauth.client_credentials({}, std::chrono::seconds(5), io.get_executor(), done); }).ok());
+  EXPECT_EQ(https.sent[0].url, "https://lugh.example:8443/oauth2/token");
+  const auto fields = fields_of(https.sent[0].body);
+  EXPECT_EQ(fields.at("client_id"), "app1");
+  EXPECT_FALSE(fields.count("client_assertion"));
+  EXPECT_TRUE(https.header(0, "Authorization").empty());
+
+  auto bound = public_client();
+  bound.method = ClientIdentity::Method::private_key_jwt;
+  bound.key = std::make_shared<SigningKey>(SigningKey::generate(SigningAlgorithm::es256));
+  bound.kid = "c1";
+  bound.certificate_bound = true;
+  auto bound_client = client(bound);
+  ASSERT_TRUE(wait<TokenSet>([&](auto done) { bound_client.client_credentials({}, std::chrono::seconds(5), io.get_executor(), done); }).ok());
+  EXPECT_EQ(https.sent[1].url, "https://lugh.example:8443/oauth2/token");
+  // The assertion is still for the token endpoint the issuer names.
+  const auto assertion = jws_parse(fields_of(https.sent[1].body).at("client_assertion"));
+  ASSERT_TRUE(assertion);
+  EXPECT_EQ(std::string(assertion->claims.at("aud").as_string()), token_url());
+
+  // An issuer with no aliases: the endpoints as they are.
+  auto plain = discovery();
+  plain.erase("mtls_endpoint_aliases");
+  OAuthClient without(std::get<Endpoints>(Endpoints::from_discovery(plain, kIssuer)), tls, https, verifier, wall);
+  https.answer(token_url(), 200, {{"access_token", "at-2"}, {"token_type", "Bearer"}});
+  ASSERT_TRUE(wait<TokenSet>([&](auto done) { without.client_credentials({}, std::chrono::seconds(5), io.get_executor(), done); }).ok());
+  EXPECT_EQ(https.sent[2].url, token_url());
+}
+
+// RFC 7662: the token sent, authenticated as the client is; the answer's claims read.
+TEST_F(OAuthTest, IntrospectionSaysWhetherATokenIsActive) {
+  auto identity = public_client();
+  identity.method = ClientIdentity::Method::client_secret_basic;
+  identity.secret = std::make_shared<Secret>(lugh::byte_span("s1"));
+  auto oauth = client(identity);
+  const auto url = std::string(kIssuer) + "/oauth2/introspect";
+  https.answer(url, 200, {{"active", true}, {"token_type", "Bearer"}, {"sub", "u1"}, {"client_id", "app2"}, {"scope", "lir:sub:a openid"}, {"exp", kNow + 60}});
+  const Secret token(lugh::byte_span("lo_handle"));
+  const auto active = wait<Introspection>([&](auto done) { oauth.introspect(token, std::chrono::seconds(5), io.get_executor(), done); });
+  ASSERT_TRUE(active.ok()) << active.message;
+  EXPECT_TRUE(active.value.active);
+  EXPECT_EQ(active.value.subject, "u1");
+  EXPECT_EQ(active.value.client_id, "app2");
+  EXPECT_EQ(active.value.scopes, (std::vector<std::string>{"lir:sub:a", "openid"}));
+  EXPECT_EQ(active.value.expires, kNow + 60);
+  EXPECT_EQ(fields_of(https.sent[0].body).at("token"), "lo_handle");
+  EXPECT_FALSE(https.header(0, "Authorization").empty());
+
+  https.answer(url, 200, {{"active", false}});
+  const auto inactive = wait<Introspection>([&](auto done) { oauth.introspect(token, std::chrono::seconds(5), io.get_executor(), done); });
+  ASSERT_TRUE(inactive.ok());
+  EXPECT_FALSE(inactive.value.active);
+
+  // A public client may not ask.
+  https.answer(url, 401, {{"error", "invalid_client"}, {"error_description", "a public client cannot introspect"}});
+  const auto refused = wait<Introspection>([&](auto done) { oauth.introspect(token, std::chrono::seconds(5), io.get_executor(), done); });
+  EXPECT_EQ(refused.fault, lugh::Fault::refused);
+  EXPECT_EQ(refused.message.rfind("invalid_client:", 0), 0u);
+  https.answer(url, 200, {{"sub", "u1"}});
+  EXPECT_EQ(wait<Introspection>([&](auto done) { oauth.introspect(token, std::chrono::seconds(5), io.get_executor(), done); }).fault, lugh::Fault::failed);
+}
+
+// RFC 7009: the token sent; the issuer's 200 is the answer whether it knew the token or not.
+TEST_F(OAuthTest, ATokenIsRevoked) {
+  auto oauth = client(public_client());
+  const auto url = std::string(kIssuer) + "/oauth2/revoke";
+  https.answer(url, 200, {});
+  const Secret token(lugh::byte_span("lr_family.secret"));
+  ASSERT_TRUE(wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); }).ok());
+  const auto fields = fields_of(https.sent[0].body);
+  EXPECT_EQ(fields.at("token"), "lr_family.secret");
+  EXPECT_EQ(fields.at("client_id"), "app1");
+
+  https.answer(url, 401, {{"error", "invalid_client"}, {"error_description", "no such client"}});
+  const auto refused = wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); });
+  EXPECT_EQ(refused.fault, lugh::Fault::refused);
+  EXPECT_EQ(refused.message, "invalid_client: no such client");
+  https.answers.clear();
+  EXPECT_EQ(wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); }).fault, lugh::Fault::failed);
 }
