@@ -88,3 +88,21 @@ TEST(Encoding, Base64UrlDecodesExactlyWhatItEncodes) {
     EXPECT_EQ(*base64url_decode(base64url(bytes)), bytes) << size;
   }
 }
+
+// RFC 4648 section 10, padded in the standard alphabet, as HTTP Basic credentials are written;
+// and back again.
+TEST(Encoding, Base64KnownAnswers) {
+  EXPECT_EQ(base64(byte_span("")), "");
+  EXPECT_EQ(base64(byte_span("f")), "Zg==");
+  EXPECT_EQ(base64(byte_span("fo")), "Zm8=");
+  EXPECT_EQ(base64(byte_span("foo")), "Zm9v");
+  EXPECT_EQ(base64(byte_span("foob")), "Zm9vYg==");
+  EXPECT_EQ(base64(byte_span("fooba")), "Zm9vYmE=");
+  EXPECT_EQ(base64(byte_span("foobar")), "Zm9vYmFy");
+  EXPECT_EQ(base64(from_hex("fbff")), "+/8=");
+  for (std::size_t size = 0; size < 40; ++size) {
+    lugh::Bytes bytes;
+    for (std::size_t i = 0; i < size; ++i) bytes.push_back(static_cast<unsigned char>(i * 41 + 3));
+    EXPECT_EQ(*base64_decode(base64(bytes)), bytes) << size;
+  }
+}
