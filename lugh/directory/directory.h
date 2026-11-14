@@ -81,8 +81,10 @@ class Directory : public std::enable_shared_from_this<Directory> {
   Directory(std::shared_ptr<dannan::status::LogSink> log, std::shared_ptr<store::Store> store, const dannan::contract::WallClock& wall,
             std::shared_ptr<audit::AuditLog> audit);
 
-  // Told, in the order added, when a user is removed. Set up before anything is served.
-  void dependent_add(std::shared_ptr<Dependent> dependent);
+  // Told, in the order added, when a user is removed. Set up before anything is served. Held
+  // weakly: whoever made it keeps it, and a dependent such as AppPasswords holds this directory,
+  // so a strong hold here would keep both alive for ever (LeakSanitizer, 2026-11-14).
+  void dependent_add(const std::shared_ptr<Dependent>& dependent);
 
   // Where POSIX numbers come from, if they are configured: a person or a group gets one when made.
   // Set up before anything is served.
@@ -155,7 +157,7 @@ class Directory : public std::enable_shared_from_this<Directory> {
   store::StoreCalls _calls;
   const dannan::contract::WallClock& _wall;
   std::shared_ptr<audit::AuditLog> _audit_log;
-  std::vector<std::shared_ptr<Dependent>> _dependents;
+  std::vector<std::weak_ptr<Dependent>> _dependents;
   std::shared_ptr<PosixNumbers> _numbers;
 };
 

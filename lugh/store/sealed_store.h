@@ -81,6 +81,10 @@ class SealedStore : public Store {
   };
   std::optional<Usage> usage(std::string_view table) const;
 
+  // At shutdown, once the executors have stopped: every writer still waiting for a lock is
+  // dropped, so the store and the coroutines that hold it do not keep each other alive.
+  void abandon_waiters();
+
  private:
   struct Entry {
     std::uint64_t version = 0;

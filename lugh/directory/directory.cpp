@@ -68,7 +68,7 @@ Directory::Directory(std::shared_ptr<dannan::status::LogSink> log, std::shared_p
                      std::shared_ptr<audit::AuditLog> audit)
     : _logger(std::move(log), "directory"), _calls(std::move(store)), _wall(wall), _audit_log(std::move(audit)) {}
 
-void Directory::dependent_add(std::shared_ptr<Dependent> dependent) { _dependents.push_back(std::move(dependent)); }
+void Directory::dependent_add(const std::shared_ptr<Dependent>& dependent) { _dependents.push_back(dependent); }
 
 void Directory::numbers_set(std::shared_ptr<PosixNumbers> numbers) { _numbers = std::move(numbers); }
 
@@ -297,7 +297,11 @@ void Directory::remove_user(audit::Actor actor, std::string id, std::optional<st
       self->_audit(actor, "user.remove", found.id, found.name, executor, [=] {
         self->_remove_memberships([id](const Membership& membership) { return membership.user_id == id; }, executor,
                                   [=] {
-                                    auto dependents = std::make_shared<std::vector<std::shared_ptr<Dependent>>>(self->_dependents);
+                                    // Those still kept by their owner; one gone has nothing left to forget.
+                                    auto dependents = std::make_shared<std::vector<std::shared_ptr<Dependent>>>();
+                                    for (const auto& weak : self->_dependents) {
+                                      if (auto dependent = weak.lock()) dependents->push_back(std::move(dependent));
+                                    }
                                     in_turn<std::shared_ptr<Dependent>>(
                                         dependents, 0,
                                         [=](const std::shared_ptr<Dependent>& dependent, std::function<void()> next) {

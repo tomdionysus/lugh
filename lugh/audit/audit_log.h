@@ -99,6 +99,10 @@ class AuditLog : public std::enable_shared_from_this<AuditLog> {
   // The number of entries.
   std::uint64_t size() const;
 
+  // At shutdown, once the executors have stopped: entries still queued are dropped unwritten,
+  // so their callers' callbacks, which may hold this log, are freed with them.
+  void abandon_pending();
+
   // Walks the whole chain, recomputing every hash. The number of entries, or where it
   // breaks, or that the walk did not finish within the deadline.
   void verify(Deadline deadline, Executor executor, Done<Result<std::uint64_t>> done) const;

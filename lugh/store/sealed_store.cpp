@@ -420,6 +420,11 @@ Task<Status> SealedStore::rotate(std::string name) {
   co_return co_await _compact(*table);
 }
 
+void SealedStore::abandon_waiters() {
+  for (auto& [name, table] : _tables) table->write_lock.abandon();
+  _keyring_lock.abandon();
+}
+
 std::optional<SealedStore::Usage> SealedStore::usage(std::string_view name) const {
   const auto* table = _table(name);
   if (table == nullptr) return std::nullopt;

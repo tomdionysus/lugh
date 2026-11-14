@@ -571,6 +571,10 @@ int run(const cli::Options& options) {
   io_context.run();
   for (auto& thread : threads) thread.join();
 
+  // Nothing runs the io_context now. What was still waiting is dropped, not left holding what
+  // holds it.
+  services.store->abandon_waiters();
+  services.audit->abandon_pending();
   logger.info("Stopped");
   return 0;
 }

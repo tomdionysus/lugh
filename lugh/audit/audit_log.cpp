@@ -165,6 +165,15 @@ void AuditLog::_walk_entries(std::shared_ptr<Walk> walk) const {
   });
 }
 
+void AuditLog::abandon_pending() {
+  std::deque<Pending> dropped;
+  {
+    dannan::contract::Lock state(_mutex);
+    dropped.swap(_queue);
+    _appending = false;
+  }
+}
+
 std::uint64_t AuditLog::size() const {
   dannan::contract::Lock lock(_mutex);
   return _next - 1;

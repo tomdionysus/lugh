@@ -56,6 +56,17 @@ class AsyncMutex {
   AsyncMutex(const AsyncMutex&) = delete;
   AsyncMutex& operator=(const AsyncMutex&) = delete;
 
+  // Drops every waiter without resuming it, for shutdown once nothing runs the executors any
+  // more: a waiting coroutine is owned by its handler here, and holds what owns this mutex, so
+  // left in place the two keep each other alive for ever (LeakSanitizer, 2026-11-14).
+  void abandon() {
+    std::deque<Waiter> dropped;
+    {
+      dannan::contract::Lock state(_state);
+      dropped.swap(_waiters);
+    }
+  }
+
   Task<Guard> lock() {
     // Resumed on the waiter's own executor, whichever thread hands the lock on.
     auto executor = co_await boost::asio::this_coro::executor;
