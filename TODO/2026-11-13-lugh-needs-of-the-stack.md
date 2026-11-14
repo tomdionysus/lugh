@@ -135,6 +135,21 @@ member, so sign-in fails there until then.
 - **Alpine, not now**, for Dannan and Dagda alike; and Raven is dropped from all of Lugh's development for now (the maintainer, 2026-11-13).
 - **TOTP replay under a per-user Dagda lease** (the maintainer, 2026-11-13), not the owning node's node-local space: leases are then on the sign-in path, at sign-in rates (told to Dagda). Dagda: one lease space keyed by user; an acquire is one replicated commit, so it is in slice 0's measurement (50 a second over 10,000 keys, p50 and p99). Consequence, stated: during a split a node that cannot reach the lease space's replicas cannot grant the lease, so a TOTP sign-in on that side fails closed ("try again shortly") rather than risk a replay. Recovery codes are single-use too and take the same lease. Accepted by the maintainer (2026-11-13).
 
+## Slice 0's first figures for Lugh's shape (Dagda, 2026-11-14, Mac, today's head path)
+
+Three in-process nodes, one every-node space of 50,000 keys, one writer: 37 commits a second reached of 50 wanted (commit p50
+18 ms, p99 102 ms); a commit on A seen on B at p50 103 ms, p99 347 ms, max 484 ms. So "disabled on A, refused on B" is about a
+tenth of a second, and a TOTP lease about 120 ms typical, 450 ms worst: both fine. Correction sent: a TOTP sign-in is about
+three head commits (the session, the lease acquired and released), so a 50-a-second storm is about 150 commits a second, and may
+land on one node; asked whether concurrent `mutate`s on one node group-commit, and for that measured, before P8.5. The build node run is
+the firmer figure.
+
+Dagda's answer: commits to one space are serialised (its mutation lock is held across the local commit and device writes), and
+a node reaches about 100 to 200 head commits a second in all on the Mac, whatever the number of spaces. Lugh's own cuts, taken
+regardless: the TOTP step and the session in one `lugh/secrets` commit, and the lease left to lapse after a second or two
+rather than released, so a TOTP sign-in is two commits (about 100 a second in a storm). Lugh prefers group commit for heads in
+Dagda, which Lir needs too; Dagda puts both options to the maintainer. Figures for 1, 4 and 8 writers on one node to follow.
+
 ## Of both
 
 - **Alpine (musl, GCC 15)** for Raven: every project must build and pass there. Has either been built on Alpine?

@@ -54,6 +54,7 @@ add_library(lugh STATIC
     ldap/operations.cpp
     ldap/tree.cpp
     ldap/writes.cpp
+    merge/record_merge.cpp
     keys/keyring.cpp
     keys/keyring_format.cpp
     keys/keyring_manager.cpp

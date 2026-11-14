@@ -2,6 +2,11 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-14: P8's merge, ahead of Dagda's slices
+
+- `lugh/merge/record_merge.h`: the merge the maintainer ruled for Lugh's shared spaces (P8 plan, "The merge"), as pure functions: the record envelope (version, writing node, tombstone) and its codec, `winner` (a removal over any edit; then the higher version, then the higher writer), `merge` over any number of heads, commutative, associative and idempotent; `writable` (a removed key never again); and `UniqueIndex`, which keeps two records of one name and reports the name ambiguous. Ready for Dagda's `Merge` at slice 1. Fuzz target `fuzz_envelope`, syntax-checked only.
+- Tests: 658 to 666, green in the debug, ASan and TSan builds, repeated and shuffled.
+
 ## 2026-11-06: `ldap.anonymous_bind`, and LDAP driven by a current client
 
 - `ldap.anonymous_bind` (the maintainer, 2026-11-06), default false. On, a bind with no name and no password succeeds on either listener and leaves the connection anonymous, reading the rootDSE and nothing else; a bound connection that does it gives up its identity. A name with an empty password stays refused, whatever the setting. It amends the plan's `BindRequest` row.
