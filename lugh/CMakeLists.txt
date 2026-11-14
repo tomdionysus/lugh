@@ -32,12 +32,12 @@ add_library(lugh STATIC
     authn/passwords.cpp
     authn/policy.cpp
     authn/totp.cpp
+    client/boost_json.cpp
     client/jose.cpp
     crypto/aead.cpp
     directory/directory.cpp
     directory/records.cpp
     directory/posix_numbers.cpp
-    http/boost_json.cpp
     http/client_address.cpp
     http/forms.cpp
     http/health_routes.cpp

@@ -32,7 +32,7 @@ include(CheckPIESupported)
 
 # Boost 1.83 is Dannan's floor (Debian's, so the build nodes build with it), and Lugh's must be the one
 # Dannan is built with; Asio, Beast and JSON are all used header-only, and Boost.JSON's definitions
-# are compiled once, in lugh/http/boost_json.cpp.
+# are compiled once, in lugh/client/boost_json.cpp.
 find_package(Boost 1.83 REQUIRED CONFIG)
 find_package(Threads REQUIRED)
 
