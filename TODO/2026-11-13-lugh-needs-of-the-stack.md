@@ -74,7 +74,9 @@ Proposals to the maintainer where marked; nothing changes in Dannan until he rul
   are fixed. Since hashing on the node's pool would share foreground with Dagda's foreground work in `lugh-node`, Lugh hashes on
   its own `WorkerPool` (cap 2 on a arm64 build node, a small queue); Dannan f58df4e confirms a second pool runs under the node's supervision
   (`Context::threads()`), counted like any other, its background work through the node's gates. Built once the maintainer answers Dannan's
-  note.)
+  note. Lugh reviewed the code (Dannan `feature/worker-pool`, f531ce5); answered in f752aa9: tasks and their `done` are a
+  move-only `UniqueFunction`, so a task owns the password's `Secret` outright; work past its deadline is told at most one running
+  task late, as the contract says; 694 of 694 on node-a. Lugh links it once it is released.)
   Hash on Lugh's own
   worker threads registered with `Context::threads()`, never the node's executor. Gap: Dannan admits by memory, not CPU; Dagda has
   Macha's CPU pacing. **Proposal to the maintainer:** a class-aware worker pool with CPU pacing moves into Dannan. Listeners: Lugh keeps its own
