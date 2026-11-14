@@ -69,7 +69,11 @@ Proposals to the maintainer where marked; nothing changes in Dannan until he rul
   first and answer "try later" at once when there is no room, so a storm costs at most the foreground budget. (2026-11-14: Dannan's
   P4 design, `../dannan/TODO/2026-11-14-p4-worker-pool.md`, `sched::WorkerPool`: per-class bounded queue refusing at once, a
   per-class cap, `Context::workers()`. Lugh answered that this meets N6 and asked for a queued task whose deadline passes to be
-  dropped unrun and told so, for the refusal's reason (queue, cap, budget), and for a Lugh-set cap below cores on the node's pool.)
+  dropped unrun and told so, for the refusal's reason (queue, cap, budget), and for a Lugh-set cap below cores on the node's pool.
+  Revised the same day, Dannan 520648b: all three taken, a Budget refusal stays Lugh's before it submits, and the four classes
+  are fixed. Since hashing on the node's pool would share foreground with Dagda's foreground work in `lugh-node`, Lugh will most
+  likely hash on its own `WorkerPool` (cap 2 on a arm64 build node, a small queue), registered with `Context::threads()`. Built once the maintainer
+  answers Dannan's note.)
   Hash on Lugh's own
   worker threads registered with `Context::threads()`, never the node's executor. Gap: Dannan admits by memory, not CPU; Dagda has
   Macha's CPU pacing. **Proposal to the maintainer:** a class-aware worker pool with CPU pacing moves into Dannan. Listeners: Lugh keeps its own
