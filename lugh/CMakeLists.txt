@@ -12,7 +12,9 @@
 add_library(lugh_client STATIC
     client/access_token.cpp
     client/boost_json.cpp
+    client/id_token.cpp
     client/jose.cpp
+    client/verifier.cpp
 )
 add_library(lugh::client ALIAS lugh_client)
 

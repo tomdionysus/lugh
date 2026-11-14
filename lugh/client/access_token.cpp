@@ -7,23 +7,13 @@
 
 #include "lugh/client/access_token.h"
 
+#include <algorithm>
+
+#include "lugh/client/claims.h"
+
 namespace lugh::client {
 
 namespace {
-
-std::optional<std::uint64_t> seconds_claim(const boost::json::object& claims, std::string_view name) {
-  const auto found = claims.if_contains(name);
-  if (!found || !found->is_number()) return std::nullopt;
-  const auto value = found->to_number<double>();
-  if (value < 0) return std::nullopt;
-  return static_cast<std::uint64_t>(value);
-}
-
-std::optional<std::string> string_claim(const boost::json::object& object, std::string_view name) {
-  const auto found = object.if_contains(name);
-  if (!found || !found->is_string()) return std::nullopt;
-  return std::string(found->as_string());
-}
 
 std::vector<std::string> split_on_spaces(std::string_view text) {
   std::vector<std::string> pieces;
@@ -68,17 +58,9 @@ std::variant<AccessToken, std::string> check_access_token(std::string_view compa
   if (nbf && now + kClockSkewSeconds < *nbf) return std::string("not yet valid");
   token.expires = *exp;
 
-  if (const auto aud = claims.if_contains("aud"); aud && aud->is_array()) {
-    for (const auto& one : aud->as_array()) {
-      if (one.is_string()) token.audiences.emplace_back(one.as_string());
-    }
-  } else if (aud && aud->is_string()) {
-    token.audiences.emplace_back(aud->as_string());
-  }
-  if (audience) {
-    bool found = false;
-    for (const auto& one : token.audiences) found = found || one == *audience;
-    if (!found) return std::string("not for this audience");
+  token.audiences = audiences_claim(claims);
+  if (audience && std::find(token.audiences.begin(), token.audiences.end(), *audience) == token.audiences.end()) {
+    return std::string("not for this audience");
   }
 
   if (const auto cnf = claims.if_contains("cnf"); cnf && cnf->is_object()) {
