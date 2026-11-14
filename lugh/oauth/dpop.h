@@ -26,7 +26,7 @@
 namespace lugh::oauth {
 
 // RFC 7638: the SHA-256 thumbprint of a public key's JWK, base64url: what `cnf.jkt` names.
-std::string jwk_thumbprint(const tokens::VerifyKey& key);
+std::string jwk_thumbprint(const client::VerifyKey& key);
 
 // A DPoP proof, its signature checked against the key it carries.
 struct Proof {

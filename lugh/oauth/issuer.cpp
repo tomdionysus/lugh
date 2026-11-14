@@ -150,7 +150,7 @@ void TokenIssuer::for_person(apps::App app, CodeGrant grant, Deadline deadline, 
       if (cnf) access["cnf"] = *cnf;
 
       Issued issued;
-      issued.access_token = self->_as_issued(app, tokens::jws_sign(*signer->key, signer->kid, "at+jwt", access));
+      issued.access_token = self->_as_issued(app, client::jws_sign(*signer->key, signer->kid, "at+jwt", access));
       if (cnf && cnf->contains("jkt")) issued.token_type = "DPoP";
       issued.expires_in = app.access_seconds;
       issued.scopes = scopes;
@@ -167,7 +167,7 @@ void TokenIssuer::for_person(apps::App app, CodeGrant grant, Deadline deadline, 
         id["amr"] = strings(grant.amr);
         id["sid"] = grant.sid;
         id["at_hash"] = at_hash(issued.access_token);
-        issued.id_token = tokens::jws_sign(*signer->key, signer->kid, "JWT", id);
+        issued.id_token = client::jws_sign(*signer->key, signer->kid, "JWT", id);
       }
       answer->finish(Answer::success(std::move(issued)));
     });
@@ -196,7 +196,7 @@ Outcome<Issued> TokenIssuer::for_client(const apps::App& app, const std::vector<
   access["scope"] = scopes::join(scopes);
   if (cnf) access["cnf"] = *cnf;
   Issued issued;
-  issued.access_token = _as_issued(app, tokens::jws_sign(*signer->key, signer->kid, "at+jwt", access));
+  issued.access_token = _as_issued(app, client::jws_sign(*signer->key, signer->kid, "at+jwt", access));
   if (cnf && cnf->contains("jkt")) issued.token_type = "DPoP";
   issued.expires_in = app.access_seconds;
   issued.scopes = scopes;
@@ -204,8 +204,8 @@ Outcome<Issued> TokenIssuer::for_client(const apps::App& app, const std::vector<
 }
 
 std::optional<IdTokenHint> TokenIssuer::id_token_hint(std::string_view token) const {
-  const auto jws = tokens::jws_parse(token);
-  if (!jws || jws->typ != "JWT" || !tokens::jws_verify(*jws, _keys->published())) return std::nullopt;
+  const auto jws = client::jws_parse(token);
+  if (!jws || jws->typ != "JWT" || !client::jws_verify(*jws, _keys->published())) return std::nullopt;
   const auto text = [&](const char* name) {
     const auto found = jws->claims.if_contains(name);
     return found && found->is_string() ? std::string(found->as_string()) : std::string();
@@ -228,7 +228,7 @@ std::optional<std::string> TokenIssuer::logout_token(const std::string& client_i
   claims["jti"] = random_id();
   claims["sid"] = sid;
   claims["events"] = boost::json::object{{"http://schemas.openid.net/event/backchannel-logout", boost::json::object{}}};
-  return tokens::jws_sign(*signer->key, signer->kid, "logout+jwt", claims);
+  return client::jws_sign(*signer->key, signer->kid, "logout+jwt", claims);
 }
 
 std::optional<Bearer> TokenIssuer::verify(std::string_view token, std::optional<std::string_view> audience) const {
@@ -237,8 +237,8 @@ std::optional<Bearer> TokenIssuer::verify(std::string_view token, std::optional<
     behind = _opaque->peek(token.substr(std::string_view(kOpaquePrefix).size()));
     if (!behind) return std::nullopt;
   }
-  const auto jws = tokens::jws_parse(behind ? std::string_view(*behind) : token);
-  if (!jws || jws->typ != "at+jwt" || !tokens::jws_verify(*jws, _keys->published())) return std::nullopt;
+  const auto jws = client::jws_parse(behind ? std::string_view(*behind) : token);
+  if (!jws || jws->typ != "at+jwt" || !client::jws_verify(*jws, _keys->published())) return std::nullopt;
   const auto& claims = jws->claims;
   const auto iss = claims.if_contains("iss");
   const auto sub = claims.if_contains("sub");

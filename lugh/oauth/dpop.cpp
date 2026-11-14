@@ -34,12 +34,12 @@ std::optional<std::string> string_of(const boost::json::object& object, std::str
 
 }  // namespace
 
-std::string jwk_thumbprint(const tokens::VerifyKey& key) {
-  const auto jwk = tokens::public_jwk(key);
+std::string jwk_thumbprint(const client::VerifyKey& key) {
+  const auto jwk = client::public_jwk(key);
   if (!jwk) return {};
   // RFC 7638 section 3: the required members only, in lexical order, no whitespace.
   std::string canonical;
-  if (key.algorithm == tokens::SigningAlgorithm::es256) {
+  if (key.algorithm == client::SigningAlgorithm::es256) {
     canonical = R"({"crv":"P-256","kty":"EC","x":")" + std::string(jwk->at("x").as_string()) + R"(","y":")" + std::string(jwk->at("y").as_string()) + "\"}";
   } else {
     canonical = R"({"crv":"Ed25519","kty":"OKP","x":")" + std::string(jwk->at("x").as_string()) + "\"}";
@@ -48,7 +48,7 @@ std::string jwk_thumbprint(const tokens::VerifyKey& key) {
 }
 
 std::optional<Proof> parse_proof(std::string_view text) {
-  if (text.size() > tokens::kMostJwsBytes) return std::nullopt;
+  if (text.size() > client::kMostJwsBytes) return std::nullopt;
   const auto first = text.find('.');
   const auto second = first == std::string_view::npos ? std::string_view::npos : text.find('.', first + 1);
   if (second == std::string_view::npos || text.find('.', second + 1) != std::string_view::npos) return std::nullopt;
@@ -63,7 +63,7 @@ std::optional<Proof> parse_proof(std::string_view text) {
   if (string_of(*header, "typ") != "dpop+jwt") return std::nullopt;
   const auto jwk = header->if_contains("jwk");
   if (!jwk || !jwk->is_object()) return std::nullopt;
-  const auto key = tokens::from_jwk(jwk->as_object());
+  const auto key = client::from_jwk(jwk->as_object());
   if (!key) return std::nullopt;
   if (string_of(*header, "alg") != std::string(dannan::identity::algorithm_name(key->algorithm))) return std::nullopt;
   if (!dannan::identity::verify(key->algorithm, key->public_key, byte_span(text.substr(0, second)), *signature)) return std::nullopt;

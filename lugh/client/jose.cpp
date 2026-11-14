@@ -13,7 +13,7 @@
 
 #include "lugh/core/encoding.h"
 
-namespace lugh::tokens {
+namespace lugh::client {
 
 namespace {
 
@@ -159,4 +159,4 @@ bool jws_verify(const Jws& jws, const std::vector<VerifyKey>& keys) {
   return false;
 }
 
-}  // namespace lugh::tokens
+}  // namespace lugh::client

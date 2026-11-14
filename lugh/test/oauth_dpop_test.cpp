@@ -29,7 +29,7 @@ struct Checking {
 
 // RFC 9449 section 6.1's key and the jkt it gives.
 TEST(Dpop, ThumbprintIsRfc7638) {
-  const auto key = lugh::tokens::from_jwk(
+  const auto key = lugh::client::from_jwk(
       boost::json::parse(R"({"kty":"EC","crv":"P-256","x":"l8tFrhx-34tV3hRICRDY9zCkDlpBhF42UQUfWVAWBFs","y":"9VE4jf_Ok_o64zbTTlcuNJajHmt6v9TDVrU0CdvGRDA"})")
           .as_object());
   ASSERT_TRUE(key);
@@ -37,7 +37,7 @@ TEST(Dpop, ThumbprintIsRfc7638) {
 }
 
 TEST(Dpop, AProofOfEitherAlgorithm) {
-  for (const auto algorithm : {lugh::tokens::SigningAlgorithm::es256, lugh::tokens::SigningAlgorithm::ed25519}) {
+  for (const auto algorithm : {lugh::client::SigningAlgorithm::es256, lugh::client::SigningAlgorithm::ed25519}) {
     DpopClient client(algorithm);
     const auto proof = parse_proof(client.proof("POST", kUrl, kNow));
     ASSERT_TRUE(proof);

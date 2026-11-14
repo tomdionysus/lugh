@@ -21,7 +21,7 @@
 // The signatures are Dannan's (dannan/identity/signing.h); the framing is Lugh's, since
 // token verification stays Lugh's (the maintainer, 2026-11-04). Nothing here accepts "none", an HMAC,
 // RSA, a key carried in a header (jwk, jku, x5u), or a header Lugh does not understand.
-namespace lugh::tokens {
+namespace lugh::client {
 
 using dannan::identity::SigningAlgorithm;
 using dannan::identity::SigningKey;
@@ -67,4 +67,4 @@ std::optional<Jws> jws_parse(std::string_view compact);
 // Whether the JWS is signed by the key its kid names, of the algorithm its header names.
 bool jws_verify(const Jws& jws, const std::vector<VerifyKey>& keys);
 
-}  // namespace lugh::tokens
+}  // namespace lugh::client

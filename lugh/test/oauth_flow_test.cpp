@@ -48,7 +48,7 @@ std::string basic(const std::string& client_id, const std::string& secret) {
   return "Basic " + encoded;
 }
 
-boost::json::object claims_of(const std::string& token) { return lugh::tokens::jws_parse(token)->claims; }
+boost::json::object claims_of(const std::string& token) { return lugh::client::jws_parse(token)->claims; }
 
 class OAuthFlowTest : public ::testing::Test {
  protected:
@@ -142,7 +142,7 @@ TEST_F(OAuthFlowTest, TheCodeFlowWithPkce) {
 
   const auto access = std::string(body.at("access_token").as_string());
   const auto access_claims = claims_of(access);
-  EXPECT_EQ(lugh::tokens::jws_parse(access)->typ, "at+jwt");
+  EXPECT_EQ(lugh::client::jws_parse(access)->typ, "at+jwt");
   EXPECT_EQ(access_claims.at("sub"), boost::json::value(alice.id));
   EXPECT_EQ(access_claims.at("client_id"), boost::json::value(app.client_id));
   EXPECT_EQ(access_claims.at("aud"), (boost::json::array{"lugh"}));
@@ -256,7 +256,7 @@ TEST_F(OAuthFlowTest, AnOpaqueAccessToken) {
   const auto body = boost::json::parse(tokens.body);
   const auto access = std::string(body.at("access_token").as_string());
   ASSERT_EQ(access.rfind("lo_", 0), 0u);
-  EXPECT_FALSE(lugh::tokens::jws_parse(access));
+  EXPECT_FALSE(lugh::client::jws_parse(access));
 
   // The ID token's at_hash is of what the client was given (OIDC Core 3.1.3.6).
   const auto digest = dannan::identity::sha256(lugh::byte_span(access));
@@ -410,8 +410,8 @@ TEST_F(OAuthFlowTest, ClientCredentials) {
 
 // private_key_jwt: an assertion signed with a key the client registered, used once.
 TEST_F(OAuthFlowTest, PrivateKeyJwt) {
-  const auto key = lugh::tokens::SigningKey::generate(lugh::tokens::SigningAlgorithm::es256);
-  const auto jwk = *lugh::tokens::public_jwk({"k1", lugh::tokens::SigningAlgorithm::es256, key.public_key()});
+  const auto key = lugh::client::SigningKey::generate(lugh::client::SigningAlgorithm::es256);
+  const auto jwk = *lugh::client::public_jwk({"k1", lugh::client::SigningAlgorithm::es256, key.public_key()});
   lugh::apps::App draft;
   draft.name = "hub";
   draft.kind = lugh::apps::Kind::service;
@@ -426,7 +426,7 @@ TEST_F(OAuthFlowTest, PrivateKeyJwt) {
   const auto id = made.value.app.client_id;
   const auto now = rig.wall.unix_ms() / 1000;
   const auto assertion = [&](const std::string& jti, std::uint64_t exp, const std::string& aud) {
-    return lugh::tokens::jws_sign(key, "k1", "JWT", boost::json::object{{"iss", id}, {"sub", id}, {"aud", aud}, {"exp", exp}, {"jti", jti}});
+    return lugh::client::jws_sign(key, "k1", "JWT", boost::json::object{{"iss", id}, {"sub", id}, {"aud", aud}, {"exp", exp}, {"jti", jti}});
   };
   const auto ask = [&](const std::string& signed_assertion) {
     return rig.request(verb::post, "/oauth2/token",
@@ -440,9 +440,9 @@ TEST_F(OAuthFlowTest, PrivateKeyJwt) {
   EXPECT_EQ(ask(assertion("j2", now + 60, "https://elsewhere.example.com")).status, 401u);
   EXPECT_EQ(ask(assertion("j3", now - 1, endpoint)).status, 401u);
   EXPECT_EQ(ask(assertion("j4", now + 3600, endpoint)).status, 401u);
-  const auto stranger = lugh::tokens::SigningKey::generate(lugh::tokens::SigningAlgorithm::es256);
+  const auto stranger = lugh::client::SigningKey::generate(lugh::client::SigningAlgorithm::es256);
   EXPECT_EQ(
-      ask(lugh::tokens::jws_sign(stranger, "k1", "JWT", boost::json::object{{"iss", id}, {"sub", id}, {"aud", endpoint}, {"exp", now + 60}, {"jti", "j5"}}))
+      ask(lugh::client::jws_sign(stranger, "k1", "JWT", boost::json::object{{"iss", id}, {"sub", id}, {"aud", endpoint}, {"exp", now + 60}, {"jti", "j5"}}))
           .status,
       401u);
 }

@@ -12,6 +12,7 @@
 
 using lugh::Outcome;
 using lugh::Status;
+using namespace lugh::client;
 using namespace lugh::tokens;
 using std::chrono::hours;
 

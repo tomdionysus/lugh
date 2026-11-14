@@ -194,18 +194,18 @@ class NodeProcessOAuth : public ::testing::Test {
   // A logout token, checked as the application would check it, against the published keys.
   void check_logout_token(const std::string& posted) {
     ASSERT_EQ(posted.rfind("logout_token=", 0), 0u) << posted;
-    const auto token = lugh::tokens::jws_parse(posted.substr(13));
+    const auto token = lugh::client::jws_parse(posted.substr(13));
     ASSERT_TRUE(token);
     EXPECT_EQ(token->typ, "logout+jwt");
 
     const auto published = send(serving->port(), http::verb::get, "/oauth2/jwks");
     ASSERT_TRUE(published);
-    std::vector<lugh::tokens::VerifyKey> keys;
+    std::vector<lugh::client::VerifyKey> keys;
     const auto jwks = boost::json::parse(published->body);
-    for (const auto& one : jwks.at("keys").as_array()) keys.push_back(*lugh::tokens::from_jwk(one.as_object()));
-    EXPECT_TRUE(lugh::tokens::jws_verify(*token, keys));
+    for (const auto& one : jwks.at("keys").as_array()) keys.push_back(*lugh::client::from_jwk(one.as_object()));
+    EXPECT_TRUE(lugh::client::jws_verify(*token, keys));
 
-    const auto id = lugh::tokens::jws_parse(id_token);
+    const auto id = lugh::client::jws_parse(id_token);
     ASSERT_TRUE(id);
     EXPECT_EQ(token->claims.at("iss"), kIssuer);
     EXPECT_EQ(token->claims.at("aud"), boost::json::value(client_id));

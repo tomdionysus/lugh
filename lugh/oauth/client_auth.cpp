@@ -88,13 +88,13 @@ void ClientAuthenticator::authenticate(const http::HttpRequest& request, const P
 
   // Which client the request says it is.
   std::string client_id = form_client;
-  std::optional<tokens::Jws> jws;
+  std::optional<client::Jws> jws;
   if (basic) {
     if (basic->client_id.empty()) return answer->finish(refused("the Authorization header is not a client_id and secret"));
     client_id = basic->client_id;
   } else if (!assertion.empty()) {
     if (value_of(form, "client_assertion_type") != kAssertionType) return answer->finish(refused("client_assertion_type is " + std::string(kAssertionType)));
-    jws = tokens::jws_parse(assertion);
+    jws = client::jws_parse(assertion);
     if (!jws) return answer->finish(refused("the client assertion is not a JWT Lugh can read"));
     const auto iss = jws->claims.if_contains("iss");
     if (!iss || !iss->is_string()) return answer->finish(refused("the client assertion has no iss"));
@@ -137,18 +137,18 @@ void ClientAuthenticator::authenticate(const http::HttpRequest& request, const P
 
       case apps::ClientAuth::private_key_jwt: {
         if (!jws) return answer->finish(refused("this client authenticates with private_key_jwt"));
-        std::vector<tokens::VerifyKey> keys;
+        std::vector<client::VerifyKey> keys;
         boost::system::error_code ec;
         const auto set = boost::json::parse(app.jwks, ec);
         if (!ec && set.is_object()) {
           if (const auto list = set.as_object().if_contains("keys"); list && list->is_array()) {
             for (const auto& one : list->as_array()) {
               if (!one.is_object()) continue;
-              if (auto key = tokens::from_jwk(one.as_object())) keys.push_back(std::move(*key));
+              if (auto key = client::from_jwk(one.as_object())) keys.push_back(std::move(*key));
             }
           }
         }
-        if (!tokens::jws_verify(*jws, keys)) return answer->finish(refused("the client assertion is not signed by a key this client registered"));
+        if (!client::jws_verify(*jws, keys)) return answer->finish(refused("the client assertion is not signed by a key this client registered"));
         const auto& claims = jws->claims;
         const auto sub = claims.if_contains("sub");
         const auto exp = claims.if_contains("exp");

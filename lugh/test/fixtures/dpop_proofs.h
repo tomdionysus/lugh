@@ -20,10 +20,10 @@
 // it for a method and URL, with the access token's hash when one is given.
 class DpopClient {
  public:
-  explicit DpopClient(lugh::tokens::SigningAlgorithm algorithm = lugh::tokens::SigningAlgorithm::es256) : key(lugh::tokens::SigningKey::generate(algorithm)) {}
+  explicit DpopClient(lugh::client::SigningAlgorithm algorithm = lugh::client::SigningAlgorithm::es256) : key(lugh::client::SigningKey::generate(algorithm)) {}
 
   boost::json::object jwk() const {
-    auto out = *lugh::tokens::public_jwk({"unused", key.algorithm(), key.public_key()});
+    auto out = *lugh::client::public_jwk({"unused", key.algorithm(), key.public_key()});
     out.erase("kid");
     out.erase("use");
     out.erase("alg");
@@ -49,7 +49,7 @@ class DpopClient {
     return input + "." + lugh::encoding::base64url(key.sign(lugh::byte_span(input)));
   }
 
-  lugh::tokens::SigningKey key;
+  lugh::client::SigningKey key;
 
  private:
   int _sequence = 0;

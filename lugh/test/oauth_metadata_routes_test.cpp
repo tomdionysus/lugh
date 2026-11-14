@@ -50,7 +50,7 @@ TEST_F(MetadataTest, TheJwksIsOpenPublicAndCached) {
   for (const auto& key : body.at("keys").as_array()) {
     EXPECT_TRUE(key.as_object().contains("kid"));
     EXPECT_FALSE(key.as_object().contains("d"));
-    EXPECT_TRUE(lugh::tokens::from_jwk(key.as_object()));
+    EXPECT_TRUE(lugh::client::from_jwk(key.as_object()));
   }
 }
 

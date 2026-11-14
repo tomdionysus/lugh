@@ -43,7 +43,7 @@ void KeyRoutes::register_routes(http::Router& router) {
       http::write_error(context.response, http::status::bad_request, "invalid", "algorithm is ES256 or EdDSA");
       return context.done();
     }
-    const auto chosen = *algorithm == "ES256" ? tokens::SigningAlgorithm::es256 : tokens::SigningAlgorithm::ed25519;
+    const auto chosen = *algorithm == "ES256" ? client::SigningAlgorithm::es256 : client::SigningAlgorithm::ed25519;
     keys->rotate(actor_of(context), chosen, kRouteDeadline, context.executor, [context](Outcome<tokens::KeyInfo> made) {
       if (!made.ok()) return answer_fault(context, made);
       answer_json(context, http::status::created, key_json(made.value));

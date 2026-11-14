@@ -28,6 +28,11 @@
 
 namespace lugh::tokens {
 
+using client::public_jwk;
+using client::SigningAlgorithm;
+using client::SigningKey;
+using client::VerifyKey;
+
 // One signing key as an administrator sees it: never its private part.
 struct KeyInfo {
   std::string kid;

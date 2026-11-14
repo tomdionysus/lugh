@@ -10,7 +10,7 @@
 #include "lugh/client/jose.h"
 #include "lugh/core/encoding.h"
 
-using namespace lugh::tokens;
+using namespace lugh::client;
 using dannan::identity::SigningAlgorithm;
 using lugh::byte_span;
 

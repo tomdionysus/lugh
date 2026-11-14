@@ -246,10 +246,10 @@ TEST_F(LogoutTest, ALogoutTokenSaysWhatTheSpecificationSays) {
   EXPECT_EQ(post.url, kBackchannel);
   ASSERT_EQ(post.body.rfind("logout_token=", 0), 0u);
 
-  const auto token = lugh::tokens::jws_parse(post.body.substr(13));
+  const auto token = lugh::client::jws_parse(post.body.substr(13));
   ASSERT_TRUE(token);
   EXPECT_EQ(token->typ, "logout+jwt");
-  EXPECT_TRUE(lugh::tokens::jws_verify(*token, rig.keys->published()));
+  EXPECT_TRUE(lugh::client::jws_verify(*token, rig.keys->published()));
   const auto& claims = token->claims;
   EXPECT_EQ(claims.at("iss"), SigninRig::kIssuer);
   EXPECT_EQ(claims.at("aud"), boost::json::value(client.id));

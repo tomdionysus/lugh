@@ -18,7 +18,7 @@
 #include "lugh/client/jose.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
-  using namespace lugh::tokens;
+  using namespace lugh::client;
   if (size == 0) return 0;
   const std::string_view text(reinterpret_cast<const char*>(data + 1), size - 1);
   static const auto key = SigningKey::generate(SigningAlgorithm::es256);
