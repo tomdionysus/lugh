@@ -7,11 +7,9 @@
 
 #pragma once
 
-#include <memory>
-#include <optional>
 #include <string>
-#include <string_view>
 
+#include "lugh/client/https.h"
 #include "lugh/core/completion.h"
 #include "lugh/core/outcome.h"
 #include "lugh/http/http_types.h"
@@ -28,19 +26,8 @@ class Outbound {
   virtual void post_form(std::string url, std::string body, Deadline deadline, Executor executor, Done<Outcome<unsigned>> done) = 0;
 };
 
-// An https URL taken apart.
-struct OutboundTarget {
-  std::string host;
-  std::string port;
-  std::string target;
-};
-
-// Nothing for anything that is not an https URL with a host.
-std::optional<OutboundTarget> outbound_target(std::string_view url);
-
-// The real one: HTTPS, the server's certificate and name always verified, with no way to turn
-// that off (docs/architecture.md, "Outbound"); a redirect is an answer, never followed. Runs on
-// `io_context`.
+// The real one, over lugh_client's HTTPS (lugh/client/https.h): the server's certificate and name
+// always verified, a redirect an answer, never followed. Runs on `io_context`.
 class HttpsOutbound : public Outbound {
  public:
   // The roots outbound certificates are checked against: `ca_path` if given, otherwise the
@@ -50,8 +37,7 @@ class HttpsOutbound : public Outbound {
   void post_form(std::string url, std::string body, Deadline deadline, Executor executor, Done<Outcome<unsigned>> done) override;
 
  private:
-  net::io_context& _io_context;
-  ssl::context _tls;
+  client::HttpsClient _https;
 };
 
 }  // namespace lugh::http

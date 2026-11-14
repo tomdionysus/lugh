@@ -91,31 +91,6 @@ class OutboundTest : public ::testing::Test {
 
 }  // namespace
 
-TEST(OutboundTarget, TakesAnHttpsUrlApart) {
-  const auto plain = http::outbound_target("https://client.example.com/logout?x=1");
-  ASSERT_TRUE(plain);
-  EXPECT_EQ(plain->host, "client.example.com");
-  EXPECT_EQ(plain->port, "443");
-  EXPECT_EQ(plain->target, "/logout?x=1");
-  const auto port = http::outbound_target("https://client.example.com:8443");
-  ASSERT_TRUE(port);
-  EXPECT_EQ(port->port, "8443");
-  EXPECT_EQ(port->target, "/");
-  const auto literal = http::outbound_target("https://[::1]:8443/x");
-  ASSERT_TRUE(literal);
-  EXPECT_EQ(literal->host, "::1");
-  EXPECT_EQ(literal->port, "8443");
-}
-
-TEST(OutboundTarget, RefusesAnythingElse) {
-  EXPECT_FALSE(http::outbound_target("http://client.example.com/logout"));
-  EXPECT_FALSE(http::outbound_target("https:///logout"));
-  EXPECT_FALSE(http::outbound_target("https://client.example.com:/logout"));
-  EXPECT_FALSE(http::outbound_target("https://[::1/logout"));
-  EXPECT_FALSE(http::outbound_target("ftp://client.example.com/"));
-  EXPECT_FALSE(http::outbound_target(""));
-}
-
 TEST_F(OutboundTest, PostsTheFormAndAnswersTheStatus) {
   answer_with = 204;
   const auto answer = post("https://localhost:" + port + "/backchannel?tenant=1", roots);

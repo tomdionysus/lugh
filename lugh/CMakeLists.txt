@@ -12,6 +12,7 @@
 add_library(lugh_client STATIC
     client/access_token.cpp
     client/boost_json.cpp
+    client/https.cpp
     client/id_token.cpp
     client/jose.cpp
     client/verifier.cpp
@@ -29,6 +30,7 @@ target_link_libraries(lugh_client
     PUBLIC
         dannan::dannan
         Boost::headers
+        OpenSSL::SSL
         OpenSSL::Crypto
         Threads::Threads
 )

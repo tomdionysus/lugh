@@ -31,6 +31,7 @@ add_executable(lugh_tests
     authn_policy_test.cpp
     authn_totp_test.cpp
     client_access_token_test.cpp
+    client_https_test.cpp
     client_jose_test.cpp
     client_verifier_test.cpp
     core_async_test.cpp
