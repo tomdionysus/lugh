@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-14: P10.0, the lugh_client library
+
+- `jose` moved to `lugh/client/` as `lugh::client`; Boost.JSON's definitions moved there too (the maintainer: `lugh_client` carries them).
+- `lugh_client`, a static library exported as `lugh::client`, linked by the node's `lugh`; `LUGH_BUILD_NODE=OFF` builds it alone (configured and built on a build node); Lugh fetches Dannan only when the build has no `dannan::dannan`, so a consumer keeps one Dannan.
+- `check_access_token`: RFC 9068's offline checks, answering the token or why not; `TokenIssuer::verify` calls it and adds opaque handles and revoked jtis.
+- 674 tests (8 new, `client_access_token_test.cpp`), one debug run on node-b. The package config waits for a release.
+
 ## 2026-11-14: Dannan 0.7.0
 
 - Pinned to Dannan 0.7.0 (the partition reading, the deferred reply; `libdannan.so.0.7`). Nothing Lugh uses changed. 666 tests, unchanged, one debug run on node-b. The reading goes into Status and the audit log with P8.1.
