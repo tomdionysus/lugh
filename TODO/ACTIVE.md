@@ -6,7 +6,9 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 P6 (OAuth and OIDC) and P9 (writable LDAP) are done; P8 is planned and its first steps wait on Dagda. The Linux pass is green and committed (2026-11-14): debug, ASan with leak detection and TSan, 666 tests each, on the build nodes. The maintainer, 2026-11-14: **no builds or tests on the Mac**, only on the build node cluster (below).
 
-Lugh is on Dannan 0.7.0. **P10, `lugh_client`, is done** (2026-11-14; `COMPLETED.md`): 724 tests, green in debug, ASan with leaks and TSan on the build nodes; merged into `develop`. Lir's Lugh plugin (Lir 9452fd0) repins on that commit: told. `docs/client.md` describes the library.
+**Lugh is paused** (the maintainer, 2026-11-14, after P10): nothing is taken up until the maintainer says, or until P8 or the move to Dannan 0.8.0 is unblocked (below).
+
+Lugh is on Dannan 0.7.0. **P10, `lugh_client`, is done** (2026-11-14; `COMPLETED.md`): 724 tests, green in debug, ASan with leaks and TSan on the build nodes; on `develop` at dbb0573, pushed. Lir's Lugh plugin is repinned there (Lir 33b7c8b, 343 tests on a build node, nothing internal of Lugh's included) and repins next at Lugh's first release. `docs/client.md` describes the library.
 
 Waiting, so not next: P8 (Dagda paused for Macha's port, the maintainer 2026-11-14; 0.2.0 tagged locally, unpushed), P8.5 also on the follower-lag fix (Dagda slice 2), and the move to Dannan 0.8.0 (the maintainer holds it until Dannan's P5 benchmarks; then set `DANNAN_BUILD_TOOLS` OFF where Lugh fetches Dannan, build the hashing pool on `sched::WorkerPool`, and move HTTPS, mTLS and LDAP onto `dannan::listen`, whose close cancels a pending read with operation_aborted). Next is the maintainer's choice among P7 (dashboard), P11 (WebAuthn) and P12 (hardening; the fuzz targets, never yet built, can be on node-a's clang 19, and `lugh/fuzz/client_fuzz.cpp` is written for lugh_client's readers, uncommitted until it builds there).
 
