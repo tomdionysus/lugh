@@ -2,6 +2,14 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-14: P10.1 and P10.2, the Verifier and the HTTPS key source
+
+- `lugh::client::Verifier` (public, `lugh/include/lugh/client/verifier.h`, `tokens.h`): several trusted issuers with their own keys from a JWKS; `iss` picks the keys, `kid` the key; refusals a key source acts on; ID tokens checked as OIDC Core 3.1.3.7 has a client check them; an injected wall clock; keys replaced under a lock while tokens are checked; a hint naming the issuer when a token is refused for missing keys.
+- `lugh::client::Https` (public): GET and POST with headers and a body, answering the status, type, caching and a 64 KiB-bounded body; certificate and name always verified, no redirect followed. The node's back-channel posts ride it, and the node's own copy went.
+- `lugh::client::HttpsKeySource` (public): discovery (its issuer the one asked for, an https `jwks_uri`) then the JWKS; at start, hourly, and on the verifier's hint at most once a minute per issuer; a failure keeps the keys and backs off 5 s doubling to 5 min; each issuer's state visible; `refresh_now()` the operator's action; timers on a strand by an injected `TimeSource`.
+- 693 tests (19 new: 8 verifier, 4 HTTPS, 7 key source; the two URL tests moved, not added), one debug run on node-b. The new threaded and timing tests were repeated 20 to 50 times each in debug, ASan with leak detection and TSan (node-a, clang 19): all green, no sanitizer report.
+- Found on the way: Lir's `TokenVerifier` passed steady time where a token's lifetime is wall time; Lir changed its seam (Lir 8d78c95). Lir keeps a stricter rule than Lugh's skew at `exp`, stated in Lir.
+
 ## 2026-11-14: P10.0, the lugh_client library
 
 - `jose` moved to `lugh/client/` as `lugh::client`; Boost.JSON's definitions moved there too (the maintainer: `lugh_client` carries them).
