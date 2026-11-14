@@ -187,7 +187,8 @@ bundle and naming the path that failed. Two needs: with client certificates opti
 thumbprint and subject and whether its chain verified (and why not), since certificate-bound tokens bind to self-signed
 certificates too; and trusted proxy peers are exempt from the per-address bucket at accept, which Lugh applies itself per request
 to `forwarded_for()`'s answer. No per-caller callback at accept: Lugh limits per account and session per request. Lugh moves its
-HTTPS, mTLS and LDAP listeners onto it after 0.8.0, in its own step.
+HTTPS, mTLS and LDAP listeners onto it after 0.8.0, in its own step. All taken into the design (Dannan 095714e), with every limit
+optional and off by default (Lir's review); nothing is built until the maintainer rules on its name (`dannan::listen`) and phasing.
 
 ## Ruled (the maintainer, 2026-11-14)
 
