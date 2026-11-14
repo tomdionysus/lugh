@@ -192,6 +192,10 @@ certificates too; and trusted proxy peers are exempt from the per-address bucket
 to `forwarded_for()`'s answer. No per-caller callback at accept: Lugh limits per account and session per request. Lugh moves its
 HTTPS, mTLS and LDAP listeners onto it after 0.8.0, in its own step. All taken into the design (Dannan 095714e), with every limit
 optional and off by default (Lir's review); nothing is built until the maintainer rules on its name (`dannan::listen`) and phasing.
+Built on Dannan's `feature/public-listener` (68c3cc5); Lugh's code review: it fits (Stream under Beast, StartTLS taking Lugh's
+encoded ExtendedResponse, any certificate with its verdict), with three findings sent: `Limits`' per-address, per-caller and
+tie maps are never pruned (a must, against the no-unbounded rule); trusted proxies should be CIDR prefixes, as Lugh configures
+them; and the contract should say how `start_tls` meets bytes queued by `send()`.
 
 ## Ruled (the maintainer, 2026-11-14)
 
