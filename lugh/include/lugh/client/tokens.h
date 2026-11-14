@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <array>
 #include <boost/json.hpp>
 #include <cstdint>
 #include <optional>
@@ -36,8 +37,9 @@ struct AccessToken {
   std::uint64_t expires = 0;
   // cnf.jkt: the thumbprint of the DPoP key the token is bound to (RFC 9449).
   std::optional<std::string> jkt;
-  // cnf.x5t#S256: the thumbprint of the certificate the token is bound to, base64url (RFC 8705).
-  std::optional<std::string> x5t;
+  // cnf.x5t#S256: the SHA-256 thumbprint of the certificate the token is bound to (RFC 8705),
+  // decoded; a token whose value is not base64url of 32 bytes is refused.
+  std::optional<std::array<std::uint8_t, 32>> x5t;
 };
 
 struct IdToken {

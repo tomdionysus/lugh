@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include "lugh/client/claims.h"
+#include "lugh/core/encoding.h"
 
 namespace lugh::client {
 
@@ -65,7 +66,13 @@ std::variant<AccessToken, std::string> check_access_token(std::string_view compa
 
   if (const auto cnf = claims.if_contains("cnf"); cnf && cnf->is_object()) {
     token.jkt = string_claim(cnf->as_object(), "jkt");
-    token.x5t = string_claim(cnf->as_object(), "x5t#S256");
+    if (const auto x5t = string_claim(cnf->as_object(), "x5t#S256")) {
+      const auto bytes = encoding::base64url_decode(*x5t);
+      if (!bytes || bytes->size() != 32) return std::string("bound to a certificate thumbprint that is not one");
+      std::array<std::uint8_t, 32> thumbprint{};
+      std::copy(bytes->begin(), bytes->end(), thumbprint.begin());
+      token.x5t = thumbprint;
+    }
     // A cnf that binds to nothing known is no token of Lugh's.
     if (!token.jkt && !token.x5t) return std::string("bound to something not known");
   }

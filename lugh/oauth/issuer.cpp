@@ -242,7 +242,8 @@ std::optional<Bearer> TokenIssuer::verify(std::string_view token, std::optional<
   bearer.service = bearer.subject == bearer.client_id;
   bearer.opaque = behind.has_value();
   bearer.jkt = std::move(access->jkt);
-  bearer.x5t = std::move(access->x5t);
+  // The node compares it with the presented certificate's thumbprint, which it holds as base64url.
+  if (access->x5t) bearer.x5t = encoding::base64url(*access->x5t);
   if (const auto scope = bearer.claims.if_contains("scope"); scope && scope->is_string()) {
     if (auto split = scopes::split(scope->as_string())) bearer.scopes = std::move(*split);
   }

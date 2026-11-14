@@ -12,7 +12,10 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+
 #include "lugh/client/access_token.h"
+#include "lugh/core/encoding.h"
 
 using namespace lugh::client;
 
@@ -147,11 +150,20 @@ TEST(ClientAccessToken, ACnfBindsToAKeyOrACertificateOrIsRefused) {
   ASSERT_TRUE(std::holds_alternative<AccessToken>(key_bound)) << refusal(key_bound);
   EXPECT_EQ(std::get<AccessToken>(key_bound).jkt, "0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I");
 
+  // RFC 8705 3.1: the certificate's SHA-256, base64url; carried decoded.
+  std::array<std::uint8_t, 32> thumbprint{};
+  for (std::size_t i = 0; i < thumbprint.size(); ++i) thumbprint[i] = static_cast<std::uint8_t>(i * 7 + 1);
   auto to_certificate = claims();
-  to_certificate["cnf"] = boost::json::object{{"x5t#S256", "bwcK0esc3ACC3DB2Y5_lESsXE8o9ltc05O89jdN-dg2"}};
+  to_certificate["cnf"] = boost::json::object{{"x5t#S256", lugh::encoding::base64url(thumbprint)}};
   const auto certificate_bound = check_access_token(signer.sign(to_certificate), signer.keys, kIssuer, kNow);
   ASSERT_TRUE(std::holds_alternative<AccessToken>(certificate_bound)) << refusal(certificate_bound);
-  EXPECT_EQ(std::get<AccessToken>(certificate_bound).x5t, "bwcK0esc3ACC3DB2Y5_lESsXE8o9ltc05O89jdN-dg2");
+  EXPECT_EQ(std::get<AccessToken>(certificate_bound).x5t, thumbprint);
+  // A thumbprint that is not base64url of 32 bytes binds to nothing.
+  for (const auto* bad : {"not base64url!", "AAAA", "bwcK0esc3ACC3DB2Y5_lESsXE8o9ltc05O89jdN-dg2A"}) {
+    auto malformed = claims();
+    malformed["cnf"] = boost::json::object{{"x5t#S256", bad}};
+    EXPECT_EQ(refusal(check_access_token(signer.sign(malformed), signer.keys, kIssuer, kNow)), "bound to a certificate thumbprint that is not one") << bad;
+  }
 
   for (const auto& cnf : {boost::json::object{}, boost::json::object{{"jwk", "x"}}, boost::json::object{{"jkt", 7}}}) {
     auto unknown = claims();

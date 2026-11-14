@@ -686,7 +686,10 @@ TEST_F(OAuthFlowTest, TlsClientAuthAndCertificateBoundTokens) {
     EXPECT_TRUE(made.ok()) << made.message;
     return made.value.app.client_id;
   };
-  const std::string thumbprint(43, 'T');
+  // Thumbprints as the server writes them: a SHA-256, base64url.
+  const auto print_of = [](unsigned char fill) { return lugh::encoding::base64url(std::vector<unsigned char>(32, fill)); };
+  const auto thumbprint = print_of(0x54);
+  const auto other_print = print_of(0x58);
   const auto with_certificate = [](const std::string& print, const std::string& subject, bool verified) {
     return std::vector<std::pair<std::string, std::string>>{
         {"Lugh-Client-Cert-Thumbprint", print}, {"Lugh-Client-Cert-Subject", subject}, {"Lugh-Client-Cert-Chain", verified ? "verified" : "unverified"}};
@@ -698,7 +701,7 @@ TEST_F(OAuthFlowTest, TlsClientAuthAndCertificateBoundTokens) {
   // By thumbprint: any certificate whose key the client holds.
   const auto by_print = make(thumbprint, "", lugh::apps::SenderConstraint::none);
   EXPECT_EQ(ask(by_print, with_certificate(thumbprint, "CN=anything", false)).status, 200u);
-  EXPECT_EQ(ask(by_print, with_certificate(std::string(43, 'X'), "CN=anything", false)).status, 401u);
+  EXPECT_EQ(ask(by_print, with_certificate(other_print, "CN=anything", false)).status, 401u);
   EXPECT_EQ(ask(by_print, {}).status, 401u);
 
   // By subject: only a certificate that chains to the client CA.
@@ -717,7 +720,7 @@ TEST_F(OAuthFlowTest, TlsClientAuthAndCertificateBoundTokens) {
   with_token.emplace_back("Authorization", "Bearer " + access);
   EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, with_token).status, 200u);
   EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, {{"Authorization", "Bearer " + access}}).status, 401u);
-  auto other_certificate = with_certificate(std::string(43, 'X'), "", false);
+  auto other_certificate = with_certificate(other_print, "", false);
   other_certificate.emplace_back("Authorization", "Bearer " + access);
   EXPECT_EQ(rig.request(verb::get, "/api/v1/users", {}, other_certificate).status, 401u);
 }
