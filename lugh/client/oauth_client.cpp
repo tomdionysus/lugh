@@ -7,6 +7,8 @@
 
 #include "lugh/client/oauth_client.h"
 
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/strand.hpp>
 #include <map>
 #include <stdexcept>
 
@@ -190,6 +192,110 @@ void OAuthClient::client_credentials(const std::vector<std::string>& scopes, Dea
   Form form{{"grant_type", "client_credentials"}};
   if (!scopes.empty()) form.emplace_back("scope", joined(scopes));
   _token(std::move(form), std::nullopt, deadline, std::move(executor), std::move(done));
+}
+
+void OAuthClient::device_authorization(const std::vector<std::string>& scopes, Deadline deadline, Executor executor, Done<Outcome<DeviceAuthorization>> done) {
+  using Answer = Outcome<DeviceAuthorization>;
+  if (_endpoints.device_authorization.empty()) {
+    return answer_now(executor, std::move(done), Answer::failure(Fault::invalid, "the issuer takes no device authorisations"));
+  }
+  Form form;
+  if (!scopes.empty()) form.emplace_back("scope", joined(scopes));
+  HttpsRequest post;
+  post.method = "POST";
+  post.url = _endpoints.device_authorization;
+  post.content_type = "application/x-www-form-urlencoded";
+  post.headers.emplace_back("Accept", "application/json");
+  _authenticate(form, post);
+  post.body = form_body(form);
+  _https.send(std::move(post), deadline, executor, [done = std::move(done)](Outcome<HttpsResponse> answered) {
+    if (!answered.ok()) return done(Answer::from(answered));
+    boost::system::error_code ec;
+    const auto parsed = boost::json::parse(answered.value.body, ec);
+    if (ec || !parsed.is_object()) return done(Answer::failure(Fault::failed, "the device endpoint's answer is not JSON"));
+    const auto& body = parsed.as_object();
+    if (answered.value.status != 200) {
+      return done(
+          Answer::failure(Fault::refused, string_claim(body, "error").value_or("refused") + ": " + string_claim(body, "error_description").value_or("")));
+    }
+    const auto code = string_claim(body, "device_code");
+    const auto user_code = string_claim(body, "user_code");
+    const auto uri = string_claim(body, "verification_uri");
+    const auto expires = seconds_claim(body, "expires_in");
+    if (!code || code->empty() || !user_code || !uri || !expires) return done(Answer::failure(Fault::failed, "the device endpoint's answer is incomplete"));
+    DeviceAuthorization started;
+    started.device_code = std::make_shared<const Secret>(byte_span(*code));
+    started.user_code = *user_code;
+    started.verification_uri = *uri;
+    started.verification_uri_complete = string_claim(body, "verification_uri_complete").value_or("");
+    started.expires_in = static_cast<std::uint32_t>(*expires);
+    // RFC 8628 section 3.2: five seconds when the issuer names no interval.
+    started.interval = static_cast<std::uint32_t>(seconds_claim(body, "interval").value_or(5));
+    if (started.interval == 0) started.interval = 5;
+    done(Answer::success(std::move(started)));
+  });
+}
+
+// One device authorisation's polls, on a strand of the caller's executor, waiting by the injected time.
+class DevicePoll : public std::enable_shared_from_this<DevicePoll> {
+ public:
+  DevicePoll(OAuthClient& client, const DeviceAuthorization& started, const dannan::contract::TimeSource& time, Deadline deadline, Executor executor,
+             Done<Outcome<TokenSet>> done)
+      : _client(client),
+        _code(started.device_code),
+        _interval(std::chrono::seconds(started.interval)),
+        _expires(time.now() + std::chrono::seconds(started.expires_in)),
+        _time(time),
+        _deadline(deadline),
+        _strand(boost::asio::make_strand(std::move(executor))),
+        _timer(_strand),
+        _done(std::move(done)) {}
+
+  void wait() {
+    _due = _time.now() + _interval;
+    _arm();
+  }
+
+ private:
+  void _arm() {
+    const auto now = _time.now();
+    if (now >= _due) return _poll();
+    const auto remaining = std::max(std::chrono::ceil<std::chrono::milliseconds>(_due - now), std::chrono::milliseconds(1));
+    _timer.expires_after(_time.wake_within(remaining));
+    _timer.async_wait([self = shared_from_this()](const boost::system::error_code& ec) {
+      if (!ec) self->_arm();
+    });
+  }
+
+  void _poll() {
+    if (_time.now() >= _expires) return _done(Outcome<TokenSet>::failure(Fault::refused, "expired_token: the code expired before the person answered"));
+    const auto& code = _code->reveal();
+    Form form{{"grant_type", "urn:ietf:params:oauth:grant-type:device_code"}, {"device_code", std::string(code.begin(), code.end())}};
+    _client._token(std::move(form), std::nullopt, _deadline, _strand, [self = shared_from_this()](Outcome<TokenSet> got) {
+      if (got.fault == Fault::refused && got.message.rfind("authorization_pending:", 0) == 0) return self->wait();
+      if (got.fault == Fault::refused && got.message.rfind("slow_down:", 0) == 0) {
+        self->_interval += std::chrono::seconds(5);
+        return self->wait();
+      }
+      self->_done(std::move(got));
+    });
+  }
+
+  OAuthClient& _client;
+  std::shared_ptr<const Secret> _code;
+  std::chrono::seconds _interval;
+  dannan::contract::TimePoint _expires;
+  dannan::contract::TimePoint _due{};
+  const dannan::contract::TimeSource& _time;
+  Deadline _deadline;
+  boost::asio::strand<Executor> _strand;
+  boost::asio::steady_timer _timer;
+  Done<Outcome<TokenSet>> _done;
+};
+
+void OAuthClient::device_tokens(const DeviceAuthorization& started, const dannan::contract::TimeSource& time, Deadline deadline, Executor executor,
+                                Done<Outcome<TokenSet>> done) {
+  std::make_shared<DevicePoll>(*this, started, time, deadline, std::move(executor), std::move(done))->wait();
 }
 
 void OAuthClient::_authenticate(Form& form, HttpsRequest& request) const {

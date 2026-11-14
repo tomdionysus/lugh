@@ -88,6 +88,21 @@ struct TokenSet {
   std::string id_token_jwt;
 };
 
+// A device authorisation begun (RFC 8628 section 3.2): what the person is shown, and what the
+// client polls with.
+struct DeviceAuthorization {
+  std::shared_ptr<const dannan::identity::Secret> device_code;
+  std::string user_code;
+  std::string verification_uri;
+  std::string verification_uri_complete;
+  std::uint32_t expires_in = 0;
+  std::uint32_t interval = 5;
+};
+
+class DevicePoll;
+
+// A refusal from the issuer reads "<error>: <error_description>", its OAuth error code first, so a
+// caller can act on the code.
 class OAuthClient {
  public:
   // `https`, `verifier` and `wall` outlive this, and this outlives every call it is asked to make.
@@ -119,7 +134,19 @@ class OAuthClient {
   // Tokens for the client itself, for `scopes` (all its client scopes when none).
   void client_credentials(const std::vector<std::string>& scopes, Deadline deadline, Executor executor, Done<Outcome<TokenSet>> done);
 
+  // A device authorisation for `scopes` begun (RFC 8628 section 3.1).
+  void device_authorization(const std::vector<std::string>& scopes, Deadline deadline, Executor executor, Done<Outcome<DeviceAuthorization>> done);
+
+  // The tokens once the person has answered (RFC 8628 section 3.4): the token endpoint polled every
+  // interval, the first poll an interval after the call, five seconds more after each slow_down,
+  // until tokens come or the issuer refuses (access_denied, expired_token), or expires_in passes
+  // (refused, expired_token). `time` decides the waits; each poll may take `deadline`.
+  void device_tokens(const DeviceAuthorization& started, const dannan::contract::TimeSource& time, Deadline deadline, Executor executor,
+                     Done<Outcome<TokenSet>> done);
+
  private:
+  friend class DevicePoll;
+
   // The form's client authentication, and the header it may need.
   void _authenticate(std::vector<std::pair<std::string, std::string>>& form, HttpsRequest& request) const;
   void _token(std::vector<std::pair<std::string, std::string>> form, std::optional<std::string> nonce, Deadline deadline, Executor executor,

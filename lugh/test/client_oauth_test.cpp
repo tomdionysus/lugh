@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
+#include <deque>
 #include <map>
 
 #include "dannan/encoding/percent.h"
@@ -57,7 +58,12 @@ class RecordingHttps final : public Https {
  public:
   void send(HttpsRequest request, lugh::Deadline, lugh::Executor executor, lugh::Done<lugh::Outcome<HttpsResponse>> done) override {
     auto answer = lugh::Outcome<HttpsResponse>::failure(lugh::Fault::failed, "the connection failed");
-    if (const auto found = answers.find(request.url); found != answers.end()) answer = found->second;
+    if (auto queue = queued.find(request.url); queue != queued.end() && !queue->second.empty()) {
+      answer = queue->second.front();
+      queue->second.pop_front();
+    } else if (const auto found = answers.find(request.url); found != answers.end()) {
+      answer = found->second;
+    }
     sent.push_back(std::move(request));
     boost::asio::post(executor, [done = std::move(done), answer = std::move(answer)] { done(answer); });
   }
@@ -70,6 +76,21 @@ class RecordingHttps final : public Https {
     answers[url] = lugh::Outcome<HttpsResponse>::success(std::move(response));
   }
 
+  // The next answer for `url`, before the table's.
+  void queue(const std::string& url, unsigned status, const boost::json::object& body) {
+    HttpsResponse response;
+    response.status = status;
+    response.content_type = "application/json";
+    response.body = boost::json::serialize(body);
+    queued[url].push_back(lugh::Outcome<HttpsResponse>::success(std::move(response)));
+  }
+
+  std::size_t sent_to(const std::string& url) const {
+    std::size_t count = 0;
+    for (const auto& one : sent) count += one.url == url ? 1 : 0;
+    return count;
+  }
+
   std::string header(std::size_t index, const std::string& name) const {
     for (const auto& [key, value] : sent.at(index).headers) {
       if (key == name) return value;
@@ -78,6 +99,7 @@ class RecordingHttps final : public Https {
   }
 
   std::map<std::string, lugh::Outcome<HttpsResponse>> answers;
+  std::map<std::string, std::deque<lugh::Outcome<HttpsResponse>>> queued;
   std::vector<HttpsRequest> sent;
 };
 
@@ -132,7 +154,46 @@ class OAuthTest : public ::testing::Test {
     return wait<TokenSet>([&](auto done) { oauth.redeem("c1", request, std::chrono::seconds(5), io.get_executor(), done); });
   }
 
+  // Runs the io_context until `done` holds, or long enough that it never will.
+  template <typename Predicate>
+  bool pump(Predicate done) {
+    for (int i = 0; i < 400 && !done(); ++i) {
+      io.restart();
+      io.run_for(std::chrono::milliseconds(5));
+    }
+    return done();
+  }
+
+  // Runs the io_context a while, for what should not happen.
+  void settle() {
+    for (int i = 0; i < 20; ++i) {
+      io.restart();
+      io.run_for(std::chrono::milliseconds(5));
+    }
+  }
+
+  std::string device_url() const { return std::string(kIssuer) + "/oauth2/device"; }
+
+  // Until the `n`th poll is sent and its answer taken, before time moves on: the next wait is
+  // measured from the answer.
+  bool polled(std::size_t n) {
+    if (!pump([&] { return https.sent_to(token_url()) == n; })) return false;
+    settle();
+    return https.sent_to(token_url()) == n;
+  }
+
+  DeviceAuthorization started(std::uint32_t expires_in = 600, std::uint32_t interval = 5) {
+    DeviceAuthorization out;
+    out.device_code = std::make_shared<Secret>(lugh::byte_span("dc-1"));
+    out.user_code = "WDJB-MJHT";
+    out.verification_uri = std::string(kIssuer) + "/device";
+    out.expires_in = expires_in;
+    out.interval = interval;
+    return out;
+  }
+
   boost::asio::io_context io;
+  dannan::test::SteppedTime time;
   dannan::test::SteppedWall wall{kNow * 1000};
   SigningKey site_key = SigningKey::generate(SigningAlgorithm::es256);
   Verifier verifier{{kIssuer}, wall};
@@ -344,4 +405,89 @@ TEST_F(OAuthTest, APushedRequestLeavesOnlyItsUriInTheUrl) {
       wait<AuthorizationRequest>([&](auto done) { oauth.pushed_authorization(kRedirect, {"nope"}, std::chrono::seconds(5), io.get_executor(), done); });
   EXPECT_EQ(refused.fault, lugh::Fault::refused);
   EXPECT_EQ(refused.message, "invalid_scope: not this client's");
+}
+
+TEST_F(OAuthTest, ADeviceAuthorizationIsBegun) {
+  auto oauth = client(public_client());
+  https.answer(device_url(), 200,
+               {{"device_code", "dc-1"},
+                {"user_code", "WDJB-MJHT"},
+                {"verification_uri", std::string(kIssuer) + "/device"},
+                {"verification_uri_complete", std::string(kIssuer) + "/device?user_code=WDJB-MJHT"},
+                {"expires_in", 600}});
+  const auto begun = wait<DeviceAuthorization>([&](auto done) { oauth.device_authorization({"openid"}, std::chrono::seconds(5), io.get_executor(), done); });
+  ASSERT_TRUE(begun.ok()) << begun.message;
+  EXPECT_EQ(text_of(*begun.value.device_code), "dc-1");
+  EXPECT_EQ(begun.value.user_code, "WDJB-MJHT");
+  EXPECT_EQ(begun.value.verification_uri_complete, std::string(kIssuer) + "/device?user_code=WDJB-MJHT");
+  EXPECT_EQ(begun.value.expires_in, 600u);
+  // RFC 8628 3.2: five seconds when the issuer names no interval.
+  EXPECT_EQ(begun.value.interval, 5u);
+  const auto fields = fields_of(https.sent[0].body);
+  EXPECT_EQ(fields.at("scope"), "openid");
+  EXPECT_EQ(fields.at("client_id"), "app1");
+}
+
+// RFC 8628 3.4 and 3.5: the first poll an interval after the start; authorization_pending waits
+// the interval again; slow_down adds five seconds to it; tokens end it.
+TEST_F(OAuthTest, TheTokenEndpointIsPolledAtTheIntervalUntilTokensCome) {
+  auto oauth = client(public_client());
+  https.queue(token_url(), 400, {{"error", "authorization_pending"}});
+  https.queue(token_url(), 400, {{"error", "slow_down"}});
+  https.queue(token_url(), 400, {{"error", "authorization_pending"}});
+  https.queue(token_url(), 200, {{"access_token", "at-1"}, {"token_type", "Bearer"}});
+  std::optional<lugh::Outcome<TokenSet>> out;
+  oauth.device_tokens(started(), time, std::chrono::seconds(5), io.get_executor(), [&](lugh::Outcome<TokenSet> got) { out = std::move(got); });
+
+  const auto polls = [&] { return https.sent_to(token_url()); };
+  settle();
+  EXPECT_EQ(polls(), 0u);
+  time.advance(std::chrono::seconds(5));
+  ASSERT_TRUE(polled(1));
+  time.advance(std::chrono::seconds(5));
+  ASSERT_TRUE(polled(2));
+  // slow_down: the interval is ten seconds now.
+  time.advance(std::chrono::seconds(5));
+  settle();
+  EXPECT_EQ(polls(), 2u);
+  time.advance(std::chrono::seconds(5));
+  ASSERT_TRUE(polled(3));
+  time.advance(std::chrono::seconds(10));
+  ASSERT_TRUE(pump([&] { return out.has_value(); }));
+  ASSERT_TRUE(out->ok()) << out->message;
+  EXPECT_EQ(text_of(*out->value.access_token), "at-1");
+  const auto fields = fields_of(https.sent.back().body);
+  EXPECT_EQ(fields.at("grant_type"), "urn:ietf:params:oauth:grant-type:device_code");
+  EXPECT_EQ(fields.at("device_code"), "dc-1");
+}
+
+TEST_F(OAuthTest, ARefusalEndsThePolling) {
+  auto oauth = client(public_client());
+  https.queue(token_url(), 400, {{"error", "access_denied"}, {"error_description", "the user did not allow it"}});
+  std::optional<lugh::Outcome<TokenSet>> out;
+  oauth.device_tokens(started(), time, std::chrono::seconds(5), io.get_executor(), [&](lugh::Outcome<TokenSet> got) { out = std::move(got); });
+  time.advance(std::chrono::seconds(5));
+  ASSERT_TRUE(pump([&] { return out.has_value(); }));
+  EXPECT_EQ(out->fault, lugh::Fault::refused);
+  EXPECT_EQ(out->message, "access_denied: the user did not allow it");
+  time.advance(std::chrono::seconds(60));
+  settle();
+  EXPECT_EQ(https.sent_to(token_url()), 1u);
+}
+
+TEST_F(OAuthTest, PollingStopsWhenTheCodeExpires) {
+  auto oauth = client(public_client());
+  https.answer(token_url(), 400, {{"error", "authorization_pending"}});
+  std::optional<lugh::Outcome<TokenSet>> out;
+  oauth.device_tokens(started(12, 5), time, std::chrono::seconds(5), io.get_executor(), [&](lugh::Outcome<TokenSet> got) { out = std::move(got); });
+  time.advance(std::chrono::seconds(5));
+  ASSERT_TRUE(polled(1));
+  time.advance(std::chrono::seconds(5));
+  ASSERT_TRUE(polled(2));
+  // Fifteen seconds in, past the twelve: refused without another poll.
+  time.advance(std::chrono::seconds(5));
+  ASSERT_TRUE(pump([&] { return out.has_value(); }));
+  EXPECT_EQ(out->fault, lugh::Fault::refused);
+  EXPECT_EQ(out->message.rfind("expired_token:", 0), 0u);
+  EXPECT_EQ(https.sent_to(token_url()), 2u);
 }
