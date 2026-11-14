@@ -2,6 +2,19 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-14: Linux pass green: debug, ASan with leaks, TSan; Dannan 0.6.0
+
+- Pinned to Dannan 0.6.0, with Boost's floor at 1.83 (Debian 13's).
+- LeakSanitizer (on by default on Linux, off on macOS) found cycles left at exit, now broken: `AsyncMutex::abandon`, `SealedStore::abandon_waiters` and `AuditLog::abandon_pending`, called by `lugh-node` once its threads are joined (waiting coroutines held the store that held them); `Directory` holds its dependents weakly (`AppPasswords` holds the `Directory`; every dependent is kept by its owner, so a removal still reaches all of them); `TestPoolJoin` joins the test pool before exit (OpenSSL's per-thread state).
+- TSan on node-a (set up today as the stack's TSan build node: clang 19, 4K-page kernel) found three reports, all one false positive in Boost 1.83's Asio: `any_executor`'s shared target drops its last reference with a release decrement and a standalone acquire fence, which TSan does not model. Suppressed for that destructor only, in `lugh_tests`' TSan build (`lugh/test/tsan_suppressions.cpp`).
+- 666 tests, unchanged: one run each in debug (node-b, GCC 14), ASan and UBSan with leak detection (node-b), TSan (node-a, clang 19); all green. One run each, per the maintainer's rule of 2026-11-14 on repeated runs.
+
+## 2026-11-14: TODO rationalised; orphaned test nodes fixed in Dannan 0.6.0
+
+- `ACTIVE.md` cut to what is live: the uncommitted work, the TSan build node, the cluster's rules, what waits, the documents and the plan with each phase's state. Moved out as history: the alignment narrative, Dannan's 0.4.0 foundations and percent-encoding (recorded below, 2026-11-04), and the dated "For P6/P8 from Dannan, Dagda and Lir" notes, whose substance is in the P8 plan and the needs document.
+- Confirmed by the maintainer (2026-11-13), all as built: a session's scopes re-read within a minute; CSRF only on requests that may change something; role mapping in the ID token and userinfo, not access tokens; an application with no audiences gets its `client_id` as `aud`; mTLS on its own optional listener; back-channel logouts waiting and opaque-token state in memory until P8; leaving after a form by a page, not a 303; everyone bound may search from LDAP's fixed containers; a `pwd`-policy person binds with their main password with a factor enrolled; HTTP's rate limits apply to LDAP.
+- Orphaned `lugh-node` processes after a crashed or killed `lugh_tests` (the maintainer, 2026-11-13: fix it): fixed in Dannan's `ChildProcess` with a reaper per child (other descriptors closed, exit seen with `waitid(..., WNOWAIT)`, `pipe2(O_CLOEXEC)` on Linux, the residual pid-reuse window stated), shown under ASan and TSan; released as Dannan 0.6.0 (not 0.5.7: 0.5.4 had broken `libdannan.so.0.5`'s ABI). Lugh's pin moves to it in the next commit.
+
 ## 2026-11-14: Lugh on Linux, first build and run
 
 - The first build of Lugh on Linux: Debian 13 arm64, GCC 14, on the shared arm64 build node node-b, with Dannan 0.6.0 (the pin is the next commit, since Dannan 0.4.1 needs Boost 1.87 and Debian has 1.83). GCC's `-Wshadow` is stricter than clang's (a local shadowing an enclosing lambda's local, or a namespace name such as `http::status`), and `-Werror` made each fatal; it also asks for braces round an assertion under an `if` (`-Wdangling-else`) and every member of a designated initialiser. All fixed by renames and braces, no behaviour changed: 16 files.

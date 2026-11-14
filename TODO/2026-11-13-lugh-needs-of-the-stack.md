@@ -80,7 +80,7 @@ Proposals to the maintainer where marked; nothing changes in Dannan until he rul
   so arm64 is the proof Lugh waits for.
 - **N9:** **proposal to the maintainer:** patch releases keep the ABI (abidiff in CI), SONAME at major.minor, so any 0.5.x patch loads under one
   Dagda tag. Until then, pin the Dannan the Dagda tag was built on.
-- **N10:** one reading on `Nodes`, measured against the roster as last agreed (shrunk only by an operator's retire, never by absence),
+- **N10, built (Dannan `feature/partition`, for 0.7, reviewed 2026-11-14):** `context.nodes().partition()` (majority, members, reachable, the unreachable ids, when), `watch_partition()` for its changes, and `retire(id)` for the operator. Lugh puts the reading in Status and each change in the audit log (P8.1). Review found joins during a split can make both sides read majority (a joiner raises its side's count and denominator together); Dannan to choose a fix and add the case. Earlier: one reading on `Nodes`, measured against the roster as last agreed (shrunk only by an operator's retire, never by absence),
   so neither side of a split calls itself the majority.
 
 **What a shared listener must cover for Lugh**, sent to Dannan: an operator-provided certificate and key per listener (browsers and
@@ -149,6 +149,27 @@ a node reaches about 100 to 200 head commits a second in all on the Mac, whateve
 regardless: the TOTP step and the session in one `lugh/secrets` commit, and the lease left to lapse after a second or two
 rather than released, so a TOTP sign-in is two commits (about 100 a second in a storm). Lugh prefers group commit for heads in
 Dagda, which Lir needs too; Dagda puts both options to the maintainer. Figures for 1, 4 and 8 writers on one node to follow.
+
+The build node (Dagda, 2026-11-14, node-a, the same shape): the commit side holds (39 a second of 50, p50 25 ms, p99 29 ms),
+but node B saw the commits at p50 10.1 s, p99 22.0 s, the lag growing through the minute: every commit arrived, but B catches
+up slower than A commits. A tree change in one space on three nodes shows the same shape smaller (B p50 950 ms, p99 1.9 s);
+note changes and 16 spaces are seen in 14 to 36 ms. Head commits on one node stay at 84 to 95 a second, as on the Mac. So on
+the build node, today, "disabled on A, refused on B" is ten to twenty seconds and growing under load, not a tenth of a second. Where
+B's time goes (fetching changed tree nodes or merging over the 50,000-key tree) is not yet measured; Dagda puts it first in
+slice 2 beside group commit, to be profiled on a build node. Lugh's need, sent: a follower keeps up with a writer at Lugh's rates on
+the build node, so a disable or revocation is seen elsewhere within about a second; P8.5 (sign-in on the stack) does not land before
+that is measured.
+
+## Ruled (the maintainer, 2026-11-14)
+
+- **Group commit for heads in Dagda**, not owners batching (one node tops out near 85 to 90 head commits a second today). Lugh keeps
+  its own cuts too: the TOTP step and the session in one commit, and the lease left to lapse.
+- **The partition reading stays as built, its hazard documented** (via Dannan): nodes joined during a split, or a new node first
+  started during one, can give both sides a majority, so a node is joined to a whole cluster. Lugh's operator documentation says so.
+- **A Lugh node on the minority side reports it and keeps serving** (Status and the audit log); TOTP still fails closed there by
+  the lease.
+- **TSan on one build node** set up with clang 19 and a 4K-page kernel, shared by the projects that need it; builds never on the Mac. Lugh's
+  "every phase green under ASan and TSan" rule stands. Which build node is being agreed with the Macha session, which keeps the schedule.
 
 ## Of both
 
