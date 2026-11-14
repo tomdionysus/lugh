@@ -76,7 +76,10 @@ Proposals to the maintainer where marked; nothing changes in Dannan until he rul
   (`Context::threads()`), counted like any other, its background work through the node's gates. Built once the maintainer answers Dannan's
   note. Lugh reviewed the code (Dannan `feature/worker-pool`, f531ce5); answered in f752aa9: tasks and their `done` are a
   move-only `UniqueFunction`, so a task owns the password's `Secret` outright; work past its deadline is told at most one running
-  task late, as the contract says; 694 of 694 on node-a. Lugh links it once it is released.)
+  task late, as the contract says; 694 of 694 on node-a. Lugh links it once it is released. Merged on Dannan's develop
+  (202b164, with `DANNAN_BUILD_TOOLS` cde8218), CI green; both ship in 0.8.0, which the maintainer holds until P5's benchmarks. One line
+  added to the contract: the executor handed to `submit()` must outlive the pool, so Lugh stops its hashing pool before the
+  io_context it posts to.)
   Hash on Lugh's own
   worker threads registered with `Context::threads()`, never the node's executor. Gap: Dannan admits by memory, not CPU; Dagda has
   Macha's CPU pacing. **Proposal to the maintainer:** a class-aware worker pool with CPU pacing moves into Dannan. Listeners: Lugh keeps its own
