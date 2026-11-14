@@ -8,8 +8,10 @@
 #include "lugh/oauth/issuer.h"
 
 #include <algorithm>
+#include <variant>
 
 #include "dannan/identity/crypto.h"
+#include "lugh/client/access_token.h"
 #include "lugh/core/encoding.h"
 #include "lugh/core/steps.h"
 #include "lugh/oauth/request.h"
@@ -21,7 +23,6 @@ namespace {
 
 constexpr std::uint64_t kLogoutTokenSeconds = 120;
 constexpr Deadline kStepDeadline = std::chrono::seconds(30);
-constexpr std::uint64_t kSkew = 60;
 
 boost::json::array strings(const std::vector<std::string>& values) {
   boost::json::array out;
@@ -37,14 +38,6 @@ std::string random_id() { return encoding::base64url(dannan::identity::random_by
 std::string at_hash(const std::string& access_token) {
   const auto hash = dannan::identity::sha256(byte_span(access_token));
   return encoding::base64url(std::span<const unsigned char>(hash.bytes).first(16));
-}
-
-std::optional<std::uint64_t> seconds_claim(const boost::json::object& claims, std::string_view name) {
-  const auto found = claims.if_contains(name);
-  if (!found || !found->is_number()) return std::nullopt;
-  const auto value = found->to_number<double>();
-  if (value < 0) return std::nullopt;
-  return static_cast<std::uint64_t>(value);
 }
 
 }  // namespace
@@ -237,44 +230,20 @@ std::optional<Bearer> TokenIssuer::verify(std::string_view token, std::optional<
     behind = _opaque->peek(token.substr(std::string_view(kOpaquePrefix).size()));
     if (!behind) return std::nullopt;
   }
-  const auto jws = client::jws_parse(behind ? std::string_view(*behind) : token);
-  if (!jws || jws->typ != "at+jwt" || !client::jws_verify(*jws, _keys->published())) return std::nullopt;
-  const auto& claims = jws->claims;
-  const auto iss = claims.if_contains("iss");
-  const auto sub = claims.if_contains("sub");
-  const auto client = claims.if_contains("client_id");
-  if (!iss || !iss->is_string() || iss->as_string() != _issuer) return std::nullopt;
-  if (!sub || !sub->is_string() || !client || !client->is_string()) return std::nullopt;
-  if (const auto jti = claims.if_contains("jti"); !jti || !jti->is_string() || _revoked->peek(std::string(jti->as_string()))) return std::nullopt;
-  const auto now = _now();
-  const auto exp = seconds_claim(claims, "exp");
-  const auto nbf = seconds_claim(claims, "nbf");
-  if (!exp || now >= *exp + kSkew || (nbf && now + kSkew < *nbf)) return std::nullopt;
-  if (audience) {
-    const auto aud = claims.if_contains("aud");
-    bool found = false;
-    if (aud && aud->is_array()) {
-      for (const auto& one : aud->as_array()) found = found || (one.is_string() && one.as_string() == *audience);
-    } else if (aud && aud->is_string()) {
-      found = aud->as_string() == *audience;
-    }
-    if (!found) return std::nullopt;
-  }
+  // The checks a relying party makes too are the client library's; what only this node can see,
+  // an opaque handle and a revoked jti, is added here.
+  auto checked = client::check_access_token(behind ? std::string_view(*behind) : token, _keys->published(), _issuer, _now(), audience);
+  auto* access = std::get_if<client::AccessToken>(&checked);
+  if (!access || _revoked->peek(access->jti)) return std::nullopt;
   Bearer bearer;
-  bearer.claims = claims;
-  bearer.subject = std::string(sub->as_string());
-  bearer.client_id = std::string(client->as_string());
+  bearer.claims = std::move(access->claims);
+  bearer.subject = std::move(access->subject);
+  bearer.client_id = std::move(access->client_id);
   bearer.service = bearer.subject == bearer.client_id;
   bearer.opaque = behind.has_value();
-  if (const auto cnf = claims.if_contains("cnf"); cnf && cnf->is_object()) {
-    const auto jkt = cnf->as_object().if_contains("jkt");
-    const auto x5t = cnf->as_object().if_contains("x5t#S256");
-    if (jkt && jkt->is_string()) bearer.jkt = std::string(jkt->as_string());
-    if (x5t && x5t->is_string()) bearer.x5t = std::string(x5t->as_string());
-    // A cnf that binds to nothing Lugh knows is no token of Lugh's.
-    if (!bearer.jkt && !bearer.x5t) return std::nullopt;
-  }
-  if (const auto scope = claims.if_contains("scope"); scope && scope->is_string()) {
+  bearer.jkt = std::move(access->jkt);
+  bearer.x5t = std::move(access->x5t);
+  if (const auto scope = bearer.claims.if_contains("scope"); scope && scope->is_string()) {
     if (auto split = scopes::split(scope->as_string())) bearer.scopes = std::move(*split);
   }
   return bearer;
