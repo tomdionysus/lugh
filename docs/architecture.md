@@ -78,7 +78,7 @@ Lugh is asynchronous from the socket to the disk (the maintainer, 2026-10-18), i
 
 A separate, installable target with real public headers under `include/lugh/` and a CMake package config, so another project can `add_subdirectory(lugh)` or `find_package(lugh)`. Here Lugh deliberately differs from its siblings: Macha's `macha_core` is private and installs no headers, and blackraven-admin has no `include/` directory. A library for others needs a stable public face.
 
-- **`lugh_client`** (always): fetches and caches discovery and JWKS from a Lugh cluster; verifies access and ID tokens locally (signature, `iss`, `aud`, `exp`, `nbf`, sender constraint); runs the authorisation code + PKCE, client credentials and device flows; introspects opaque tokens; calls the management API. It depends on OpenSSL and Boost only.
+- **`lugh_client`** (always): fetches and caches discovery and JWKS from a Lugh cluster; verifies access and ID tokens locally (signature, `iss`, `aud`, `exp`, `nbf`, sender constraint); runs the authorisation code + PKCE, client credentials and device flows; introspects opaque tokens; calls the management API. It depends on OpenSSL, Boost and Dannan (its signing and time types; the maintainer, 2026-11-14), and knows nothing of any consumer: Lir's Lugh plugin, one of Lir's ways to authenticate, adapts it to Lir's `TokenVerifier`. The plan is `TODO/2026-11-14-p10-plan.md`.
 - **`lugh_embedded`** (option, open question): the host process joins the cluster as a non-serving node holding a replica of the directory, so it can authenticate a user name and password locally with no network round trip. That replicates sealed credentials into another process, so it would need its own threat model before anyone builds it.
 
 ### Frontend (`dashboard/`)
