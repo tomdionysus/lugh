@@ -2,6 +2,16 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-14: P10 done, lugh_client
+
+- P10.3a to P10.3d: `OAuthClient` (code with PKCE and PAR, the return checked for issuer, state and error, the ID token verified with its nonce, refresh, client credentials, the device flow, DPoP proofs, `tls_client_auth` and the mTLS aliases); client authentication `none`, `private_key_jwt`, `client_secret_basic`, `tls_client_auth`; `HttpsClient` presents a client certificate.
+- P10.4: introspection and revocation. P10.5: `ApiClient` over `/api/v1` (Bearer or DPoP, If-Match, the API's codes as faults); `Https` with PATCH, PUT, DELETE and ETags.
+- As Lir asked: `AccessToken::x5t` as its 32 bytes, refusing a malformed one; `lugh/client/testing.h` for consumers' tests.
+- P10.6: the end-to-end test against the real `lugh-node` (keys by discovery, client credentials, offline verification, the API, introspection, revocation); `docs/client.md`.
+- Found on the way: Lugh's own `base64` encoder was missing (added); the process tests' `Serving` takes a port chosen first; two test fixtures fixed (a device poll stepped before its answer arrived, an mTLS server not told it was one), and the flow test's 43-letter thumbprints replaced by real ones.
+- 724 tests (from 666 at P10's start, 58 new, two moved). Debug on node-d; the phase's ASan with leak detection (node-b) and TSan (node-a, clang 19), one run each, all green, no sanitizer report; every new threaded, timing or network test repeated 20 to 50 times in debug, ASan and TSan.
+- Merged into `develop` for Lir to repin (Lir's Lugh plugin, 9452fd0, is on 2b60b52).
+
 ## 2026-11-14: P10.1 and P10.2, the Verifier and the HTTPS key source
 
 - `lugh::client::Verifier` (public, `lugh/include/lugh/client/verifier.h`, `tokens.h`): several trusted issuers with their own keys from a JWKS; `iss` picks the keys, `kid` the key; refusals a key source acts on; ID tokens checked as OIDC Core 3.1.3.7 has a client check them; an injected wall clock; keys replaced under a lock while tokens are checked; a hint naming the issuer when a token is refused for missing keys.
