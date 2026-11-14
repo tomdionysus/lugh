@@ -48,6 +48,10 @@ inline constexpr std::size_t kMostJwsBytes = 16 * 1024;
 // token, "JWT" for an ID token, "logout+jwt" for a logout token).
 std::string jws_sign(const SigningKey& key, const std::string& kid, std::string_view typ, const boost::json::object& claims);
 
+// `claims` signed by `key` under `header` as given, alg set to the key's when the header has none:
+// for a header other than the kid and typ jws_sign() writes (a DPoP proof carries its public key).
+std::string jws_sign_with(const SigningKey& key, boost::json::object header, const boost::json::object& claims);
+
 // A compact JWS, taken apart and not yet verified.
 struct Jws {
   boost::json::object header;

@@ -107,6 +107,11 @@ std::string jws_sign(const SigningKey& key, const std::string& kid, std::string_
   header["alg"] = dannan::identity::algorithm_name(key.algorithm());
   header["kid"] = kid;
   header["typ"] = typ;
+  return jws_sign_with(key, std::move(header), claims);
+}
+
+std::string jws_sign_with(const SigningKey& key, boost::json::object header, const boost::json::object& claims) {
+  if (!header.contains("alg")) header["alg"] = dannan::identity::algorithm_name(key.algorithm());
   const auto header_text = boost::json::serialize(header);
   const auto claims_text = boost::json::serialize(claims);
   const auto input = encoding::base64url(bytes_of(header_text)) + "." + encoding::base64url(bytes_of(claims_text));
