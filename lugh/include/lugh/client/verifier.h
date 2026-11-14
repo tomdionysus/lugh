@@ -51,6 +51,11 @@ class Verifier {
 
   const std::vector<std::string>& issuers() const noexcept { return _issuers; }
 
+  // Called with the issuer whenever a token is refused because that issuer has no keys yet or
+  // none under the token's kid: a key source's cue to look again. Called on the verifying thread,
+  // so it must not wait; a key source posts the work to its own executor. Replaces any before.
+  void on_missing_keys(std::function<void(const std::string& issuer)> hint);
+
   // Replaces `issuer`'s keys with the P-256 and Ed25519 public keys in `jwks` that have a kid,
   // skipping any other; answers how many it took. Throws std::invalid_argument for an issuer
   // not trusted, and std::runtime_error for a document with no keys array or more than
@@ -74,6 +79,7 @@ class Verifier {
   const dannan::contract::WallClock& _wall;
   mutable dannan::contract::Mutex _mutex;
   std::map<std::string, Keys, std::less<>> _keys DANNAN_GUARDED_BY(_mutex);
+  std::function<void(const std::string&)> _missing_keys DANNAN_GUARDED_BY(_mutex);
 };
 
 }  // namespace lugh::client

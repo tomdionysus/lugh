@@ -56,14 +56,25 @@ std::variant<std::pair<std::string, Verifier::Keys>, std::string> Verifier::_key
   const auto iss = string_claim(jws->claims, "iss");
   if (!iss || std::find(_issuers.begin(), _issuers.end(), *iss) == _issuers.end()) return std::string("not from an issuer trusted");
   Keys keys;
+  std::function<void(const std::string&)> hint;
   {
     dannan::contract::Lock lock(_mutex);
     if (const auto found = _keys.find(*iss); found != _keys.end()) keys = found->second;
+    hint = _missing_keys;
   }
-  if (!keys || keys->empty()) return std::string("no keys yet for its issuer");
+  const auto missing = [&](const char* why) -> std::string {
+    if (hint) hint(*iss);
+    return why;
+  };
+  if (!keys || keys->empty()) return missing("no keys yet for its issuer");
   const auto named = [&](const VerifyKey& key) { return key.kid == jws->kid; };
-  if (std::none_of(keys->begin(), keys->end(), named)) return std::string("no key with its kid");
+  if (std::none_of(keys->begin(), keys->end(), named)) return missing("no key with its kid");
   return std::pair<std::string, Keys>{*iss, std::move(keys)};
+}
+
+void Verifier::on_missing_keys(std::function<void(const std::string& issuer)> hint) {
+  dannan::contract::Lock lock(_mutex);
+  _missing_keys = std::move(hint);
 }
 
 std::variant<AccessToken, std::string> Verifier::verify_access(std::string_view token, std::optional<std::string_view> audience) const {

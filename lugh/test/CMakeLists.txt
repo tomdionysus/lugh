@@ -33,6 +33,7 @@ add_executable(lugh_tests
     client_access_token_test.cpp
     client_https_test.cpp
     client_jose_test.cpp
+    client_key_source_test.cpp
     client_verifier_test.cpp
     core_async_test.cpp
     core_encoding_test.cpp
