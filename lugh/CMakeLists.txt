@@ -16,6 +16,7 @@ add_library(lugh_client STATIC
     client/id_token.cpp
     client/jose.cpp
     client/key_source.cpp
+    client/oauth_client.cpp
     client/verifier.cpp
 )
 add_library(lugh::client ALIAS lugh_client)
