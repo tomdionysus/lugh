@@ -2,6 +2,10 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-14: Dannan 0.7.0
+
+- Pinned to Dannan 0.7.0 (the partition reading, the deferred reply; `libdannan.so.0.7`). Nothing Lugh uses changed. 666 tests, unchanged, one debug run on node-b. The reading goes into Status and the audit log with P8.1.
+
 ## 2026-11-14: Linux pass green: debug, ASan with leaks, TSan; Dannan 0.6.0
 
 - Pinned to Dannan 0.6.0, with Boost's floor at 1.83 (Debian 13's).

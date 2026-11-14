@@ -6,7 +6,7 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 P6 (OAuth and OIDC) and P9 (writable LDAP) are done; P8 is planned and its first steps wait on Dagda. The Linux pass is green and committed (2026-11-14): debug, ASan with leak detection and TSan, 666 tests each, on the build nodes. The maintainer, 2026-11-14: **no builds or tests on the Mac**, only on the build node cluster (below).
 
-Next: **move to Dannan 0.7.0** (`LUGH_DANNAN_REF`, one debug run on a build node, its own commit), then wait for Dagda's slice 1 tag to start P8.0 to P8.4 (`2026-11-13-p8-plan.md`). node-a is the stack's TSan build node (clang 19, 4K pages; `config.txt.pre-4k` restores the 16K kernel); Lugh's TSan tree is `~/lugh/build-tsan` there, built with `clang++-19`; node-b keeps `~/lugh/build` and `~/lugh/build-asan` (GCC 14).
+Lugh is on Dannan 0.7.0 (2026-11-14). `develop` is not yet pushed past `9cc513b`: the push of these commits was refused by the session's permission check, so the maintainer pushes it. Next: wait for Dagda's slice 1 tag to start P8.0 to P8.4 (`2026-11-13-p8-plan.md`). node-a is the stack's TSan build node (clang 19, 4K pages; `config.txt.pre-4k` restores the 16K kernel); Lugh's TSan tree is `~/lugh/build-tsan` there, built with `clang++-19`; node-b keeps `~/lugh/build` and `~/lugh/build-asan` (GCC 14).
 
 ## The build node cluster
 
@@ -15,7 +15,7 @@ node-a `.11`, node-b `.12`, node-c `.13` (Debian 13 arm64, GCC 14, Boost 1.83), 
 ## Waiting
 
 - **Dagda's slice 1 tag**: P8.0 to P8.4 start on it (`2026-11-13-p8-plan.md`).
-- **Dannan 0.7.0 is tagged** (2026-11-14; `Nodes::partition()`, `watch_partition`, against `members()` and `retire()`; SONAME `libdannan.so.0.7`; .debs wait on the maintainer's publish). Lugh moves `LUGH_DANNAN_REF` to 0.7.0 in its own commit after the 0.6.0 one, with one debug run; the partition in Status and the audit log lands with P8.1, when `lugh-node` becomes a Dannan node.
+- **Dannan 0.7.0 is tagged** (2026-11-14; `Nodes::partition()`, `watch_partition`, against `members()` and `retire()`; SONAME `libdannan.so.0.7`; .debs wait on the maintainer's publish). Lugh is pinned to it; the partition in Status and the audit log lands with P8.1, when `lugh-node` becomes a Dannan node.
 - **Dagda slice 2, follower lag on the build node**: on node-a a second node saw Lugh-shaped commits at p50 10 s, p99 22 s and growing (Mac: 103 ms); P8.5 waits until the lag is bounded near a second (`2026-11-13-lugh-needs-of-the-stack.md`, "The build node").
 - **The maintainer**: `docs/architecture.md`, "Still open": question 2 (single-use grants) for P8, question 14 (Lugh's hostname) for P13.
 - **Not merged, by the maintainer's choice**: GitHub's `main` carries aaac977 (Alpine and OpenRC for Raven), never merged here; Raven is dropped for now (the maintainer, 2026-11-13). Local `main` (tag 0.1.0) is not pushed since it would not fast-forward. When Raven returns: merge `origin/main` into `develop` on the new layout (about ten conflicts), test, fast-forward `main`, push.

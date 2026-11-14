@@ -44,11 +44,11 @@ find_package(OpenSSL 3.0 REQUIRED)
 # Dannan, the network layer Lugh hosts on, at a release tag, or at a commit while Lugh needs
 # something not yet tagged: from the sibling checkout, cloned into the build tree, so
 # building Lugh never touches ../dannan. Linked as dannan::dannan, the name an installed
-# Dannan exports too (find_package(dannan 0.6 CONFIG)). Now: 0.6.0, the release whose patches keep
-# its ABI (libdannan.so.0.6).
+# Dannan exports too (find_package(dannan 0.7 CONFIG)). Now: 0.7.0, with the partition reading; its
+# patches keep its ABI (libdannan.so.0.7).
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_REF "0.6.0")
+set(LUGH_DANNAN_REF "0.7.0")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
