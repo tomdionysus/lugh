@@ -13,11 +13,11 @@
 #include <thread>
 #include <vector>
 
+#include "lugh/client/jose.h"
 #include "lugh/http/http_server.h"
 #include "lugh/http/tls_context.h"
 #include "lugh/test/fixtures/node_browser.h"
 #include "lugh/test/fixtures/recording_sink.h"
-#include "lugh/tokens/jose.h"
 
 // The whole of OAuth on the real binary, over TLS: root signs in and enrols; registers an
 // application through the API; the application is consented to, gets a code, redeems it, reads

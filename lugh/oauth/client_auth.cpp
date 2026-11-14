@@ -11,10 +11,10 @@
 
 #include "dannan/encoding/percent.h"
 #include "dannan/identity/crypto.h"
+#include "lugh/client/jose.h"
 #include "lugh/core/encoding.h"
 #include "lugh/core/steps.h"
 #include "lugh/http/client_certificate.h"
-#include "lugh/tokens/jose.h"
 
 namespace lugh::oauth {
 

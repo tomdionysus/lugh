@@ -5,7 +5,7 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "lugh/tokens/jose.h"
+#include "lugh/client/jose.h"
 
 #include <algorithm>
 #include <array>

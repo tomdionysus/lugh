@@ -15,7 +15,7 @@
 #include <cstdint>
 #include <string_view>
 
-#include "lugh/tokens/jose.h"
+#include "lugh/client/jose.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
   using namespace lugh::tokens;

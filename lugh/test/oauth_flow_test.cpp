@@ -8,12 +8,12 @@
 #include <gtest/gtest.h>
 
 #include "dannan/identity/crypto.h"
+#include "lugh/client/jose.h"
 #include "lugh/core/encoding.h"
 #include "lugh/scopes/scope.h"
 #include "lugh/signin/html.h"
 #include "lugh/test/fixtures/dpop_proofs.h"
 #include "lugh/test/fixtures/signin_rig.h"
-#include "lugh/tokens/jose.h"
 
 using lugh::http::verb;
 using Strings = std::vector<std::string>;

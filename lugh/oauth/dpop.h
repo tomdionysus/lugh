@@ -14,12 +14,12 @@
 #include <string_view>
 
 #include "dannan/contract/time_source.h"
+#include "lugh/client/jose.h"
 #include "lugh/core/outcome.h"
 #include "lugh/http/caller.h"
 #include "lugh/http/http_types.h"
 #include "lugh/oauth/expiring.h"
 #include "lugh/oauth/issuer.h"
-#include "lugh/tokens/jose.h"
 
 // DPoP (RFC 9449): a token bound to a key its client holds, so a token copied without the key
 // is useless (docs/architecture.md, "OAuth profile": token binding).

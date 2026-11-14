@@ -30,6 +30,7 @@ add_executable(lugh_tests
     authn_passwords_test.cpp
     authn_policy_test.cpp
     authn_totp_test.cpp
+    client_jose_test.cpp
     core_async_test.cpp
     core_encoding_test.cpp
     core_completion_test.cpp
@@ -83,7 +84,6 @@ add_executable(lugh_tests
     store_log_format_test.cpp
     store_sealed_store_test.cpp
     system_files_test.cpp
-    tokens_jose_test.cpp
     tokens_signing_keys_test.cpp
 )
 

@@ -13,8 +13,8 @@
 #include <string>
 
 #include "dannan/identity/crypto.h"
+#include "lugh/client/jose.h"
 #include "lugh/core/encoding.h"
-#include "lugh/tokens/jose.h"
 
 // DPoP proofs as a client makes them (RFC 9449 section 4), for the tests: a key, and proofs by
 // it for a method and URL, with the access token's hash when one is given.

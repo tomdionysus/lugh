@@ -19,12 +19,12 @@
 #include "dannan/contract/thread_safety.h"
 #include "dannan/contract/time_source.h"
 #include "lugh/audit/audit_log.h"
+#include "lugh/client/jose.h"
 #include "lugh/core/completion.h"
 #include "lugh/core/outcome.h"
 #include "lugh/core/status.h"
 #include "lugh/store/store.h"
 #include "lugh/store/store_calls.h"
-#include "lugh/tokens/jose.h"
 
 namespace lugh::tokens {
 

@@ -7,8 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include "lugh/client/jose.h"
 #include "lugh/core/encoding.h"
-#include "lugh/tokens/jose.h"
 
 using namespace lugh::tokens;
 using dannan::identity::SigningAlgorithm;

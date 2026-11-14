@@ -32,6 +32,7 @@ add_library(lugh STATIC
     authn/passwords.cpp
     authn/policy.cpp
     authn/totp.cpp
+    client/jose.cpp
     crypto/aead.cpp
     directory/directory.cpp
     directory/records.cpp
@@ -84,7 +85,6 @@ add_library(lugh STATIC
     store/sealed_store.cpp
     system/system_console.cpp
     system/system_files.cpp
-    tokens/jose.cpp
     tokens/signing_keys.cpp
 )
 

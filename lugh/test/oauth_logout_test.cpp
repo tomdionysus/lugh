@@ -7,9 +7,9 @@
 
 #include <gtest/gtest.h>
 
+#include "lugh/client/jose.h"
 #include "lugh/core/encoding.h"
 #include "lugh/test/fixtures/signin_rig.h"
-#include "lugh/tokens/jose.h"
 
 using lugh::http::verb;
 
