@@ -110,8 +110,7 @@ bool verify(const PublicKey& key, std::span<const std::uint8_t> message, std::sp
     case PublicKey::Kind::eddsa:
       return dannan::identity::verify(dannan::identity::SigningAlgorithm::ed25519, key.der, message, signature);
     case PublicKey::Kind::rs256:
-      // Waits on Dannan's verify_rs256 (TODO/2026-11-15-p11-webauthn.md).
-      return false;
+      return dannan::identity::verify_rs256(bytes_of(key.modulus), bytes_of(key.exponent), message, signature);
   }
   return false;
 }

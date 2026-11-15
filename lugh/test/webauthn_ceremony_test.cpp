@@ -228,3 +228,18 @@ TEST(WebAuthn, Es256SignaturesAreStrictDer) {
   long_r.insert(long_r.end(), {0x02, 0x01, 0x01});
   EXPECT_FALSE(es256_raw_signature(long_r)) << "an r longer than 32 bytes";
 }
+
+// RS256, as Windows Hello makes it (Dannan 0.8.3's verify_rs256).
+TEST(WebAuthn, RegistersThenAssertsWithRs256) {
+  auto authenticator = Authenticator::rs256();
+  const auto made = registered(authenticator);
+  ASSERT_TRUE(made.ok()) << made.message;
+  EXPECT_EQ(made.value.credential.key.kind, PublicKey::Kind::rs256);
+  EXPECT_EQ(made.value.credential.key.modulus.size(), 256u);
+  const auto credential = credential_of(made.value);
+  ASSERT_TRUE(asserted(authenticator, credential).ok());
+
+  auto proof = authenticator.get(kChallenge);
+  proof.signature[10] ^= 0x01;
+  EXPECT_FALSE(check_assertion(expected(), credential, proof.client_data_json, proof.authenticator_data, proof.signature).ok()) << "a bent signature";
+}

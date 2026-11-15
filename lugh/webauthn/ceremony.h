@@ -24,8 +24,7 @@
 // - Attestation is `none` (the maintainer, 2026-11-15). Any attestation statement is ignored, whatever
 //   its format, and the AAGUID is kept as the authenticator's claim, unverified.
 // - Each refusal is Fault::refused with a message naming the check, never a value read.
-// - RS256 credentials are registered now. Their assertions are verified once Dannan's
-//   verify_rs256 is pinned; until then an RS256 assertion is refused as not yet verifiable.
+// - Signatures are Dannan's: ES256 and EdDSA by verify(), RS256 by verify_rs256() (0.8.3).
 namespace lugh::webauthn {
 
 // Authenticator data flags (section 6.1).

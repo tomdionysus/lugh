@@ -7,9 +7,16 @@
 
 #pragma once
 
+#include <openssl/bn.h>
+#include <openssl/core_names.h>
+#include <openssl/evp.h>
+#include <openssl/rsa.h>
+
 #include <array>
 #include <boost/json.hpp>
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -66,6 +73,15 @@ class Authenticator {
   explicit Authenticator(dannan::identity::SigningAlgorithm algorithm = dannan::identity::SigningAlgorithm::es256)
       : _key(dannan::identity::SigningKey::generate(algorithm)), _credential_id(dannan::identity::random_bytes(16)) {}
 
+  // An RS256 authenticator (Windows Hello's kind): a 2048-bit RSA key of OpenSSL's, since
+  // Dannan signs nothing with RSA.
+  static Authenticator rs256() {
+    Authenticator out;
+    out._key.reset();
+    out._rsa.reset(EVP_RSA_gen(2048), EVP_PKEY_free);
+    return out;
+  }
+
   // What the ceremony carries; each defaults to what a well-behaved authenticator sends.
   std::string rp_id = "localhost";
   std::string origin = "https://localhost";
@@ -81,7 +97,7 @@ class Authenticator {
   std::array<std::uint8_t, 16> aaguid{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
 
   const Bytes& credential_id() const { return _credential_id; }
-  const dannan::identity::SigningKey& key() const { return _key; }
+  const dannan::identity::SigningKey& key() const { return *_key; }
 
   Created create(const std::string& challenge) const {
     Created out;
@@ -106,16 +122,32 @@ class Authenticator {
     const auto hash = dannan::identity::sha256(out.client_data_json);
     Bytes message = out.authenticator_data;
     message.insert(message.end(), hash.bytes.begin(), hash.bytes.end());
-    const auto raw = _key.sign(message);
-    out.signature = _key.algorithm() == dannan::identity::SigningAlgorithm::es256 ? der_signature(raw) : Bytes(raw.begin(), raw.end());
+    if (_rsa) {
+      out.signature = rsa_sign(message);
+      return out;
+    }
+    const auto raw = _key->sign(message);
+    out.signature = _key->algorithm() == dannan::identity::SigningAlgorithm::es256 ? der_signature(raw) : Bytes(raw.begin(), raw.end());
     return out;
   }
 
-  // The COSE key (RFC 9052 section 7) of this authenticator's public key.
+  // The COSE key (RFC 9052 section 7, RFC 8230) of this authenticator's public key.
   Bytes cose_key() const {
-    const auto der = _key.public_key();
     Bytes out;
-    if (_key.algorithm() == dannan::identity::SigningAlgorithm::es256) {
+    if (_rsa) {
+      head(out, 5, 4);
+      integer(out, 1);
+      integer(out, 3);
+      integer(out, 3);
+      integer(out, -257);
+      integer(out, -1);
+      bytes(out, rsa_part(OSSL_PKEY_PARAM_RSA_N));
+      integer(out, -2);
+      bytes(out, rsa_part(OSSL_PKEY_PARAM_RSA_E));
+      return out;
+    }
+    const auto der = _key->public_key();
+    if (_key->algorithm() == dannan::identity::SigningAlgorithm::es256) {
       head(out, 5, 5);
       integer(out, 1);
       integer(out, 2);
@@ -192,7 +224,30 @@ class Authenticator {
     return out;
   }
 
-  dannan::identity::SigningKey _key;
+  // RSASSA-PKCS1-v1_5 with SHA-256 (RFC 8017 8.2).
+  Bytes rsa_sign(const Bytes& message) const {
+    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> context(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+    std::size_t length = 0;
+    EVP_DigestSignInit(context.get(), nullptr, EVP_sha256(), nullptr, _rsa.get());
+    EVP_DigestSign(context.get(), nullptr, &length, message.data(), message.size());
+    Bytes out(length);
+    EVP_DigestSign(context.get(), out.data(), &length, message.data(), message.size());
+    out.resize(length);
+    return out;
+  }
+
+  // The modulus or the exponent, big-endian.
+  Bytes rsa_part(const char* name) const {
+    BIGNUM* number = nullptr;
+    EVP_PKEY_get_bn_param(_rsa.get(), name, &number);
+    Bytes out(static_cast<std::size_t>(BN_num_bytes(number)));
+    BN_bn2bin(number, out.data());
+    BN_free(number);
+    return out;
+  }
+
+  std::optional<dannan::identity::SigningKey> _key;
+  std::shared_ptr<EVP_PKEY> _rsa;
   Bytes _credential_id;
 };
 
