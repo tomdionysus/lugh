@@ -15,6 +15,8 @@ To close it:
    - The ASan rerun on node-b (`~/lugh/run-asan-p11f.log`) had not finished when the session stopped. Read that log: if it is missing
      or not 784 green with no sanitizer report, run it again (`cmake --build build-asan -j 2 && ./build-asan/lugh_tests`).
      The CBOR fix, the docs and the P11 record are already committed.
+   - Lugh's claim on node-b (2 cores, until 23:26Z) covers that run. Release it with `claim_release` once the log is
+     read, if it has not expired.
 2. When ASan is green, note it in `COMPLETED.md`'s P11 record.
 3. Merge `feature/webauthn` into `develop` (`--no-ff`), and ask the maintainer before pushing.
 
