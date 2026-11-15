@@ -13,7 +13,6 @@
 
 #include "lugh/http/http_server.h"
 #include "lugh/http/outbound.h"
-#include "lugh/http/tls_context.h"
 #include "lugh/test/fixtures/recording_sink.h"
 #include "lugh/test/fixtures/temp_directory.h"
 #include "lugh/test/fixtures/test_certificate.h"
@@ -31,9 +30,9 @@ class OutboundTest : public ::testing::Test {
  protected:
   void SetUp() override {
     roots = dir.write("roots.pem", pair.certificate_pem).string();
-    const auto tls = http::TlsContext::server(dir.write("cert.pem", pair.certificate_pem).string(), dir.write("key.pem", pair.key_pem).string());
-    ASSERT_TRUE(tls.ok) << tls.error;
-    server = std::make_shared<http::HttpServer>(std::make_shared<RecordingSink>(), server_io, tls.value,
+    const auto certificates = std::make_shared<dannan::listen::Certificates>(
+        dannan::listen::CertificatePaths{dir.write("cert.pem", pair.certificate_pem), dir.write("key.pem", pair.key_pem), {}});
+    server = std::make_shared<http::HttpServer>(std::make_shared<RecordingSink>(), server_io, certificates,
                                                 std::make_shared<http::ClientAddress>(std::vector<lugh::network::Cidr>{}));
     server->middleware_add(
         [this](const http::HttpRequest& request, const std::string&, std::shared_ptr<http::HttpResponse> response, std::function<void(bool)> next) {

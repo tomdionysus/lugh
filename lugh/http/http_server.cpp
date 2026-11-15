@@ -7,15 +7,12 @@
 
 #include "lugh/http/http_server.h"
 
-#include <openssl/bio.h>
-#include <openssl/ssl.h>
-#include <openssl/x509.h>
-
 #include <exception>
 #include <optional>
+#include <stdexcept>
+#include <system_error>
 #include <utility>
 
-#include "dannan/identity/crypto.h"
 #include "lugh/core/encoding.h"
 #include "lugh/http/api_json.h"
 #include "lugh/http/client_certificate.h"
@@ -24,79 +21,40 @@ namespace lugh::http {
 
 namespace {
 
-using tcp = net::ip::tcp;
-using Stream = beast::ssl_stream<beast::tcp_stream>;
+using dannan::listen::Stream;
 
-// One connection: a TLS handshake, then any number of requests on it in turn. Everything
-// runs on the connection's strand.
+// One connection, its TLS already up: any number of requests on it in turn. Everything runs on
+// the stream's strand.
 class HttpSession : public std::enable_shared_from_this<HttpSession> {
  public:
-  HttpSession(tcp::socket socket, ssl::context& tls, std::shared_ptr<const HttpPipeline> pipeline)
-      : _stream(std::move(socket), tls), _pipeline(std::move(pipeline)) {
-    boost::system::error_code ec;
-    const auto peer = _stream.next_layer().socket().remote_endpoint(ec);
-    if (!ec) _peer = peer.address();
+  HttpSession(std::shared_ptr<Stream> stream, std::shared_ptr<const HttpPipeline> pipeline)
+      : _stream(std::move(stream)), _pipeline(std::move(pipeline)), _peer(_stream->peer().address()) {
+    // The certificate the client presented on the mTLS listener, whatever its chain: the routes
+    // judge it (RFC 8705).
+    if (_pipeline->client_certificates) {
+      if (const auto& presented = _stream->client_certificate()) {
+        _certificate = ClientCertificate{encoding::base64url(presented->thumbprint), presented->subject, presented->verified};
+      }
+    }
   }
 
-  void start() {
-    net::dispatch(_stream.get_executor(), [self = shared_from_this()] { self->_handshake(); });
-  }
+  void start() { _read(); }
 
  private:
-  Stream _stream;
+  std::shared_ptr<Stream> _stream;
   std::shared_ptr<const HttpPipeline> _pipeline;
+  net::ip::address _peer;
   beast::flat_buffer _buffer;
   std::optional<beast::http::request_parser<beast::http::string_body>> _parser;
   HttpRequest _request;
-  net::ip::address _peer;
   std::string _remote;
   std::optional<ClientCertificate> _certificate;
-
-  // The certificate the client presented on the mTLS listener, if any.
-  void _read_certificate() {
-    SSL* ssl = _stream.native_handle();
-    X509* peer = SSL_get1_peer_certificate(ssl);
-    if (!peer) return;
-    ClientCertificate certificate;
-    unsigned char* der = nullptr;
-    const int length = i2d_X509(peer, &der);
-    if (length > 0) {
-      certificate.thumbprint = encoding::base64url(dannan::identity::sha256({der, static_cast<std::size_t>(length)}).bytes);
-      OPENSSL_free(der);
-    }
-    if (BIO* bio = BIO_new(BIO_s_mem())) {
-      X509_NAME_print_ex(bio, X509_get_subject_name(peer), 0, XN_FLAG_RFC2253);
-      char* data = nullptr;
-      const long size = BIO_get_mem_data(bio, &data);
-      if (size > 0) certificate.subject.assign(data, static_cast<std::size_t>(size));
-      BIO_free(bio);
-    }
-    certificate.verified = SSL_get_verify_result(ssl) == X509_V_OK;
-    X509_free(peer);
-    if (!certificate.thumbprint.empty()) _certificate = std::move(certificate);
-  }
-
-  void _handshake() {
-    _stream.next_layer().expires_after(_pipeline->limits.handshake);
-
-    _stream.async_handshake(ssl::stream_base::server, [self = shared_from_this()](boost::system::error_code ec) {
-      if (ec) {
-        // Scanners, plaintext clients and old TLS all end here; at debug, so they cannot
-        // fill the journal.
-        self->_pipeline->logger.debug("TLS handshake from " + self->_peer.to_string() + " failed: " + ec.message());
-        return self->_close();
-      }
-      if (self->_pipeline->client_certificates) self->_read_certificate();
-      self->_read();
-    });
-  }
 
   void _read() {
     _parser.emplace();
     _parser->body_limit(_pipeline->limits.body_bytes);
-    _stream.next_layer().expires_after(_pipeline->limits.idle);
-
-    beast::http::async_read(_stream, _buffer, *_parser, [self = shared_from_this()](boost::system::error_code ec, std::size_t) { self->_on_read(ec); });
+    _stream->set_idle(_pipeline->limits.idle);
+    beast::http::async_read(*_stream, _buffer, *_parser, [self = shared_from_this()](boost::system::error_code ec, std::size_t) { self->_on_read(ec); });
   }
 
   void _on_read(boost::system::error_code ec) {
@@ -107,7 +65,8 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
       return _write(response);
     }
 
-    // The client went, or said nothing for the idle time: nothing to answer.
+    // The client went, said nothing for the idle time, or the connection was closed under the
+    // read (operation_aborted): nothing to answer.
     if (ec) return _close();
 
     _request = _parser->release();
@@ -138,7 +97,7 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
 
     auto self = shared_from_this();
     auto next = [self, index, response](bool more) {
-      net::dispatch(self->_stream.get_executor(), [self, index, response, more] {
+      net::dispatch(self->_stream->get_executor(), [self, index, response, more] {
         if (more) return self->_run(index + 1, response);
         self->_respond(response);
       });
@@ -175,97 +134,91 @@ class HttpSession : public std::enable_shared_from_this<HttpSession> {
   void _write(std::shared_ptr<HttpResponse> response) {
     response->prepare_payload();
 
-    beast::http::async_write(_stream, *response, [self = shared_from_this(), response](boost::system::error_code ec, std::size_t) {
+    beast::http::async_write(*_stream, *response, [self = shared_from_this(), response](boost::system::error_code ec, std::size_t) {
       if (ec || !response->keep_alive()) return self->_close();
       self->_read();
     });
   }
 
-  // A TLS close_notify, then the socket; the far end may already have gone, which is fine.
-  void _close() {
-    _stream.next_layer().expires_after(std::chrono::seconds(5));
-    _stream.async_shutdown([self = shared_from_this()](boost::system::error_code) {
-      boost::system::error_code ignored;
-      self->_stream.next_layer().socket().shutdown(tcp::socket::shutdown_both, ignored);
-      self->_stream.next_layer().socket().close(ignored);
-    });
-  }
+  // A TLS close_notify within the listener's close bound, then the socket; the far end may
+  // already have gone, which is fine.
+  void _close() { _stream->close(); }
 };
 
 }  // namespace
 
-HttpServer::HttpServer(std::shared_ptr<dannan::status::LogSink> log, net::io_context& io_context, std::shared_ptr<ssl::context> tls,
+HttpServer::HttpServer(std::shared_ptr<dannan::status::LogSink> log, net::io_context& io_context, std::shared_ptr<dannan::listen::Certificates> certificates,
                        std::shared_ptr<ClientAddress> client_address, HttpPipeline::Limits limits, bool client_certificates)
     : _logger(std::move(log), "http"),
       _io_context(io_context),
-      _acceptor(net::make_strand(io_context)),
-      _tls(std::move(tls)),
+      _certificates(std::move(certificates)),
       _client_address(std::move(client_address)),
       _limits(limits),
       _client_certificates(client_certificates) {}
 
+HttpServer::~HttpServer() = default;
+
 void HttpServer::middleware_add(HttpMiddleware middleware) { _middlewares.push_back(std::move(middleware)); }
 
-Status HttpServer::listen(const std::string& address, std::uint16_t port) {
+Status HttpServer::listen(const std::string& address, std::uint16_t port, std::optional<int> inherited) {
   boost::system::error_code ec;
-
-  const auto ip = net::ip::make_address(address, ec);
+  net::ip::make_address(address, ec);
   if (ec) return Status::failure("not an address to listen on: " + address);
 
-  const tcp::endpoint endpoint(ip, port);
+  dannan::listen::ListenerConfig config;
+  config.name = _client_certificates ? "mtls" : "https";
+  config.host = address;
+  config.port = port;
+  config.inherited = inherited;
+  config.certificates = _certificates;
+  config.tls.minimum = dannan::listen::TlsVersion::tls13;
+  config.tls.client_certificates = _client_certificates ? dannan::listen::ClientCertificates::optional : dannan::listen::ClientCertificates::never;
+  config.tls.alpn = {"http/1.1"};
+  config.handshake_timeout = _limits.handshake;
   const auto where = address + ":" + std::to_string(port);
-
-  _acceptor.open(endpoint.protocol(), ec);
-  if (ec) return Status::failure("cannot open a socket for " + where + ": " + ec.message());
-
-  _acceptor.set_option(net::socket_base::reuse_address(true), ec);
-  if (ec) return Status::failure("cannot set address reuse on " + where + ": " + ec.message());
-
-  _acceptor.bind(endpoint, ec);
-  if (ec) return Status::failure("cannot bind " + where + ": " + ec.message());
-
-  _acceptor.listen(net::socket_base::max_listen_connections, ec);
-  if (ec) return Status::failure("cannot listen on " + where + ": " + ec.message());
-
+  try {
+    _listener = std::make_unique<dannan::listen::StreamListener>(_io_context, std::move(config));
+    _listener->start(_io_context.get_executor(), [weak = weak_from_this()](std::shared_ptr<Stream> stream) {
+      if (const auto self = weak.lock()) {
+        self->_served(std::move(stream));
+      } else {
+        stream->abort();
+      }
+    });
+  } catch (const std::system_error& e) {
+    _listener.reset();
+    return Status::failure("cannot listen on " + where + ": " + e.what());
+  } catch (const std::runtime_error& e) {
+    _listener.reset();
+    return Status::failure("cannot set up TLS for " + where + ": " + e.what());
+  }
   return Status::success();
 }
 
 void HttpServer::start() {
-  _pipeline = std::make_shared<const HttpPipeline>(HttpPipeline{_logger, _client_address, _middlewares, _limits, _client_certificates});
+  auto pipeline = std::make_shared<const HttpPipeline>(HttpPipeline{_logger, _client_address, _middlewares, _limits, _client_certificates});
+  {
+    dannan::contract::Lock lock(_mutex);
+    _pipeline = std::move(pipeline);
+  }
+  _logger.info("Listening on port " + std::to_string(port()) + ", TLS 1.3 only" + (_client_certificates ? ", asking for client certificates" : ""));
+}
 
-  boost::system::error_code ec;
-  const auto endpoint = _acceptor.local_endpoint(ec);
-  _logger.info("Listening on " + (ec ? std::string("an unknown address") : endpoint.address().to_string() + ":" + std::to_string(endpoint.port())) +
-               ", TLS 1.3 only" + (_client_certificates ? ", asking for client certificates" : ""));
-
-  net::dispatch(_acceptor.get_executor(), [self = shared_from_this()] { self->_accept(); });
+void HttpServer::_served(std::shared_ptr<Stream> stream) {
+  std::shared_ptr<const HttpPipeline> pipeline;
+  {
+    dannan::contract::Lock lock(_mutex);
+    pipeline = _pipeline;
+  }
+  // Accepted before start(): nothing is ready to answer it.
+  if (!pipeline) return stream->abort();
+  std::make_shared<HttpSession>(std::move(stream), std::move(pipeline))->start();
 }
 
 void HttpServer::stop() {
-  net::post(_acceptor.get_executor(), [self = shared_from_this()] {
-    boost::system::error_code ignored;
-    self->_acceptor.close(ignored);
-  });
+  if (_listener) _listener->stop();
 }
 
-std::uint16_t HttpServer::port() const {
-  boost::system::error_code ec;
-  const auto endpoint = _acceptor.local_endpoint(ec);
-  return ec ? 0 : endpoint.port();
-}
-
-void HttpServer::_accept() {
-  _acceptor.async_accept(net::make_strand(_io_context), [self = shared_from_this()](boost::system::error_code ec, tcp::socket socket) {
-    if (ec == net::error::operation_aborted || !self->_acceptor.is_open()) return;
-
-    if (ec) {
-      self->_logger.warn("Accept failed: " + ec.message());
-    } else {
-      std::make_shared<HttpSession>(std::move(socket), *self->_tls, self->_pipeline)->start();
-    }
-
-    self->_accept();
-  });
-}
+std::uint16_t HttpServer::port() const { return _listener ? _listener->port() : 0; }
 
 }  // namespace lugh::http

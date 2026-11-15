@@ -372,6 +372,20 @@ int run(const cli::Options& options) {
     logger.error(tls.error);
     return 1;
   }
+  // The operator's certificates, for Dannan's public listener: the main listener's, and the mTLS
+  // one's with the client CA.
+  std::shared_ptr<dannan::listen::Certificates> certificates;
+  std::shared_ptr<dannan::listen::Certificates> mtls_certificates;
+  try {
+    certificates = std::make_shared<dannan::listen::Certificates>(dannan::listen::CertificatePaths{config.tls_certificate, config.tls_key, {}});
+    if (config.mtls_port != 0) {
+      mtls_certificates =
+          std::make_shared<dannan::listen::Certificates>(dannan::listen::CertificatePaths{config.tls_certificate, config.tls_key, config.tls_client_ca});
+    }
+  } catch (const std::runtime_error& refused) {
+    logger.error(refused.what());
+    return 1;
+  }
 
   // A caller is a signed-in session; OAuth tokens join it with the token endpoint (P6, O7).
   // There is no other way in: the one credential Lugh is born with is root's password, made
@@ -437,7 +451,7 @@ int run(const cli::Options& options) {
     services.sessions->on_end([backchannel](const session::Session& session, const std::string&) { backchannel->session_ended(session); });
   }
 
-  auto server = std::make_shared<http::HttpServer>(log, io_context, tls.value, client_address);
+  auto server = std::make_shared<http::HttpServer>(log, io_context, certificates, client_address);
 
   // The router first, under the paths it owns; anything left is a 404. The dashboard
   // joins the chain after the API, in P7.
@@ -452,12 +466,7 @@ int run(const cli::Options& options) {
   // client certificate (RFC 8705).
   std::shared_ptr<http::HttpServer> mtls_server;
   if (config.mtls_port != 0) {
-    const auto mtls_tls = http::TlsContext::server(config.tls_certificate, config.tls_key, {true, config.tls_client_ca});
-    if (!mtls_tls.ok) {
-      logger.error(mtls_tls.error);
-      return 1;
-    }
-    mtls_server = std::make_shared<http::HttpServer>(log, io_context, mtls_tls.value, client_address, http::HttpPipeline::Limits{}, true);
+    mtls_server = std::make_shared<http::HttpServer>(log, io_context, mtls_certificates, client_address, http::HttpPipeline::Limits{}, true);
     for (const auto* prefix : {"/health", "/ready", "/api", "/oauth2"}) mtls_server->middleware_add(router->middleware(prefix));
     if (const auto listening = mtls_server->listen(config.address, config.mtls_port); !listening.ok) {
       logger.error(listening.error);
