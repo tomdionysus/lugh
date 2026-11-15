@@ -6,7 +6,7 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 P6 (OAuth and OIDC) and P9 (writable LDAP) are done; P8 is planned and its first steps wait on Dagda. The Linux pass is green and committed (2026-11-14): debug, ASan with leak detection and TSan, 666 tests each, on the build nodes. The maintainer, 2026-11-14: **no builds or tests on the Mac**, only on the build node cluster (below).
 
-**Lugh is paused** (the maintainer, 2026-11-14, after P10): nothing is taken up until the maintainer says, or until P8 or the move to Dannan 0.8.0 is unblocked (below).
+**Now: the listeners onto `dannan::listen`** (the maintainer, 2026-11-15: start it, after Lugh's pause following P10), on `feature/dannan-listen`; steps A to E in `2026-11-15-dannan-0.8.md`.
 
 Dannan 0.8.0 was tagged (2026-11-15) and Lugh moved to it (8f6180d: 724 tests, its tools off). What it unblocks is planned in `2026-11-15-dannan-0.8.md`: the listeners onto `dannan::listen` when the maintainer says; hashing on `sched::WorkerPool` at P8.1. **P10, `lugh_client`, is done** (2026-11-14; `COMPLETED.md`): 724 tests, green in debug, ASan with leaks and TSan on the build nodes; on `develop` at dbb0573, pushed. Lir's Lugh plugin is repinned there (Lir 33b7c8b, 343 tests on a build node, nothing internal of Lugh's included) and repins next at Lugh's first release. `docs/client.md` describes the library.
 
