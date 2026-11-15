@@ -84,6 +84,7 @@ add_executable(lugh_tests
     node_process_oauth_test.cpp
     node_process_signin_test.cpp
     node_process_tls_test.cpp
+    node_process_webauthn_test.cpp
     node_process_shutdown_test.cpp
     session_pre_sessions_test.cpp
     session_sessions_test.cpp
