@@ -48,11 +48,11 @@ find_package(OpenSSL 3.0 REQUIRED)
 # Dannan, the network layer Lugh hosts on, at a release tag, or at a commit while Lugh needs
 # something not yet tagged: from the sibling checkout, cloned into the build tree, so
 # building Lugh never touches ../dannan. Linked as dannan::dannan, the name an installed
-# Dannan exports too (find_package(dannan 0.7 CONFIG)). Now: 0.7.0, with the partition reading; its
-# patches keep its ABI (libdannan.so.0.7).
+# Dannan exports too (find_package(dannan 0.8 CONFIG)). Now: 0.8.0, with the public listener and
+# the worker pool; its patches keep its ABI (libdannan.so.0.8).
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_REF "0.7.0")
+set(LUGH_DANNAN_REF "0.8.0")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -67,6 +67,8 @@ if (NOT TARGET dannan::dannan)
     include(FetchContent)
     FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_REF}")
     set(DANNAN_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    # Lugh links the library; Dannan's tools (dannan-node, dannan-ca, ...) are neither built nor installed.
+    set(DANNAN_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(dannan)
 endif()
 
