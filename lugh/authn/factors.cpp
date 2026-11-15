@@ -14,6 +14,7 @@
 #include "lugh/core/codec.h"
 #include "lugh/core/encoding.h"
 #include "lugh/core/steps.h"
+#include "lugh/directory/records.h"
 
 namespace lugh::authn {
 
@@ -30,13 +31,45 @@ constexpr std::size_t kRecoveryCodeCharacters = 16;
 constexpr std::size_t kSelectorCharacters = 4;
 constexpr std::size_t kMostSlots = 16;
 
-std::string_view kind_name(FactorKind kind) { return kind == FactorKind::totp ? "totp" : "recovery"; }
+// A WebAuthn credential's limits: a name a person types; the ids and keys WebAuthn allows.
+constexpr std::size_t kMostCredentialNameBytes = 64;
+constexpr std::size_t kMostCredentialIdBytes = 1023;
+constexpr std::size_t kMostKeyBytes = 1024;
+constexpr std::size_t kMostExponentBytes = 16;
+constexpr std::uint8_t kBackupEligible = 0x01;
+constexpr std::uint8_t kBackedUp = 0x02;
+
+std::string_view kind_name(FactorKind kind) {
+  switch (kind) {
+    case FactorKind::totp:
+      return "totp";
+    case FactorKind::recovery:
+      return "recovery";
+    case FactorKind::webauthn:
+      return "webauthn";
+  }
+  return "unknown";
+}
 
 std::optional<FactorKind> kind_of(std::span<const unsigned char> value) {
   if (value.size() < 2 || value[0] != kFormat) return std::nullopt;
   if (value[1] == static_cast<std::uint8_t>(FactorKind::totp)) return FactorKind::totp;
   if (value[1] == static_cast<std::uint8_t>(FactorKind::recovery)) return FactorKind::recovery;
+  if (value[1] == static_cast<std::uint8_t>(FactorKind::webauthn)) return FactorKind::webauthn;
   return std::nullopt;
+}
+
+FactorInfo info_of(const std::string& key, const WebAuthnRecord& record) {
+  FactorInfo info;
+  info.id = key;
+  info.kind = FactorKind::webauthn;
+  info.confirmed = true;
+  info.created = record.created;
+  info.name = record.name;
+  info.aaguid = dannan::identity::hex(record.aaguid);
+  info.backed_up = record.backed_up;
+  info.last_used = record.last_used;
+  return info;
 }
 
 // "abcd-efgh-ijkl-mnop", for a person to copy down.
@@ -83,6 +116,68 @@ std::optional<TotpRecord> decode_totp(std::span<const unsigned char> value) {
     if (flags & kHasLastStep) record.last_step = last;
     record.created = created;
     record.secret.assign(secret.begin(), secret.end());
+    return record;
+  });
+}
+
+SecureBuffer encode(const WebAuthnRecord& record) {
+  SecureWriter writer;
+  writer.u8(kFormat);
+  writer.u8(static_cast<std::uint8_t>(FactorKind::webauthn));
+  writer.u64(record.created);
+  writer.u64(record.last_used);
+  writer.string(record.name);
+  writer.string(record.credential_id);
+  writer.u8(static_cast<std::uint8_t>(record.key.kind));
+  if (record.key.kind == webauthn::PublicKey::Kind::rs256) {
+    writer.string(record.key.modulus);
+    writer.string(record.key.exponent);
+  } else {
+    writer.bytes(record.key.der);
+    writer.string({});
+  }
+  writer.u32(record.sign_count);
+  writer.u8(static_cast<std::uint8_t>((record.backup_eligible ? kBackupEligible : 0) | (record.backed_up ? kBackedUp : 0)));
+  writer.fixed(record.aaguid);
+  return writer.take();
+}
+
+std::optional<WebAuthnRecord> decode_webauthn(std::span<const unsigned char> value) {
+  if (kind_of(value) != FactorKind::webauthn) return std::nullopt;
+  return decode_whole<WebAuthnRecord>(value, [](dannan::net::Reader& reader) -> std::optional<WebAuthnRecord> {
+    reader.view(2);
+    WebAuthnRecord record;
+    record.created = reader.u64();
+    record.last_used = reader.u64();
+    record.name = reader.string(kMostCredentialNameBytes);
+    record.credential_id = reader.string(kMostCredentialIdBytes);
+    const auto kind = reader.u8();
+    auto first = reader.string(kMostKeyBytes);
+    auto second = reader.string(kMostExponentBytes);
+    switch (kind) {
+      case static_cast<std::uint8_t>(webauthn::PublicKey::Kind::es256):
+      case static_cast<std::uint8_t>(webauthn::PublicKey::Kind::eddsa):
+        if (first.empty() || !second.empty()) return std::nullopt;
+        record.key.kind = static_cast<webauthn::PublicKey::Kind>(kind);
+        record.key.der.assign(first.begin(), first.end());
+        break;
+      case static_cast<std::uint8_t>(webauthn::PublicKey::Kind::rs256):
+        if (first.empty() || second.empty()) return std::nullopt;
+        record.key.kind = webauthn::PublicKey::Kind::rs256;
+        record.key.modulus = std::move(first);
+        record.key.exponent = std::move(second);
+        break;
+      default:
+        return std::nullopt;
+    }
+    record.sign_count = reader.u32();
+    const auto flags = reader.u8();
+    if ((flags & ~(kBackupEligible | kBackedUp)) != 0) return std::nullopt;
+    record.backup_eligible = (flags & kBackupEligible) != 0;
+    record.backed_up = (flags & kBackedUp) != 0;
+    if (record.backed_up && !record.backup_eligible) return std::nullopt;
+    record.aaguid = reader.fixed<16>();
+    if (record.credential_id.empty()) return std::nullopt;
     return record;
   });
 }
@@ -170,6 +265,8 @@ void Factors::list(std::string user_id, Deadline deadline, Executor executor, Do
         info.confirmed = true;
         info.created = recovery->created;
         for (const auto& slot : recovery->slots) info.remaining += slot.used ? 0 : 1;
+      } else if (const auto credential = decode_webauthn(stored.value)) {
+        info = info_of(stored.key, *credential);
       } else {
         continue;
       }
@@ -182,11 +279,12 @@ void Factors::list(std::string user_id, Deadline deadline, Executor executor, Do
 void Factors::has_second_factor(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<bool>> done) const {
   using Answer = Outcome<bool>;
   auto answer = answering<bool>(deadline, executor, std::move(done), kReadLate);
-  _records(std::move(user_id), FactorKind::totp, executor, [answer](Outcome<std::vector<Stored>> records) {
+  _records(std::move(user_id), std::nullopt, executor, [answer](Outcome<std::vector<Stored>> records) {
     if (!records.ok()) return answer->finish(Answer::from(records));
     for (const auto& stored : records.value) {
       const auto totp = decode_totp(stored.value);
       if (totp && totp->confirmed) return answer->finish(Answer::success(true));
+      if (decode_webauthn(stored.value)) return answer->finish(Answer::success(true));
     }
     answer->finish(Answer::success(false));
   });
@@ -388,6 +486,82 @@ void Factors::recovery_use(std::string user_id, Secret code, Deadline deadline, 
           });
     }
     answer->finish(Answer::failure(Fault::refused, kWrongCode));
+  });
+}
+
+void Factors::webauthn_register(audit::Actor actor, std::string user_id, std::string name, webauthn::Expected expected, Bytes client_data_json,
+                                Bytes attestation_object, Deadline deadline, Executor executor, Done<Outcome<FactorInfo>> done) {
+  using Answer = Outcome<FactorInfo>;
+  auto answer = answering<FactorInfo>(deadline, executor, std::move(done), kChangeLate);
+  if (name.empty() || !directory::printable(name, kMostCredentialNameBytes))
+    return answer->finish(Answer::failure(Fault::invalid, "a credential's name is 1 to 64 printable bytes"));
+  const auto checked = webauthn::check_registration(expected, client_data_json, attestation_object);
+  if (!checked.ok()) {
+    return _record(actor, "factor.webauthn.register.refused", user_id, checked.message, executor, [answer, checked] { answer->finish(Answer::from(checked)); });
+  }
+  auto self = shared_from_this();
+  // Every user's credentials, since an id registered to anyone is refused.
+  _calls.list_settled(kTable, executor, [=](Outcome<std::vector<store::Record>> all) {
+    if (!all.ok()) return answer->finish(Answer::from(all));
+    for (const auto& stored : all.value) {
+      const auto existing = decode_webauthn(stored.value);
+      if (existing && existing->credential_id == checked.value.credential.credential_id)
+        return answer->finish(Answer::failure(Fault::duplicate, "that credential is registered already"));
+    }
+    const auto key = self->_new_key(user_id, FactorKind::webauthn);
+    if (!key) return answer->finish(Answer::failure(Fault::failed, "no randomness for an ID"));
+    auto record = std::make_shared<WebAuthnRecord>();
+    record->created = self->_wall.unix_ms() / 1000;
+    record->name = name;
+    record->credential_id = checked.value.credential.credential_id;
+    record->key = checked.value.credential.key;
+    record->sign_count = checked.value.sign_count;
+    record->backup_eligible = checked.value.backup_eligible;
+    record->backed_up = checked.value.backed_up;
+    record->aaguid = checked.value.credential.aaguid;
+    self->_calls.put_settled(kTable, *key, encode(*record), 0, executor, [=](store::Write written) {
+      if (!written.ok()) return answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
+      self->_record(actor, "factor.webauthn.register", user_id, *key, executor, [=] { answer->finish(Answer::success(info_of(*key, *record))); });
+    });
+  });
+}
+
+void Factors::webauthn_credentials(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<std::vector<std::string>>> done) const {
+  using Answer = Outcome<std::vector<std::string>>;
+  auto answer = answering<std::vector<std::string>>(deadline, executor, std::move(done), kReadLate);
+  _records(std::move(user_id), FactorKind::webauthn, executor, [answer](Outcome<std::vector<Stored>> records) {
+    if (!records.ok()) return answer->finish(Answer::from(records));
+    std::vector<std::string> out;
+    for (const auto& stored : records.value)
+      if (const auto credential = decode_webauthn(stored.value)) out.push_back(credential->credential_id);
+    answer->finish(Answer::success(std::move(out)));
+  });
+}
+
+void Factors::webauthn_check(std::string user_id, webauthn::Expected expected, std::string credential_id, Bytes client_data_json, Bytes authenticator_data,
+                             Bytes signature, Deadline deadline, Executor executor, Done<Outcome<webauthn::Asserted>> done) {
+  using Answer = Outcome<webauthn::Asserted>;
+  auto answer = answering<webauthn::Asserted>(deadline, executor, std::move(done), kReadLate);
+  auto self = shared_from_this();
+  _records(std::move(user_id), FactorKind::webauthn, executor, [=](Outcome<std::vector<Stored>> records) {
+    if (!records.ok()) return answer->finish(Answer::from(records));
+    for (const auto& stored : records.value) {
+      auto record = decode_webauthn(stored.value);
+      if (!record || record->credential_id != credential_id) continue;
+      const webauthn::Credential credential{record->credential_id, record->key, record->sign_count, record->backup_eligible};
+      const auto checked = webauthn::check_assertion(expected, credential, client_data_json, authenticator_data, signature);
+      if (!checked.ok()) return answer->finish(checked);
+      record->sign_count = checked.value.sign_count;
+      record->backed_up = checked.value.backed_up;
+      record->last_used = self->_wall.unix_ms() / 1000;
+      return self->_calls.put_settled(kTable, stored.key, encode(*record), stored.version, executor, [answer, checked](store::Write written) {
+        if (written.ok()) return answer->finish(checked);
+        // Another sign-in used this credential between the read and the write.
+        if (written.error == store::StoreError::conflict) return answer->finish(Answer::failure(Fault::refused, "the credential was used at the same moment"));
+        answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
+      });
+    }
+    answer->finish(Answer::failure(Fault::refused, "no such credential for this user"));
   });
 }
 

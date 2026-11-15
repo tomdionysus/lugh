@@ -12,6 +12,7 @@
 #include "lugh/authn/factors.h"
 #include "lugh/authn/totp.h"
 #include "lugh/test/fixtures/authn_rig.h"
+#include "lugh/test/fixtures/soft_authenticator.h"
 
 using lugh::Fault;
 using lugh::Secret;
@@ -293,4 +294,126 @@ TEST_F(FactorsTest, RecordsRoundTripAndRefuseTheRest) {
 
   totp.last_step.reset();
   EXPECT_FALSE(decode_totp(encode(totp))->last_step);
+}
+
+// WebAuthn credentials (TODO/2026-11-15-p11-webauthn.md, W3), with the software authenticator.
+class WebAuthnFactorsTest : public FactorsTest {
+ protected:
+  static constexpr const char* kWebAuthnChallenge = "a challenge of 32 bytes, random!";
+
+  static lugh::webauthn::Expected webauthn_expected() {
+    lugh::webauthn::Expected out;
+    out.rp_id = "localhost";
+    out.origins = {"https://localhost"};
+    out.challenge = kWebAuthnChallenge;
+    out.user_verification = true;
+    return out;
+  }
+
+  static lugh::Bytes bytes_of(const std::vector<std::uint8_t>& in) { return lugh::Bytes(in.begin(), in.end()); }
+
+  lugh::Outcome<FactorInfo> register_with(const soft_authenticator::Authenticator& authenticator, const std::string& user_id, std::string name = "laptop") {
+    const auto made = authenticator.create(kWebAuthnChallenge);
+    return wait_for<lugh::Outcome<FactorInfo>>([&](lugh::Executor executor, auto done) {
+      factors->webauthn_register(rig.admin, user_id, name, webauthn_expected(), bytes_of(made.client_data_json), bytes_of(made.attestation_object),
+                                 kTestDeadline, executor, done);
+    });
+  }
+
+  lugh::Outcome<lugh::webauthn::Asserted> assert_with(soft_authenticator::Authenticator& authenticator, const std::string& user_id) {
+    const auto proof = authenticator.get(kWebAuthnChallenge);
+    const std::string id(authenticator.credential_id().begin(), authenticator.credential_id().end());
+    return wait_for<lugh::Outcome<lugh::webauthn::Asserted>>([&](lugh::Executor executor, auto done) {
+      factors->webauthn_check(user_id, webauthn_expected(), id, bytes_of(proof.client_data_json), bytes_of(proof.authenticator_data), bytes_of(proof.signature),
+                              kTestDeadline, executor, done);
+    });
+  }
+};
+
+TEST_F(WebAuthnFactorsTest, ARegisteredCredentialIsASecondFactor) {
+  soft_authenticator::Authenticator authenticator;
+  EXPECT_FALSE(read_value<bool>([&](lugh::Executor executor, auto done) { factors->has_second_factor(alice.id, kTestDeadline, executor, done); }));
+  const auto made = register_with(authenticator, alice.id);
+  ASSERT_TRUE(made.ok()) << made.message;
+  EXPECT_EQ(made.value.kind, FactorKind::webauthn);
+  EXPECT_EQ(made.value.name, "laptop");
+  EXPECT_EQ(made.value.aaguid, "0102030405060708090a0b0c0d0e0f10");
+  EXPECT_EQ(made.value.id.rfind(alice.id + "/webauthn/", 0), 0u);
+  EXPECT_TRUE(read_value<bool>([&](lugh::Executor executor, auto done) { factors->has_second_factor(alice.id, kTestDeadline, executor, done); }));
+
+  const auto ids =
+      read_value<std::vector<std::string>>([&](lugh::Executor executor, auto done) { factors->webauthn_credentials(alice.id, kTestDeadline, executor, done); });
+  ASSERT_EQ(ids.size(), 1u);
+  EXPECT_EQ(ids[0], std::string(authenticator.credential_id().begin(), authenticator.credential_id().end()));
+  EXPECT_TRUE(rig.audited("factor.webauthn.register"));
+}
+
+TEST_F(WebAuthnFactorsTest, AnAssertionMovesTheCountAndTheLastUse) {
+  soft_authenticator::Authenticator authenticator;
+  ASSERT_TRUE(register_with(authenticator, alice.id).ok());
+  rig.advance(std::chrono::seconds(100));
+  const auto first = assert_with(authenticator, alice.id);
+  ASSERT_TRUE(first.ok()) << first.message;
+  EXPECT_EQ(first.value.sign_count, 1u);
+  const auto listed = read_value<std::vector<FactorInfo>>([&](lugh::Executor executor, auto done) { factors->list(alice.id, kTestDeadline, executor, done); });
+  ASSERT_EQ(listed.size(), 1u);
+  EXPECT_NE(listed[0].last_used, 0u);
+
+  // The count stored moved: an assertion that repeats it is a clone's.
+  authenticator.sign_count = 0;
+  EXPECT_EQ(assert_with(authenticator, alice.id).fault, Fault::refused);
+  EXPECT_TRUE(assert_with(authenticator, alice.id).ok()) << "2, past the 1 stored";
+}
+
+TEST_F(WebAuthnFactorsTest, ACredentialIsOnlyItsOwnersAndOnlyOnce) {
+  const auto bob = rig.person("bob");
+  soft_authenticator::Authenticator authenticator;
+  ASSERT_TRUE(register_with(authenticator, alice.id).ok());
+  EXPECT_EQ(register_with(authenticator, alice.id, "again").fault, Fault::duplicate);
+  EXPECT_EQ(register_with(authenticator, bob.id).fault, Fault::duplicate) << "registered to anyone";
+  EXPECT_EQ(assert_with(authenticator, bob.id).fault, Fault::refused) << "alice's credential, offered for bob";
+}
+
+TEST_F(WebAuthnFactorsTest, ACeremonyThatFailsRegistersNothing) {
+  soft_authenticator::Authenticator elsewhere;
+  elsewhere.origin = "https://evil.example";
+  EXPECT_EQ(register_with(elsewhere, alice.id).fault, Fault::refused);
+  EXPECT_TRUE(rig.audited("factor.webauthn.register.refused"));
+  soft_authenticator::Authenticator unnamed;
+  EXPECT_EQ(register_with(unnamed, alice.id, "").fault, Fault::invalid);
+  EXPECT_EQ(register_with(unnamed, alice.id, std::string(65, 'n')).fault, Fault::invalid);
+  EXPECT_FALSE(read_value<bool>([&](lugh::Executor executor, auto done) { factors->has_second_factor(alice.id, kTestDeadline, executor, done); }));
+}
+
+TEST_F(WebAuthnFactorsTest, AResetForgetsCredentials) {
+  soft_authenticator::Authenticator authenticator;
+  ASSERT_TRUE(register_with(authenticator, alice.id).ok());
+  ASSERT_TRUE(wait_for<lugh::Status>([&](lugh::Executor executor, auto done) { factors->forget(rig.admin, alice.id, kTestDeadline, executor, done); }).ok);
+  EXPECT_EQ(assert_with(authenticator, alice.id).fault, Fault::refused);
+  EXPECT_TRUE(register_with(authenticator, alice.id).ok()) << "the same authenticator may be registered again after a reset";
+}
+
+TEST(WebAuthnRecord, EncodesAndDecodes) {
+  WebAuthnRecord record;
+  record.created = 1;
+  record.last_used = 2;
+  record.name = "key";
+  record.credential_id = "id";
+  record.key.kind = lugh::webauthn::PublicKey::Kind::rs256;
+  record.key.modulus = std::string(256, 'n');
+  record.key.exponent = std::string("\x01\x00\x01", 3);
+  record.sign_count = 7;
+  record.backup_eligible = true;
+  record.backed_up = true;
+  const auto decoded = decode_webauthn(encode(record));
+  ASSERT_TRUE(decoded);
+  EXPECT_EQ(decoded->key.modulus, record.key.modulus);
+  EXPECT_EQ(decoded->sign_count, 7u);
+  EXPECT_TRUE(decoded->backed_up);
+
+  record.backup_eligible = false;
+  EXPECT_FALSE(decode_webauthn(encode(record))) << "backed up but not eligible is no record";
+  record.backed_up = false;
+  record.credential_id.clear();
+  EXPECT_FALSE(decode_webauthn(encode(record))) << "a credential with no id";
 }

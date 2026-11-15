@@ -284,17 +284,19 @@ void Authenticator::remove_factor(audit::Actor actor, std::string user_id, std::
   _factors->list(user_id, kStepDeadline, executor, [=](Outcome<std::vector<FactorInfo>> factors) {
     if (!factors.ok()) return answer->finish(Answer::from(factors));
     const FactorInfo* target = nullptr;
-    std::size_t confirmed_totp = 0;
+    // A second factor of their own: a confirmed TOTP secret or a WebAuthn credential.
+    const auto second = [](const FactorInfo& factor) { return factor.confirmed && (factor.kind == FactorKind::totp || factor.kind == FactorKind::webauthn); };
+    std::size_t seconds = 0;
     for (const auto& factor : factors.value) {
       if (factor.id == factor_id) target = &factor;
-      if (factor.kind == FactorKind::totp && factor.confirmed) ++confirmed_totp;
+      if (second(factor)) ++seconds;
     }
     if (target == nullptr) return answer->finish(Answer::failure(Fault::not_found, "no such factor"));
 
     const auto removing = [=] {
       self->_factors->remove(actor, user_id, factor_id, kStepDeadline, executor, [answer](Answer removed) { answer->finish(std::move(removed)); });
     };
-    const bool last = target->kind == FactorKind::totp && target->confirmed && confirmed_totp == 1;
+    const bool last = second(*target) && seconds == 1;
     if (!last) return removing();
     self->_policies->required(user_id, kStepDeadline, executor, [=](Outcome<Assurance> required) {
       if (!required.ok()) return answer->finish(Answer::from(required));
