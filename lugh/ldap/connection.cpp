@@ -15,7 +15,6 @@
 namespace lugh::ldap {
 
 namespace net = http::net;
-namespace ssl = http::ssl;
 
 namespace {
 
@@ -37,45 +36,31 @@ ResponseOp response_to(const Request& request) {
   return ResponseOp::compare;
 }
 
-std::string address_of(const net::ip::tcp::socket& socket) {
-  boost::system::error_code ec;
-  const auto endpoint = socket.remote_endpoint(ec);
-  return ec ? std::string() : endpoint.address().to_string();
-}
-
 }  // namespace
 
+// The stream reads and writes plaintext or TLS alike, whichever it is now.
 template <typename Handler>
 void Connection::_read_some(Handler handler) {
   const auto space = net::buffer(_buffer.data() + _used, _buffer.size() - _used);
-  if (_tls) {
-    _stream.async_read_some(space, net::bind_executor(_strand, std::move(handler)));
-  } else {
-    _stream.next_layer().async_read_some(space, net::bind_executor(_strand, std::move(handler)));
-  }
+  _stream->async_read_some(space, net::bind_executor(_strand, std::move(handler)));
 }
 
 template <typename Handler>
 void Connection::_write_all(std::shared_ptr<std::string> bytes, Handler handler) {
-  if (_tls) {
-    net::async_write(_stream, net::buffer(*bytes), net::bind_executor(_strand, std::move(handler)));
-  } else {
-    net::async_write(_stream.next_layer(), net::buffer(*bytes), net::bind_executor(_strand, std::move(handler)));
-  }
+  net::async_write(*_stream, net::buffer(*bytes), net::bind_executor(_strand, std::move(handler)));
 }
 
-Connection::Connection(net::ip::tcp::socket socket, ConnectionParts parts, bool start_with_tls)
-    : _strand(net::make_strand(socket.get_executor())),
-      _stream(std::move(socket), *parts.tls),
+Connection::Connection(std::shared_ptr<dannan::listen::Stream> stream, ConnectionParts parts)
+    : _strand(stream->get_executor()),
+      _stream(std::move(stream)),
       _parts(std::move(parts)),
-      _tls(start_with_tls),
-      _address(address_of(_stream.next_layer())),
+      _tls(_stream->is_tls()),
+      _address(_stream->peer().address().to_string()),
       _timer(_strand),
       _buffer(kMostMessageBytes + kReadChunk) {}
 
 void Connection::start() {
   net::post(_strand, [self = shared_from_this()] {
-    if (self->_tls) return self->_handshake();
     self->_arm(self->_parts.idle);
     self->_read();
   });
@@ -89,9 +74,7 @@ void Connection::_close_now() {
   if (_closing) return;
   _closing = true;
   _timer.cancel();
-  boost::system::error_code ignored;
-  _stream.next_layer().shutdown(net::ip::tcp::socket::shutdown_both, ignored);
-  _stream.next_layer().close(ignored);
+  _stream->abort();
   // What was read held passwords, in their turn.
   dannan::identity::cleanse(std::span(_buffer.data(), _buffer.size()));
 }
@@ -101,17 +84,6 @@ void Connection::_arm(std::chrono::milliseconds after) {
   _timer.async_wait([self = shared_from_this()](const boost::system::error_code& ec) {
     if (!ec) self->_close_now();
   });
-}
-
-void Connection::_handshake() {
-  _arm(_parts.handshake);
-  _stream.async_handshake(ssl::stream_base::server, net::bind_executor(_strand, [self = shared_from_this()](const boost::system::error_code& ec) {
-                            if (ec) return self->_close_now();
-                            self->_tls = true;
-                            self->_hold_reads = false;
-                            self->_arm(self->_parts.idle);
-                            self->_read();
-                          }));
 }
 
 void Connection::_read() {
@@ -341,12 +313,18 @@ void Connection::_start_tls(std::int64_t id) {
   if (_tls) return refuse("TLS is already up");
   // Anything sent after the request and before the handshake is not what TLS will protect: it is
   // a command injected on the way, so it ends the connection rather than being acted on.
+  // Lugh checks what it has read; the stream checks the socket, writes the answer itself, and only
+  // then takes the handshake, so nothing a quick client sends is read as plaintext past the request.
   if (_used != 0) return _disconnect(ResultCode::protocol_error, "nothing may follow StartTLS until the handshake");
-  _write(encode_extended(id, {}, std::string(kStartTlsOid)), [self] {
-    if (self->_used != 0) return self->_close_now();
+  _arm(_parts.handshake + _parts.write);
+  _stream->start_tls(encode_extended(id, {}, std::string(kStartTlsOid)), [self](const std::string& why) {
+    if (!why.empty()) return self->_close_now();
+    self->_tls = true;
+    self->_hold_reads = false;
     self->_busy = false;
     self->_running.reset();
-    self->_handshake();
+    self->_arm(self->_parts.idle);
+    self->_read();
   });
 }
 

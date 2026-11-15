@@ -367,11 +367,6 @@ int run(const cli::Options& options) {
   }
   const auto& services = started.value;
 
-  const auto tls = http::TlsContext::server(config.tls_certificate, config.tls_key);
-  if (!tls.ok) {
-    logger.error(tls.error);
-    return 1;
-  }
   // The operator's certificates, for Dannan's public listener: the main listener's, and the mTLS
   // one's with the client CA.
   std::shared_ptr<dannan::listen::Certificates> certificates;
@@ -543,7 +538,7 @@ int run(const cli::Options& options) {
     parts.binder = std::make_shared<ldap::Binder>(tree, services.directory, services.authenticator, services.app_passwords, services.grants, services.audit);
     parts.operations = std::make_shared<ldap::Operations>(tree, operation_settings);
     parts.writes = std::make_shared<ldap::Writes>(tree, services.directory, services.sessions, services.passwords, services.authenticator);
-    parts.tls = tls.value;
+    parts.certificates = certificates;
     parts.throttle = throttle;
     parts.anonymous_bind = config.ldap_anonymous_bind;
     parts.most_pending = config.ldap_most_pending;

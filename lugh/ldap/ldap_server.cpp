@@ -7,87 +7,73 @@
 
 #include "lugh/ldap/ldap_server.h"
 
-#include <vector>
+#include <stdexcept>
+#include <system_error>
 
 namespace lugh::ldap {
 
 namespace net = http::net;
-using tcp = net::ip::tcp;
 
 LdapServer::LdapServer(std::shared_ptr<dannan::status::LogSink> log, net::io_context& io_context, ConnectionParts parts, bool tls, std::size_t most_connections)
-    : _logger(std::move(log), "ldap"),
-      _io_context(io_context),
-      _acceptor(io_context),
-      _parts(std::move(parts)),
-      _tls(tls),
-      _most_connections(most_connections) {}
+    : _logger(std::move(log), "ldap"), _io_context(io_context), _parts(std::move(parts)), _tls(tls), _most_connections(most_connections) {}
 
-Status LdapServer::listen(const std::string& address, std::uint16_t port) {
+LdapServer::~LdapServer() = default;
+
+Status LdapServer::listen(const std::string& address, std::uint16_t port, std::optional<int> inherited) {
   boost::system::error_code ec;
-  const auto ip = net::ip::make_address(address, ec);
+  net::ip::make_address(address, ec);
   if (ec) return Status::failure("not an address to listen on: " + address);
-  const tcp::endpoint endpoint(ip, port);
+
+  dannan::listen::ListenerConfig config;
+  config.name = _tls ? "ldaps" : "ldap";
+  config.host = address;
+  config.port = port;
+  config.inherited = inherited;
+  config.certificates = _parts.certificates;
+  // TLS 1.3 only, as LDAP has been (whether to allow 1.2 for old clients is an open question).
+  config.tls.minimum = dannan::listen::TlsVersion::tls13;
+  config.tls.client_certificates = dannan::listen::ClientCertificates::never;
+  // Plaintext until StartTLS: the upgrade is Dannan's, when Lugh hands it the answer.
+  config.start_tls = !_tls;
+  config.handshake_timeout = std::chrono::duration_cast<std::chrono::milliseconds>(_parts.handshake);
+  // One past the limit is closed at once, at accept.
+  config.max_connections = _most_connections;
   const auto where = address + ":" + std::to_string(port);
-  _acceptor.open(endpoint.protocol(), ec);
-  if (ec) return Status::failure("cannot open a socket for " + where + ": " + ec.message());
-  _acceptor.set_option(net::socket_base::reuse_address(true), ec);
-  if (ec) return Status::failure("cannot set address reuse on " + where + ": " + ec.message());
-  _acceptor.bind(endpoint, ec);
-  if (ec) return Status::failure("cannot bind " + where + ": " + ec.message());
-  _acceptor.listen(net::socket_base::max_listen_connections, ec);
-  if (ec) return Status::failure("cannot listen on " + where + ": " + ec.message());
+  try {
+    _listener = std::make_unique<dannan::listen::StreamListener>(_io_context, std::move(config));
+    _listener->start(_io_context.get_executor(), [weak = weak_from_this()](std::shared_ptr<dannan::listen::Stream> stream) {
+      if (const auto self = weak.lock()) {
+        self->_served(std::move(stream));
+      } else {
+        stream->abort();
+      }
+    });
+  } catch (const std::system_error& e) {
+    _listener.reset();
+    return Status::failure("cannot listen on " + where + ": " + e.what());
+  } catch (const std::runtime_error& e) {
+    _listener.reset();
+    return Status::failure("cannot set up TLS for " + where + ": " + e.what());
+  }
   return Status::success();
 }
 
 void LdapServer::start() {
+  _started = true;
   _logger.info("LDAP listening on port " + std::to_string(port()) + (_tls ? ", LDAPS, TLS 1.3 only" : ", plaintext until StartTLS, TLS 1.3 only"));
-  net::dispatch(_acceptor.get_executor(), [self = shared_from_this()] { self->_accept(); });
+}
+
+void LdapServer::_served(std::shared_ptr<dannan::listen::Stream> stream) {
+  // Accepted before start(): nothing is ready to answer it.
+  if (!_started) return stream->abort();
+  std::make_shared<Connection>(std::move(stream), _parts)->start();
 }
 
 void LdapServer::stop() {
-  net::post(_acceptor.get_executor(), [self = shared_from_this()] {
-    boost::system::error_code ignored;
-    self->_acceptor.close(ignored);
-    std::vector<std::shared_ptr<Connection>> open;
-    {
-      dannan::contract::Lock state(self->_mutex);
-      for (const auto& [raw, weak] : self->_connections) {
-        if (auto connection = weak.lock()) open.push_back(std::move(connection));
-      }
-      self->_connections.clear();
-    }
-    for (const auto& connection : open) connection->close();
-  });
+  // The listener closes every stream it handed up; each connection's read then ends it.
+  if (_listener) _listener->stop();
 }
 
-std::uint16_t LdapServer::port() const {
-  boost::system::error_code ec;
-  const auto endpoint = _acceptor.local_endpoint(ec);
-  return ec ? 0 : endpoint.port();
-}
-
-void LdapServer::_accept() {
-  _acceptor.async_accept(net::make_strand(_io_context), [self = shared_from_this()](boost::system::error_code ec, tcp::socket socket) {
-    if (ec == net::error::operation_aborted || !self->_acceptor.is_open()) return;
-    if (ec) {
-      self->_logger.warn("Accept failed: " + ec.message());
-    } else {
-      std::shared_ptr<Connection> connection;
-      {
-        dannan::contract::Lock state(self->_mutex);
-        for (auto one = self->_connections.begin(); one != self->_connections.end();) {
-          one = one->second.expired() ? self->_connections.erase(one) : std::next(one);
-        }
-        if (self->_connections.size() < self->_most_connections) {
-          connection = std::make_shared<Connection>(std::move(socket), self->_parts, self->_tls);
-          self->_connections.emplace(connection.get(), connection);
-        }
-      }
-      // One past the limit is simply closed, by the socket going out of scope.
-      if (connection) connection->start();
-    }
-    self->_accept();
-  });
-}
+std::uint16_t LdapServer::port() const { return _listener ? _listener->port() : 0; }
 
 }  // namespace lugh::ldap

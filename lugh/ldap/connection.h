@@ -16,6 +16,8 @@
 #include <string>
 #include <vector>
 
+#include "dannan/listen/certificates.h"
+#include "dannan/listen/stream.h"
 #include "lugh/http/http_types.h"
 #include "lugh/http/rate_limiter.h"
 #include "lugh/ldap/authz.h"
@@ -30,7 +32,8 @@ struct ConnectionParts {
   std::shared_ptr<Binder> binder;
   std::shared_ptr<Operations> operations;
   std::shared_ptr<Writes> writes;
-  std::shared_ptr<http::ssl::context> tls;
+  // The operator's chain and key, for LDAPS and StartTLS.
+  std::shared_ptr<dannan::listen::Certificates> certificates;
   // The HTTP routes' limits: by address until bound, by caller after.
   std::shared_ptr<http::Throttle> throttle;
   // `ldap.anonymous_bind`: whether a bind with no name and no password succeeds, leaving the
@@ -51,9 +54,9 @@ struct ConnectionParts {
 // answered with a Notice of Disconnection (RFC 4511 section 4.4.1) and the connection closes.
 class Connection : public std::enable_shared_from_this<Connection> {
  public:
-  // `start_with_tls` for an LDAPS listener; otherwise plaintext until StartTLS, which carries
-  // nothing but StartTLS and the rootDSE.
-  Connection(http::net::ip::tcp::socket socket, ConnectionParts parts, bool start_with_tls);
+  // A connection Dannan's listener accepted (dannan::listen): TLS already up on an LDAPS listener;
+  // otherwise plaintext until StartTLS, which carries nothing but StartTLS and the rootDSE.
+  Connection(std::shared_ptr<dannan::listen::Stream> stream, ConnectionParts parts);
 
   void start();
 
@@ -65,7 +68,6 @@ class Connection : public std::enable_shared_from_this<Connection> {
     Message message;
   };
 
-  void _handshake();
   void _read();
   void _take_messages();
   void _next();
@@ -90,8 +92,9 @@ class Connection : public std::enable_shared_from_this<Connection> {
   template <typename Handler>
   void _write_all(std::shared_ptr<std::string> bytes, Handler handler);
 
-  http::net::strand<http::net::any_io_executor> _strand;
-  http::ssl::stream<http::net::ip::tcp::socket> _stream;
+  // The stream's own strand, which every step runs on.
+  http::net::any_io_executor _strand;
+  std::shared_ptr<dannan::listen::Stream> _stream;
   ConnectionParts _parts;
   bool _tls = false;
   std::string _address;
