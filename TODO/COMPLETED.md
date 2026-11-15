@@ -2,6 +2,27 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-15: the listeners on dannan::listen, steps A to D, on Dannan 0.8.2
+
+On `feature/dannan-listen`, not yet merged.
+- A: `HttpServer` (HTTPS and mTLS) accepts through `dannan::listen::StreamListener` and takes a `listen::Certificates`.
+- B: `LdapServer` does the same, with StartTLS through `Stream::start_tls`. The LDAP StartTLS tests passed unchanged.
+- C: `lugh-node` builds one `Certificates` per listener's files and reloads them on SIGHUP. `deploy/lugh.service` gains `ExecReload`. A new process test covers this, `NodeProcess.SighupReloadsTheCertificates`. Socket activation is deferred, with the reason in `2026-11-15-dannan-0.8.md`.
+- D: `TlsContext` is deleted (`lugh/http/tls_context.{h,cpp}`), and nothing in Lugh used it after A to C.
+  - Its 5 tests went with it: `LoadsAMatchingPair`, `BothPathsAreRequired`, `AMissingFileIsNamed`, `AKeyThatDoesNotMatchTheCertificateIsRefusedAtStart` and `SomethingThatIsNotAPemIsRefused`.
+  - Why: they tested a class that no longer exists. What they proved is now proved elsewhere:
+    - Dannan's own `Certificates` tests.
+    - `node_config_test`, which already refuses empty TLS paths.
+    - Every TLS test, all of which load a matching pair.
+    - A new process test on the real binary, `NodeProcess.StartRefusesCertificatesThatWillNotServe`: a mismatched key, a key that is not PEM, and a missing key each stop `lugh-node`. Each error names the file and never logs a key.
+- The pin moves from 0.8.0 to Dannan 0.8.2.
+  - 0.8.1 fixes the hang Lugh found in `stop_accepting()` and sets TCP_NODELAY on accepted sockets.
+  - 0.8.2 carries Lugh's finding: a key that did not match its certificate was reported as "not a PEM private key"; it now says "not the key of" the chain (7dce5e3). An encrypted key is refused without ever asking for a passphrase (1899262). Lugh reviewed both.
+  - Lugh's process test asserts the mismatch wording.
+- Test count: 721, down from 725 (minus the 5, plus the 1). On 0.8.1, debug and ASan were already green.
+  - On 0.8.2, the phase checks: debug and ASan with leak detection on node-b, TSan on node-a. One run each, 721 tests, all green, no sanitizer report.
+  - The new process test was not repeated. It runs `lugh-node` to its end three times and has no thread or timing race of its own.
+
 ## 2026-11-14: P10 done, lugh_client
 
 - P10.3a to P10.3d: `OAuthClient` (code with PKCE and PAR, the return checked for issuer, state and error, the ID token verified with its nonce, refresh, client credentials, the device flow, DPoP proofs, `tls_client_auth` and the mTLS aliases); client authentication `none`, `private_key_jwt`, `client_secret_basic`, `tls_client_auth`; `HttpsClient` presents a client certificate.

@@ -55,7 +55,6 @@ add_executable(lugh_tests
     http_router_test.cpp
     http_outbound_test.cpp
     http_server_test.cpp
-    http_tls_context_test.cpp
     ldap_codec_test.cpp
     ldap_connection_test.cpp
     ldap_operations_test.cpp

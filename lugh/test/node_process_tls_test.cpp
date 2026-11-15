@@ -124,3 +124,44 @@ TEST(NodeProcess, SighupReloadsTheCertificates) {
   ASSERT_TRUE(status.has_value()) << read_file(log);
   EXPECT_EQ(*status, 0) << read_file(log);
 }
+
+// At start the pair is checked before anything listens: a key that is not the certificate's, a
+// file that is missing, or one that is not PEM stops the node, and the error names the file,
+// never what is in it. What TlsContext's own tests proved, now proved on the binary.
+TEST(NodeProcess, StartRefusesCertificatesThatWillNotServe) {
+  Workspace workspace;
+  const auto state = workspace.path("state");
+  const auto key = workspace.path("key.pem");
+  const auto config = workspace.path("config.yaml");
+  write_file(config, "log: { level: info }\ntls: { certificate: \"" + workspace.certificate.string() + "\", key: \"" + key.string() +
+                         "\" }\nstate: { directory: \"" + state.string() + "\" }\n");
+  write_file(key, read_file(workspace.key));
+  const auto credentials = workspace.path("credentials");
+  std::filesystem::create_directories(credentials);
+  const auto made = run(workspace, {"init", "--config", config.string()});
+  ASSERT_EQ(made.status, 0) << made.err;
+  write_file(credentials / kCredential, made.out);
+
+  const auto serve = [&] {
+    return run(workspace, {"--config", config.string(), "--address", "127.0.0.1", "--port", std::to_string(dannan::test::free_port())},
+               {.environment = environment(credentials), .input = std::nullopt, .terminal = false});
+  };
+
+  const TestCertificate other;
+  write_file(key, other.key_pem);
+  const auto mismatched = serve();
+  EXPECT_NE(mismatched.status, 0);
+  EXPECT_NE(mismatched.err.find(key.string() + ": not the key of " + workspace.certificate.string()), std::string::npos) << mismatched.err;
+
+  write_file(key, "not a key\n");
+  const auto garbled = serve();
+  EXPECT_NE(garbled.status, 0);
+  EXPECT_NE(garbled.err.find(key.string() + ": not a PEM private key"), std::string::npos) << garbled.err;
+
+  std::filesystem::remove(key);
+  const auto missing = serve();
+  EXPECT_NE(missing.status, 0);
+  EXPECT_NE(missing.err.find(key.string()), std::string::npos) << missing.err;
+
+  for (const auto* err : {&mismatched.err, &garbled.err, &missing.err}) EXPECT_EQ(err->find("BEGIN"), std::string::npos) << "no key is ever logged";
+}
