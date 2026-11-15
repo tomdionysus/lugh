@@ -4,21 +4,9 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here (2026-11-15, end of session)
 
-**P11 (WebAuthn, passkeys, `phr`) is built and nearly closed**, on `feature/webauthn` (branched from `develop`, not pushed). Its record is
-`COMPLETED.md`, "2026-11-15: P11", and its plan with the maintainer's rulings is `2026-11-15-p11-webauthn.md`.
-
-To close it:
-1. One check is still open:
-   - Clang (the TSan build) refused CBOR's `std::vector<std::pair<Value, Value>>` inside `Value`, so it became a declared
-     `Value::Entry`. TSan on node-a passed 784 tests, with the new tests repeated 20 times.
-   - Debug rerun on node-b: 784, green.
-   - The ASan rerun on node-b (`~/lugh/run-asan-p11f.log`) had not finished when the session stopped. Read that log: if it is missing
-     or not 784 green with no sanitizer report, run it again (`cmake --build build-asan -j 2 && ./build-asan/lugh_tests`).
-     The CBOR fix, the docs and the P11 record are already committed.
-   - Lugh's claim on node-b (2 cores, until 23:26Z) covers that run. Release it with `claim_release` once the log is
-     read, if it has not expired.
-2. When ASan is green, note it in `COMPLETED.md`'s P11 record.
-3. Merge `feature/webauthn` into `develop` (`--no-ff`), and ask the maintainer before pushing.
+**P11 (WebAuthn, passkeys, `phr`) is done**: debug, ASan and TSan each green at 784 tests on the final code, and
+`feature/webauthn` merged into `develop` (not pushed; ask the maintainer before pushing). Its record is `COMPLETED.md`, "2026-11-15: P11",
+and its plan with the maintainer's rulings is `2026-11-15-p11-webauthn.md`.
 
 Still uncommitted, on purpose: `lugh/fuzz/client_fuzz.cpp`, `lugh/fuzz/webauthn_fuzz.cpp` and their lines in
 `lugh/fuzz/CMakeLists.txt`. They wait until every fuzz target is built on node-a's clang (P12).
@@ -120,6 +108,6 @@ without a reason (the maintainer, 2026-11-14).
 | P8 | The cluster on the stack: Dannan's `Context`, Dagda's spaces, replacing the sealed store and keyring (`2026-11-13-p8-plan.md`) | planned, waits on Dagda |
 | P9 | Writable LDAP | done |
 | P10 | `lugh_client` | done |
-| P11 | WebAuthn, passkeys and `phr` (`2026-11-15-p11-webauthn.md`) | built; closing (above) |
+| P11 | WebAuthn, passkeys and `phr` (`2026-11-15-p11-webauthn.md`) | done |
 | P12 | Hardening: fuzzing campaigns (build every target on node-a first), sandbox review, key rotation drills, threat model | not started |
 | P13 | SSO rollout: blackraven-admin, T.O.M.S, AthenaSIP admin, Macha; one break-glass account each | not started |

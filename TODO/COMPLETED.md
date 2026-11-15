@@ -40,8 +40,8 @@ Tests and checks:
 - TSan on node-a (clang 19): green, no warning.
 - The new process, sign-in and challenge tests were repeated 20 times in debug, ASan and TSan, all green.
 - Found by clang: CBOR's `std::vector<std::pair<Value, Value>>` inside `Value` would not compile with libstdc++, so it became a
-  declared `Value::Entry`. TSan ran on the change and debug was rerun on it, green; the ASan rerun on it is in
-  `ACTIVE.md`'s resume note.
+  declared `Value::Entry`. TSan, debug and ASan with leak detection were each run once more on the change: 784, green,
+  no sanitizer report.
 
 Left for later:
 - adding a key after enrolment (`/signin/factors`);
