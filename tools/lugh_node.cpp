@@ -556,10 +556,32 @@ int run(const cli::Options& options) {
     if (!add_listener(config.ldap_port, true) || !add_listener(config.ldap_starttls_port, false)) return 1;
   }
 
+  // SIGHUP: the operator's certificate files read again (renewed by whatever the host runs), for the
+  // next handshake on every listener; connections already open keep theirs. A failure keeps what
+  // was loaded and says which file (the maintainer, 2026-11-13: operator-supplied files only).
+  boost::asio::signal_set reloads(io_context, SIGHUP);
+  std::function<void()> reload_on_hangup = [&] {
+    reloads.async_wait([&](const boost::system::error_code& ec, int) {
+      if (ec) return;
+      for (const auto& one : {certificates, mtls_certificates}) {
+        if (!one) continue;
+        try {
+          one->reload();
+          logger.info("Certificates reloaded from " + one->paths().chain.string());
+        } catch (const std::runtime_error& refused) {
+          logger.error(std::string("Certificates not reloaded, the old ones kept: ") + refused.what());
+        }
+      }
+      reload_on_hangup();
+    });
+  };
+  reload_on_hangup();
+
   boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
   signals.async_wait([&](const boost::system::error_code& ec, int number) {
     if (ec) return;
     logger.info("Stopping on " + signal_name(number));
+    reloads.cancel();
     server->stop();
     if (mtls_server) mtls_server->stop();
     for (const auto& one : ldap_servers) one->stop();
