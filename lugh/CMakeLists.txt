@@ -124,6 +124,8 @@ add_library(lugh STATIC
     system/system_console.cpp
     system/system_files.cpp
     tokens/signing_keys.cpp
+    webauthn/cbor.cpp
+    webauthn/cose.cpp
 )
 
 target_include_directories(lugh

@@ -94,6 +94,8 @@ add_executable(lugh_tests
     store_sealed_store_test.cpp
     system_files_test.cpp
     tokens_signing_keys_test.cpp
+    webauthn_cbor_test.cpp
+    webauthn_cose_test.cpp
 )
 
 target_link_libraries(lugh_tests PRIVATE lugh GTest::gtest_main)
