@@ -41,7 +41,7 @@ node-a `.11`, node-b `.12`, node-c `.13` (Debian 13 arm64, GCC 14, Boost 1.83), 
 The ones that shape the next work; the rest are in the plans and `COMPLETED.md`.
 
 - The sealed store, keyring, `Files`, `Console` and the node's start-up stay coroutines and frozen until Dagda carries Lugh's spaces, then are deleted ("Keep the store until Dagda"). Keys then come from Dagda's domains under Dannan's custody.
-- Lugh's domains: `lugh/scope` (every node a member) and `lugh/secrets` (Lugh nodes, a configured-member domain). Credential and factor changes and revocations are Replicated; a write with nodes pending answers "applied, n nodes pending" and is audited. TOTP is a per-user Dagda lease, failing closed on the minority side; the minority side reports only.
+- Lugh's domains: `lugh/scope` (every node a member) and `lugh/secrets` (Lugh nodes, a configured-member domain). Credential and factor changes and revocations are Replicated; a write with nodes pending answers "applied, n nodes pending" and is audited. TOTP and recovery codes are per-user registers in Dannan 0.9.0's agreement (the maintainer, 2026-11-15; the per-user Dagda lease before it), failing closed on the minority side; the minority side reports only.
 - Lugh installs Dannan's `ScopeSource`; message types from 512; one `lugh-node` per node; HTTP stays Lugh's.
 - For P10 (from Lir): `lugh_client` is Lir's `TokenVerifier`, keeps the source of signing keys behind it (retained values in `lugh/scope`, HTTPS JWKS until then), and keeps HTTPS working where the cluster has no Lugh node.
 - Lir's MQTT permissions are Lugh scopes (topic filters), checked through Dannan; a client presents the token as the CONNECT password.
@@ -59,10 +59,10 @@ Each phase ends green in the debug, ASan and TSan builds, one run each, and a co
 | P4 | Directory and authentication: users, groups, Argon2id, back-off, TOTP, recovery codes, enrolment, the audit chain | done |
 | P5 | Management API `/api/v1` | done |
 | P6 | OAuth 2 and OIDC (`2026-11-04-oauth.md`, `docs/oauth.md`) | done |
-| P7 | Dashboard: the React SPA in T.O.M.S's styling | not started |
+| P7 | Dashboard: the React SPA in T.O.M.S's styling. The maintainer, 2026-11-15: after P11, so it requires `phr` from the start. Tests: GoogleTest for the server side, Vitest for components and `lib/API.ts`, and Playwright driving the built dashboard against a real `lugh-node`. Node to be installed on node-b for its build | after P11 |
 | P8 | The cluster on the stack: Dannan's `Context`, Dagda's spaces, replacing the sealed store and keyring; multi-node tests (`2026-11-13-p8-plan.md`) | planned, waits on Dagda slice 1 |
 | P9 | Writable LDAP (`2026-11-04-ldap.md`, `docs/ldap.md`) | done |
 | P10 | `lugh_client`, the C++ library (`2026-11-14-p10-plan.md`, `docs/client.md`) | done |
-| P11 | WebAuthn, passkeys and the `phr` level | not started |
+| P11 | WebAuthn, passkeys and the `phr` level. Next (the maintainer, 2026-11-15) | planning |
 | P12 | Hardening: fuzzing campaigns, sandbox review, key rotation drills, threat model | not started |
 | P13 | SSO rollout: blackraven-admin, T.O.M.S, AthenaSIP admin, Macha; one break-glass account each | not started |
