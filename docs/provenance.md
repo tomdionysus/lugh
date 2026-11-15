@@ -38,7 +38,7 @@ keyring are frozen until Dagda carries Lugh's spaces.
 
 | Source | Here | Change |
 |---|---|---|
-| `src/servers/tls_context.h` | `src/http/tls_context.{h,cpp}` | TLS 1.3 only, not 1.2 and up; `Result`, not a bool and a log line; the key is checked against the certificate at start |
+| `src/servers/tls_context.h` | `src/http/tls_context.{h,cpp}`, deleted 2026-11-15 | TLS 1.3 only, not 1.2 and up; `Result`, not a bool and a log line; the key is checked against the certificate at start. Replaced by Dannan's `listen::Certificates`, which checks the pair at load and on reload |
 
 ## From Macha
 

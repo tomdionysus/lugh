@@ -6,7 +6,7 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 P6 (OAuth and OIDC) and P9 (writable LDAP) are done; P8 is planned and its first steps wait on Dagda. The Linux pass is green and committed (2026-11-14): debug, ASan with leak detection and TSan, 666 tests each, on the build nodes. The maintainer, 2026-11-14: **no builds or tests on the Mac**, only on the build node cluster (below).
 
-**Lugh is paused** (the maintainer, 2026-11-14, after P10): nothing is taken up until the maintainer says, or until P8 or the move to Dannan 0.8.0 is unblocked (below).
+**The listeners are on `dannan::listen`** (2026-11-15, steps A to E in `2026-11-15-dannan-0.8.md`). They are merged into `develop` on Dannan 0.8.2, with 725 tests green in debug, ASan and TSan. Left for later: socket activation, and moving `lugh/client/https.cpp` onto Dannan's coming stream connector. Next is the maintainer's choice, as below.
 
 Dannan 0.8.0 was tagged (2026-11-15) and Lugh moved to it (8f6180d: 724 tests, its tools off). What it unblocks is planned in `2026-11-15-dannan-0.8.md`: the listeners onto `dannan::listen` when the maintainer says; hashing on `sched::WorkerPool` at P8.1. **P10, `lugh_client`, is done** (2026-11-14; `COMPLETED.md`): 724 tests, green in debug, ASan with leaks and TSan on the build nodes; on `develop` at dbb0573, pushed. Lir's Lugh plugin is repinned there (Lir 33b7c8b, 343 tests on a build node, nothing internal of Lugh's included) and repins next at Lugh's first release. `docs/client.md` describes the library.
 
@@ -31,6 +31,8 @@ node-a `.11`, node-b `.12`, node-c `.13` (Debian 13 arm64, GCC 14, Boost 1.83), 
 
 - `2026-11-13-p8-plan.md`: P8, the rewrite of each component against Dagda's spaces, steps P8.0 to P8.9, the maintainer's rulings. The merge it needs is built (`lugh/merge/record_merge.h`).
 - `2026-11-13-lugh-needs-of-the-stack.md`: what Lugh needs of Dannan (N1 to N10) and Dagda (G1 to G15), their answers, the maintainer's rulings, slice 0's figures (about 85 to 90 head commits a second per node; Lugh's sign-in cut to two commits).
+- `2026-11-15-principal-events.md`: principal changes published over Lir, so that relying parties never poll (the maintainer, 2026-11-15). Asked by Mimir and Louhi. A design, not scheduled; when to build it is the maintainer's choice, and after P8.1 is recommended.
+- `2026-11-15-dannan-0.8.md`: the listeners onto `dannan::listen`, steps A to E.
 - `2026-11-04-oauth.md`, `2026-11-04-ldap.md`: the P6 and P9 plans, done; kept as the design record behind `docs/oauth.md` and `docs/ldap.md`.
 - `../dagda/TODO/2026-11-03-stack.md`: what each project of the stack owns.
 
@@ -43,7 +45,7 @@ The ones that shape the next work; the rest are in the plans and `COMPLETED.md`.
 - Lugh installs Dannan's `ScopeSource`; message types from 512; one `lugh-node` per node; HTTP stays Lugh's.
 - For P10 (from Lir): `lugh_client` is Lir's `TokenVerifier`, keeps the source of signing keys behind it (retained values in `lugh/scope`, HTTPS JWKS until then), and keeps HTTPS working where the cluster has no Lugh node.
 - Lir's MQTT permissions are Lugh scopes (topic filters), checked through Dannan; a client presents the token as the CONNECT password.
-- Left to decide, small: whether Lugh's remaining synchronous `Result` returns (config loader, TLS context, record codecs) should throw, per `CONTRIBUTING.md`.
+- Left to decide, small: whether Lugh's remaining synchronous `Result` returns (config loader, record codecs) should throw, per `CONTRIBUTING.md`.
 
 ## Plan
 

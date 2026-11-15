@@ -23,6 +23,10 @@ ExecStart=/usr/local/bin/lugh-node \
     --tls-key /usr/local/etc/lugh/tls/key.pem \
     --state-directory /var/lib/lugh
 
+# `systemctl reload lugh` (a certificate renewal's hook): the certificate files read again for
+# the next handshake on every listener; a reload that fails keeps the old ones and logs which file.
+ExecReload=/bin/kill -HUP $MAINPID
+
 User=lugh
 Group=lugh
 

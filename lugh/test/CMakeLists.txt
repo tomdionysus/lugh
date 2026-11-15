@@ -55,7 +55,6 @@ add_executable(lugh_tests
     http_router_test.cpp
     http_outbound_test.cpp
     http_server_test.cpp
-    http_tls_context_test.cpp
     ldap_codec_test.cpp
     ldap_connection_test.cpp
     ldap_operations_test.cpp
@@ -83,6 +82,7 @@ add_executable(lugh_tests
     node_process_ldap_test.cpp
     node_process_oauth_test.cpp
     node_process_signin_test.cpp
+    node_process_tls_test.cpp
     node_process_shutdown_test.cpp
     session_pre_sessions_test.cpp
     session_sessions_test.cpp

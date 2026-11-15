@@ -10,9 +10,13 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "dannan/contract/thread_safety.h"
+#include "dannan/listen/certificates.h"
+#include "dannan/listen/listener.h"
 #include "dannan/status/log.h"
 #include "lugh/core/status.h"
 #include "lugh/http/client_address.h"
@@ -45,42 +49,48 @@ struct HttpPipeline {
   bool client_certificates = false;
 };
 
-// Beast over TLS 1.3, and only that: there is no plaintext listener. Runs on an io_context
-// it is given and does not own, so main decides the threads. Every response leaves with the
-// security headers, whatever the middleware set.
+// Beast over TLS 1.3, and only that: there is no plaintext listener. Accepts through Dannan's
+// public listener (dannan::listen): the TLS handshake, its deadline and a bounded close are the
+// listener's, the requests Lugh's. Runs on an io_context it is given and does not own, so main
+// decides the threads. Every response leaves with the security headers, whatever the middleware
+// set.
 class HttpServer : public std::enable_shared_from_this<HttpServer> {
  public:
-  // With `client_certificates`, the listener is the mTLS one, its TLS context asking for them
-  // (TlsContext::ClientCertificates).
-  HttpServer(std::shared_ptr<dannan::status::LogSink> log, net::io_context& io_context, std::shared_ptr<ssl::context> tls,
+  // `certificates` are the operator's chain, key and client CA; with `client_certificates`, the
+  // listener is the mTLS one, asking every connection for a certificate, which never ends the
+  // handshake: the routes judge it.
+  HttpServer(std::shared_ptr<dannan::status::LogSink> log, net::io_context& io_context, std::shared_ptr<dannan::listen::Certificates> certificates,
              std::shared_ptr<ClientAddress> client_address, HttpPipeline::Limits limits = {}, bool client_certificates = false);
+  ~HttpServer();
 
   // In the order they run. Before start().
   void middleware_add(HttpMiddleware middleware);
 
-  // Binds and listens. A failure is the caller's to act on.
-  Status listen(const std::string& address, std::uint16_t port);
+  // Binds and listens, or adopts `inherited`, a listening socket systemd passed. A failure is the
+  // caller's to act on. Connections are served from start().
+  Status listen(const std::string& address, std::uint16_t port, std::optional<int> inherited = std::nullopt);
 
   void start();
 
-  // Stops accepting. Connections in flight finish when the io_context stops.
+  // Stops accepting and closes every connection, each within the listener's close bound.
   void stop();
 
   // The port being listened on, which differs from the one asked for when that was zero.
   std::uint16_t port() const;
 
  private:
-  void _accept();
+  void _served(std::shared_ptr<dannan::listen::Stream> stream);
 
   dannan::status::ScopedLogger _logger;
   net::io_context& _io_context;
-  net::ip::tcp::acceptor _acceptor;
-  std::shared_ptr<ssl::context> _tls;
+  std::shared_ptr<dannan::listen::Certificates> _certificates;
   std::shared_ptr<ClientAddress> _client_address;
   HttpPipeline::Limits _limits;
   bool _client_certificates = false;
   std::vector<HttpMiddleware> _middlewares;
-  std::shared_ptr<const HttpPipeline> _pipeline;
+  std::unique_ptr<dannan::listen::StreamListener> _listener;
+  mutable dannan::contract::Mutex _mutex;
+  std::shared_ptr<const HttpPipeline> _pipeline DANNAN_GUARDED_BY(_mutex);
 };
 
 }  // namespace lugh::http

@@ -20,7 +20,6 @@
 #include "lugh/core/encoding.h"
 #include "lugh/http/api_json.h"
 #include "lugh/http/client_certificate.h"
-#include "lugh/http/tls_context.h"
 #include "lugh/test/fixtures/recording_sink.h"
 #include "lugh/test/fixtures/temp_directory.h"
 #include "lugh/test/fixtures/test_certificate.h"
@@ -31,7 +30,6 @@ using lugh::http::HttpPipeline;
 using lugh::http::HttpRequest;
 using lugh::http::HttpResponse;
 using lugh::http::HttpServer;
-using lugh::http::TlsContext;
 namespace http = lugh::http;
 namespace net = lugh::http::net;
 namespace beast = lugh::http::beast;
@@ -51,13 +49,11 @@ struct Running {
   // With `mtls`, the listener asks for client certificates, chained to `client_ca` if given.
   explicit Running(std::vector<HttpMiddleware> middlewares, HttpPipeline::Limits limits = {}, bool mtls = false, const std::string& client_ca = "") {
     TestCertificate pair;
-    const auto certificate = dir.write("cert.pem", pair.certificate_pem).string();
-    const auto key = dir.write("key.pem", pair.key_pem).string();
-    const auto tls = mtls ? TlsContext::server(certificate, key, {true, client_ca.empty() ? "" : dir.write("ca.pem", client_ca).string()})
-                          : TlsContext::server(certificate, key);
-    EXPECT_TRUE(tls.ok) << tls.error;
+    const auto certificates = std::make_shared<dannan::listen::Certificates>(
+        dannan::listen::CertificatePaths{dir.write("cert.pem", pair.certificate_pem), dir.write("key.pem", pair.key_pem),
+                                         client_ca.empty() ? std::filesystem::path() : dir.write("ca.pem", client_ca)});
 
-    server = std::make_shared<HttpServer>(logger, io_context, tls.value, std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}), limits, mtls);
+    server = std::make_shared<HttpServer>(logger, io_context, certificates, std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}), limits, mtls);
     for (auto& middleware : middlewares) server->middleware_add(std::move(middleware));
 
     const auto listening = server->listen("127.0.0.1", 0);
@@ -229,11 +225,21 @@ TEST(HttpServer, ABodyOverTheLimitIs413) {
   EXPECT_EQ(client.send(request).result(), http::status::payload_too_large);
 }
 
+namespace {
+
+std::shared_ptr<dannan::listen::Certificates> certificates_in(const TempDirectory& dir) {
+  TestCertificate pair;
+  return std::make_shared<dannan::listen::Certificates>(
+      dannan::listen::CertificatePaths{dir.write("cert.pem", pair.certificate_pem), dir.write("key.pem", pair.key_pem), {}});
+}
+
+}  // namespace
+
 TEST(HttpServer, ListeningOnNonsenseFails) {
+  TempDirectory dir;
   net::io_context io_context;
-  auto tls = std::make_shared<ssl::context>(ssl::context::tls_server);
-  auto server =
-      std::make_shared<HttpServer>(std::make_shared<RecordingSink>(), io_context, tls, std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}));
+  auto server = std::make_shared<HttpServer>(std::make_shared<RecordingSink>(), io_context, certificates_in(dir),
+                                             std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}));
 
   const auto status = server->listen("not-an-address", 0);
   EXPECT_FALSE(status.ok);
@@ -243,10 +249,10 @@ TEST(HttpServer, ListeningOnNonsenseFails) {
 TEST(HttpServer, APortInUseFails) {
   Running running({});
 
+  TempDirectory dir;
   net::io_context io_context;
-  auto tls = std::make_shared<ssl::context>(ssl::context::tls_server);
-  auto second =
-      std::make_shared<HttpServer>(std::make_shared<RecordingSink>(), io_context, tls, std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}));
+  auto second = std::make_shared<HttpServer>(std::make_shared<RecordingSink>(), io_context, certificates_in(dir),
+                                             std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}));
 
   EXPECT_FALSE(second->listen("127.0.0.1", running.server->port()).ok);
 }

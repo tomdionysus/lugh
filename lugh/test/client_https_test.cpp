@@ -19,7 +19,6 @@
 #include "lugh/client/https.h"
 #include "lugh/http/client_certificate.h"
 #include "lugh/http/http_server.h"
-#include "lugh/http/tls_context.h"
 #include "lugh/test/fixtures/recording_sink.h"
 #include "lugh/test/fixtures/temp_directory.h"
 #include "lugh/test/fixtures/test_certificate.h"
@@ -39,16 +38,14 @@ constexpr lugh::Deadline kDeadline = std::chrono::seconds(10);
 // test sets, and remembering what it was sent.
 class HttpsTest : public ::testing::Test {
  protected:
-  void SetUp() override { start({}); }
+  void SetUp() override { start(false); }
 
-  void start(http::TlsContext::ClientCertificates clients) {
+  // The mTLS listener asks for certificates and hands them to the routes; the main one does neither.
+  void start(bool mtls) {
     roots = dir.write("roots.pem", pair.certificate_pem).string();
-    // The mTLS listener asks for certificates and hands them to the routes; the main one does neither.
-    const bool mtls = clients.request;
-    const auto tls =
-        http::TlsContext::server(dir.write("cert.pem", pair.certificate_pem).string(), dir.write("key.pem", pair.key_pem).string(), std::move(clients));
-    ASSERT_TRUE(tls.ok) << tls.error;
-    server = std::make_shared<http::HttpServer>(std::make_shared<RecordingSink>(), server_io, tls.value,
+    const auto certificates = std::make_shared<dannan::listen::Certificates>(
+        dannan::listen::CertificatePaths{dir.write("cert.pem", pair.certificate_pem), dir.write("key.pem", pair.key_pem), {}});
+    server = std::make_shared<http::HttpServer>(std::make_shared<RecordingSink>(), server_io, certificates,
                                                 std::make_shared<http::ClientAddress>(std::vector<lugh::network::Cidr>{}), http::HttpPipeline::Limits{}, mtls);
     server->middleware_add(
         [this](const http::HttpRequest& request, const std::string&, std::shared_ptr<http::HttpResponse> response, std::function<void(bool)> next) {
@@ -190,7 +187,7 @@ namespace {
 // The same server, asking every connection for a certificate, as Lugh's mTLS listener does.
 class MtlsHttpsTest : public HttpsTest {
  protected:
-  void SetUp() override { start({true, ""}); }
+  void SetUp() override { start(true); }
 };
 
 }  // namespace

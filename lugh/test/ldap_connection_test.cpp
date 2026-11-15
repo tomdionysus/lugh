@@ -10,7 +10,6 @@
 #include <thread>
 
 #include "lugh/http/rate_limiter.h"
-#include "lugh/http/tls_context.h"
 #include "lugh/ldap/ldap_server.h"
 #include "lugh/scopes/scope.h"
 #include "lugh/test/fixtures/authn_rig.h"
@@ -55,8 +54,8 @@ class LdapConnectionTest : public ::testing::Test {
 
   void start(std::chrono::milliseconds idle = std::chrono::minutes(10), std::size_t most_connections = LdapServer::kMostConnections,
              std::size_t most_pending = 8) {
-    const auto tls = lugh::http::TlsContext::server(dir.write("cert.pem", pair.certificate_pem).string(), dir.write("key.pem", pair.key_pem).string());
-    ASSERT_TRUE(tls.ok) << tls.error;
+    const auto certificates = std::make_shared<dannan::listen::Certificates>(
+        dannan::listen::CertificatePaths{dir.write("cert.pem", pair.certificate_pem), dir.write("key.pem", pair.key_pem), {}});
     auto tree = std::make_shared<Tree>(rig.directory, [] {
       Tree::Settings settings;
       settings.base_dn = kBase;
@@ -71,7 +70,7 @@ class LdapConnectionTest : public ::testing::Test {
     parts.operations = std::make_shared<Operations>(tree, settings);
     sessions = std::make_shared<lugh::session::Sessions>(rig.store, rig.wall, rig.directory, rig.grants, rig.audit, lugh::session::Sessions::Settings{});
     parts.writes = std::make_shared<Writes>(tree, rig.directory, sessions, rig.passwords, rig.authenticator);
-    parts.tls = tls.value;
+    parts.certificates = certificates;
     parts.throttle = throttle;
     parts.anonymous_bind = anonymous_bind;
     parts.idle = idle;

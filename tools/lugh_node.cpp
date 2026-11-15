@@ -48,7 +48,6 @@
 #include "lugh/http/outbound.h"
 #include "lugh/http/rate_limiter.h"
 #include "lugh/http/router.h"
-#include "lugh/http/tls_context.h"
 #include "lugh/keys/keyring_manager.h"
 #include "lugh/ldap/ldap_server.h"
 #include "lugh/ldap/operations.h"
@@ -367,9 +366,18 @@ int run(const cli::Options& options) {
   }
   const auto& services = started.value;
 
-  const auto tls = http::TlsContext::server(config.tls_certificate, config.tls_key);
-  if (!tls.ok) {
-    logger.error(tls.error);
+  // The operator's certificates, for Dannan's public listener: the main listener's, and the mTLS
+  // one's with the client CA.
+  std::shared_ptr<dannan::listen::Certificates> certificates;
+  std::shared_ptr<dannan::listen::Certificates> mtls_certificates;
+  try {
+    certificates = std::make_shared<dannan::listen::Certificates>(dannan::listen::CertificatePaths{config.tls_certificate, config.tls_key, {}});
+    if (config.mtls_port != 0) {
+      mtls_certificates =
+          std::make_shared<dannan::listen::Certificates>(dannan::listen::CertificatePaths{config.tls_certificate, config.tls_key, config.tls_client_ca});
+    }
+  } catch (const std::runtime_error& refused) {
+    logger.error(refused.what());
     return 1;
   }
 
@@ -437,7 +445,7 @@ int run(const cli::Options& options) {
     services.sessions->on_end([backchannel](const session::Session& session, const std::string&) { backchannel->session_ended(session); });
   }
 
-  auto server = std::make_shared<http::HttpServer>(log, io_context, tls.value, client_address);
+  auto server = std::make_shared<http::HttpServer>(log, io_context, certificates, client_address);
 
   // The router first, under the paths it owns; anything left is a 404. The dashboard
   // joins the chain after the API, in P7.
@@ -452,12 +460,7 @@ int run(const cli::Options& options) {
   // client certificate (RFC 8705).
   std::shared_ptr<http::HttpServer> mtls_server;
   if (config.mtls_port != 0) {
-    const auto mtls_tls = http::TlsContext::server(config.tls_certificate, config.tls_key, {true, config.tls_client_ca});
-    if (!mtls_tls.ok) {
-      logger.error(mtls_tls.error);
-      return 1;
-    }
-    mtls_server = std::make_shared<http::HttpServer>(log, io_context, mtls_tls.value, client_address, http::HttpPipeline::Limits{}, true);
+    mtls_server = std::make_shared<http::HttpServer>(log, io_context, mtls_certificates, client_address, http::HttpPipeline::Limits{}, true);
     for (const auto* prefix : {"/health", "/ready", "/api", "/oauth2"}) mtls_server->middleware_add(router->middleware(prefix));
     if (const auto listening = mtls_server->listen(config.address, config.mtls_port); !listening.ok) {
       logger.error(listening.error);
@@ -534,7 +537,7 @@ int run(const cli::Options& options) {
     parts.binder = std::make_shared<ldap::Binder>(tree, services.directory, services.authenticator, services.app_passwords, services.grants, services.audit);
     parts.operations = std::make_shared<ldap::Operations>(tree, operation_settings);
     parts.writes = std::make_shared<ldap::Writes>(tree, services.directory, services.sessions, services.passwords, services.authenticator);
-    parts.tls = tls.value;
+    parts.certificates = certificates;
     parts.throttle = throttle;
     parts.anonymous_bind = config.ldap_anonymous_bind;
     parts.most_pending = config.ldap_most_pending;
@@ -552,10 +555,32 @@ int run(const cli::Options& options) {
     if (!add_listener(config.ldap_port, true) || !add_listener(config.ldap_starttls_port, false)) return 1;
   }
 
+  // SIGHUP: the operator's certificate files read again (renewed by whatever the host runs), for the
+  // next handshake on every listener; connections already open keep theirs. A failure keeps what
+  // was loaded and says which file (the maintainer, 2026-11-13: operator-supplied files only).
+  boost::asio::signal_set reloads(io_context, SIGHUP);
+  std::function<void()> reload_on_hangup = [&] {
+    reloads.async_wait([&](const boost::system::error_code& ec, int) {
+      if (ec) return;
+      for (const auto& one : {certificates, mtls_certificates}) {
+        if (!one) continue;
+        try {
+          one->reload();
+          logger.info("Certificates reloaded from " + one->paths().chain.string());
+        } catch (const std::runtime_error& refused) {
+          logger.error(std::string("Certificates not reloaded, the old ones kept: ") + refused.what());
+        }
+      }
+      reload_on_hangup();
+    });
+  };
+  reload_on_hangup();
+
   boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
   signals.async_wait([&](const boost::system::error_code& ec, int number) {
     if (ec) return;
     logger.info("Stopping on " + signal_name(number));
+    reloads.cancel();
     server->stop();
     if (mtls_server) mtls_server->stop();
     for (const auto& one : ldap_servers) one->stop();
