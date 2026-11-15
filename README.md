@@ -44,10 +44,12 @@ those that follow), but nothing in it is specific to them.
   that are unique whatever their case. A removal is final: the identifier dies with a
   tombstone kept for ever.
 - **Sign-in.** Argon2id passwords with a minimum length and a breached-password list; TOTP
-  as the second factor, with replay refused; recovery codes; enrolment by a one-time link,
-  so no administrator ever sees or sets a password; policy per group saying how sure Lugh
-  must be of a person (`pwd`, `mfa`, and `phr` once WebAuthn arrives).
-- **OAuth 2 and OpenID Connect** (in progress). Authorisation code with PKCE, client
+  as the second factor, with replay refused; passkeys and security keys (WebAuthn: ES256,
+  EdDSA and RS256), a passkey signing in alone with no name typed; recovery codes;
+  enrolment by a one-time link, so no administrator ever sees or sets a password; policy
+  per group saying how sure Lugh must be of a person (`pwd`, `mfa`, or `phr`, phishing-
+  resistant, which only WebAuthn reaches).
+- **OAuth 2 and OpenID Connect.** Authorisation code with PKCE, client
   credentials, refresh rotation and the device grant; PAR, DPoP and mTLS binding;
   introspection, revocation, discovery and JWKS; ID tokens, userinfo, `acr` and `amr`,
   step-up, and RP-initiated and back-channel logout. No implicit grant, no password grant.
@@ -220,12 +222,12 @@ Design: [docs/architecture.md](docs/architecture.md). Conventions, shared with t
 
 ## Status
 
-Version 0.1.0. Built and tested: the directory, sign-in with the second factor, the audit
-chain, the management API, genesis, the interim sealed store and keyring, and the alignment
-with Dannan and Dagda (Lugh is in Dannan's callback shape above the frozen store, links
-Dannan for every shared primitive, and has no copy of one). Next: OAuth 2 and OpenID
-Connect, then hosting on Dannan's `Context` and Dagda, the dashboard, LDAP, the library,
-WebAuthn, and the rollout to each project. Every phase ends green under ASan with UBSan and
+Version 0.1.0 is tagged; `develop` is ahead of it. Built and tested: the directory,
+sign-in with the second factor and WebAuthn, the audit chain, the management API, genesis,
+OAuth 2 and OpenID Connect, writable LDAP, `lugh_client`, the listeners on Dannan's, and
+the interim sealed store and keyring (Lugh is in Dannan's callback shape above the frozen
+store, links Dannan for every shared primitive, and has no copy of one). Next: hosting on
+Dannan's `Context` and Dagda, the dashboard, hardening, and the rollout to each project. Every phase ends green under ASan with UBSan and
 under TSan.
 
 ## Licence
