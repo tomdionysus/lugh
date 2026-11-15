@@ -27,10 +27,15 @@ std::string page(std::string_view title, std::string_view body, std::string_view
 // "Frontend"): plain CSS, dark only.
 std::string_view stylesheet();
 
-// The policy every page is served under: nothing but the stylesheet, and forms posted only
-// here (TODO/2026-11-04-oauth.md, "The pages").
+// The policy every page is served under: the stylesheet, one first-party script for WebAuthn and
+// what it fetches from here, and forms posted only here (TODO/2026-11-04-oauth.md, "The pages";
+// P11). No inline script and no other origin.
 inline constexpr const char* kPagePolicy =
-    "default-src 'none'; style-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+    "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; "
+    "base-uri 'none'";
+
+// The script the pages load for WebAuthn.
+std::string_view webauthn_script();
 
 // `html` as the response: text/html, never cached, under kPagePolicy.
 void write_page(const std::shared_ptr<http::HttpResponse>& response, http::status status, const std::string& html);

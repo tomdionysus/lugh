@@ -38,7 +38,9 @@
 #include "lugh/apps/apps.h"
 #include "lugh/audit/audit_log.h"
 #include "lugh/authn/authenticator.h"
+#include "lugh/authn/challenges.h"
 #include "lugh/authn/genesis.h"
+#include "lugh/client/https.h"
 #include "lugh/core/awaited.h"
 #include "lugh/directory/directory.h"
 #include "lugh/directory/posix_numbers.h"
@@ -424,6 +426,14 @@ int run(const cli::Options& options) {
   app_password_routes.register_routes(*router);
   auto pre_sessions = std::make_shared<session::PreSessions>(time, authn::Authenticator::Settings{}.lifetime);
   signin::Pages pages(services.authenticator, services.directory, services.sessions, pre_sessions);
+  // WebAuthn (P11): the RP ID is the issuer's host and the issuer's origin is where ceremonies
+  // come from, so it is offered only when the issuer is set.
+  if (const auto where = config.issuer.empty() ? std::nullopt : client::https_target(config.issuer)) {
+    const auto origin = "https://" + where->host + (where->port == "443" ? std::string() : ":" + where->port);
+    pages.webauthn({where->host, {origin}, "Lugh", std::make_shared<authn::Challenges>(time), services.factors});
+  } else {
+    logger.warn("No oauth.issuer: WebAuthn is not offered, so nobody can reach the phr level");
+  }
   pages.register_routes(*router);
   oauth::MetadataRoutes metadata_routes(services.keys, {config.issuer, config.allow_client_secrets, config.mtls_port});
   metadata_routes.register_routes(*router);

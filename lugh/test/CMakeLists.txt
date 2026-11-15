@@ -89,6 +89,7 @@ add_executable(lugh_tests
     session_sessions_test.cpp
     signin_pages_test.cpp
     signin_qr_test.cpp
+    signin_webauthn_test.cpp
     store_async_test.cpp
     store_contract_test.cpp
     store_log_format_test.cpp

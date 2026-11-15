@@ -172,7 +172,83 @@ a { color: var(--good); }
 }
 ul.codes { list-style: none; padding: 0; columns: 2; }
 .alternative { margin-top: var(--gap); font-size: 0.9rem; }
+[hidden] { display: none !important; }
 )";
+}
+
+// The one script: a button with data-webauthn shown only where the browser can run a ceremony;
+// its options fetched with the form's CSRF token; the ceremony run; what the authenticator
+// returned put in the hidden form, base64url, and the form posted. Nothing else runs, and
+// nothing is kept in the page.
+std::string_view webauthn_script() {
+  return R"js(// Lugh - The Directory. WebAuthn for the sign-in pages.
+(() => {
+  "use strict";
+  const form = document.getElementById("webauthn");
+  if (!form || !window.PublicKeyCredential || !navigator.credentials) return;
+  const encode = (buffer) => {
+    let text = "";
+    for (const byte of new Uint8Array(buffer)) text += String.fromCharCode(byte);
+    return btoa(text).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  };
+  const decode = (text) => {
+    const base64 = text.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (text.length % 4)) % 4);
+    return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  };
+  const status = document.getElementById("webauthn-status");
+  const say = (text) => {
+    if (!status) return;
+    status.textContent = text;
+    status.hidden = false;
+  };
+  const set = (name, value) => {
+    form.elements[name].value = value || "";
+  };
+  const run = async (purpose) => {
+    const answer = await fetch("/signin/webauthn/options", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {"Content-Type": "application/json", "X-CSRF-Token": form.elements.csrf.value},
+      body: JSON.stringify({purpose}),
+    });
+    if (!answer.ok) throw new Error("no options");
+    const options = await answer.json();
+    set("purpose", purpose);
+    set("challenge", options.challenge);
+    options.challenge = decode(options.challenge);
+    for (const list of [options.allowCredentials, options.excludeCredentials]) {
+      if (list) for (const each of list) each.id = decode(each.id);
+    }
+    if (purpose === "enrol") {
+      options.user.id = decode(options.user.id);
+      const made = await navigator.credentials.create({publicKey: options});
+      set("id", encode(made.rawId));
+      set("client_data", encode(made.response.clientDataJSON));
+      set("attestation_object", encode(made.response.attestationObject));
+      const name = document.getElementById("key_name");
+      set("name", name && name.value ? name.value : "Passkey");
+    } else {
+      const used = await navigator.credentials.get({publicKey: options});
+      set("id", encode(used.rawId));
+      set("client_data", encode(used.response.clientDataJSON));
+      set("authenticator_data", encode(used.response.authenticatorData));
+      set("signature", encode(used.response.signature));
+      if (used.response.userHandle) set("user_handle", encode(used.response.userHandle));
+    }
+    form.submit();
+  };
+  for (const button of document.querySelectorAll("button[data-webauthn]")) {
+    button.hidden = false;
+    button.addEventListener("click", () => {
+      button.disabled = true;
+      run(button.dataset.webauthn).catch(() => {
+        button.disabled = false;
+        say("That did not work. Try again, or sign in another way.");
+      });
+    });
+  }
+})();
+)js";
 }
 
 void write_page(const std::shared_ptr<http::HttpResponse>& response, http::status status, const std::string& html) {

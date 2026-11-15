@@ -8,8 +8,11 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "lugh/authn/authenticator.h"
+#include "lugh/authn/challenges.h"
 #include "lugh/directory/directory.h"
 #include "lugh/http/router.h"
 #include "lugh/session/pre_sessions.h"
@@ -35,12 +38,35 @@ namespace lugh::signin {
 //   POST /signout                signs out
 //   GET  /signin/style.css
 //
+// With WebAuthn (P11, W4): one first-party script, so the pages work without it for a password
+// and TOTP, and with it offer a passkey alone, a credential as the second factor, and a credential
+// at enrolment. The script fetches a ceremony's options as JSON (the visitor's CSRF token in
+// X-CSRF-Token), runs the ceremony, and posts what the authenticator returned as an ordinary form,
+// so the answer is the same page, redirect or recovery codes as every other step.
+//
+//   GET  /signin/webauthn.js
+//   POST /signin/webauthn/options  {"purpose": "passkey" | "factor" | "enrol"}
+//   POST /signin/webauthn          the ceremony's result, as a form
+//
 // The sign-in itself, its back-off and its audit, are the authenticator's; the pages only
 // carry it from one form to the next.
 class Pages {
  public:
+  // Where WebAuthn ceremonies may come from: the RP ID (the issuer's host) and the origins a
+  // browser reports (the issuer's), and the challenges, held by the composition root.
+  struct WebAuthn {
+    std::string rp_id;
+    std::vector<std::string> origins;
+    std::string rp_name = "Lugh";
+    std::shared_ptr<authn::Challenges> challenges;
+    std::shared_ptr<authn::Factors> factors;
+  };
+
   Pages(std::shared_ptr<authn::Authenticator> authenticator, std::shared_ptr<directory::Directory> directory, std::shared_ptr<session::Sessions> sessions,
         std::shared_ptr<session::PreSessions> pre_sessions);
+
+  // Offers WebAuthn. Before register_routes(); without it the pages offer a password and TOTP only.
+  void webauthn(WebAuthn settings);
 
   void register_routes(http::Router& router);
 
