@@ -48,6 +48,17 @@ commits it, and records it in the audit log. Nothing tells anyone else.
   be decided with Lir. `lugh_client` stays without Lir (the maintainer, 2026-11-14); a subscriber helper, if any, lives in Lir's Lugh
   plugin or the consumer.
 
+## The status read (the maintainer, 2026-11-15)
+
+Ruled first in Mimir's session (Mimir ruling 18) and confirmed to Lugh, to be built with the events: a scope,
+`lugh:principals.status`, that answers only whether a named principal exists, whether it is enabled, and its version. A
+subscriber holds that and never `lugh:directory.read`.
+- The route: `GET /api/v1/principals/{id}/status`. It answers `{kind, enabled, version}` for a user (person or service), an
+  application or a group, with the version as an ETag. Unknown: 404.
+- No names, addresses, groups or anything else, so the scope reveals only that an id exists.
+- It is how a subscriber rechecks after a version moves or the heartbeat stops, and how Mimir confirms a principal before it
+  mints a secret, storing the ETag it read.
+
 ## Questions for the maintainer
 
 1. When: recommended after P8.1 (the audit log as a node-local Dagda space, `lugh-node` a Dannan node), so the outbox is
