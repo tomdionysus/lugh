@@ -56,7 +56,8 @@ Done<Step> to(std::shared_ptr<Completion<Step>> answer) {
 
 }  // namespace
 
-void Authenticator::password(std::string login, Secret password, std::string source, Deadline deadline, Executor executor, Done<Step> done) {
+void Authenticator::password(std::string login, Secret password, std::string source, Deadline deadline, Executor executor, Done<Step> done,
+                             Assurance at_least) {
   auto answer = stepping(deadline, executor, std::move(done));
   // Held where every step can reach it: a Secret is not copied.
   auto held = std::make_shared<Secret>(std::move(password));
@@ -113,7 +114,7 @@ void Authenticator::password(std::string login, Secret password, std::string sou
         if (!required.ok()) return answer->finish(Step::of(Step::Kind::failed));
         SignIn sign_in;
         sign_in.user_id = user->id;
-        sign_in.required = required.value;
+        sign_in.required = std::max(required.value, at_least);
         sign_in.started = self->_time.now();
         sign_in.amr = {"pwd"};
         if (user->enrolled) return then_factor(std::move(sign_in));
@@ -142,6 +143,8 @@ void Authenticator::password(std::string login, Secret password, std::string sou
 void Authenticator::totp(SignIn sign_in, std::string code, std::string source, Deadline deadline, Executor executor, Done<Step> done) {
   auto answer = stepping(deadline, executor, std::move(done));
   if (!_live(sign_in, SignIn::Stage::second_factor)) return answer->finish(Step::of(Step::Kind::ended, std::move(sign_in)));
+  // A code is not phishing-resistant: where phr is required, only a WebAuthn credential will do.
+  if (sign_in.required == Assurance::phr) return _code_refused(std::move(sign_in), source, "signin.totp.refused", executor, to(answer));
   const auto account = account_key(sign_in.user_id);
   const auto address = address_key(source);
   if (const auto wait = _waiting(account, address)) return answer->finish(waiting(*wait, std::move(sign_in)));
@@ -162,6 +165,7 @@ void Authenticator::totp(SignIn sign_in, std::string code, std::string source, D
 void Authenticator::recovery(SignIn sign_in, Secret code, std::string source, Deadline deadline, Executor executor, Done<Step> done) {
   auto answer = stepping(deadline, executor, std::move(done));
   if (!_live(sign_in, SignIn::Stage::second_factor)) return answer->finish(Step::of(Step::Kind::ended, std::move(sign_in)));
+  if (sign_in.required == Assurance::phr) return _code_refused(std::move(sign_in), source, "signin.recovery.refused", executor, to(answer));
   const auto account = account_key(sign_in.user_id);
   const auto address = address_key(source);
   if (const auto wait = _waiting(account, address)) return answer->finish(waiting(*wait, std::move(sign_in)));

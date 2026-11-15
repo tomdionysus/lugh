@@ -223,6 +223,7 @@ TEST_F(OAuthFlowTest, PhrIsNotMetByAnMfaSession) {
   ASSERT_EQ(rig.post("/signin/factor", {{"csrf", rig.get("/signin/factor").csrf()}, {"code", rig.code_for(rig.secret)}}).location(), "/signin/done");
   const auto phr = rig.get(authorize_target(app.client_id, "&acr_values=urn%3Alugh%3Aacr%3Aphr"));
   EXPECT_EQ(phr.location().rfind("/signin?continue=", 0), 0u) << phr.location();
+  EXPECT_EQ(query_value(phr.location(), "acr"), "urn:lugh:acr:phr") << "the level wanted goes with it";
   const auto silent = rig.get(authorize_target(app.client_id, "&acr_values=urn%3Alugh%3Aacr%3Aphr&prompt=none"));
   EXPECT_EQ(query_value(silent.location(), "error"), "login_required");
 }
@@ -827,8 +828,12 @@ TEST_F(OAuthFlowTest, PhrIsMetByAPasswordAndASecurityKey) {
   const auto first = rig.get(authorize_target(app.client_id, "&acr_values=urn%3Alugh%3Aacr%3Aphr"));
   const auto form = rig.get(first.location());
   const auto resume = form.between("name=\"continue\" value=\"", "\"");
-  ASSERT_EQ(rig.post("/signin", {{"csrf", form.csrf()}, {"login", "alice"}, {"password", kPassword}, {"continue", resume}}).location(), "/signin/factor");
+  const auto wanted = form.between("name=\"acr\" value=\"", "\"");
+  EXPECT_EQ(wanted, "urn:lugh:acr:phr");
+  ASSERT_EQ(rig.post("/signin", {{"csrf", form.csrf()}, {"login", "alice"}, {"password", kPassword}, {"continue", resume}, {"acr", wanted}}).location(),
+            "/signin/factor");
   const auto factor = rig.get("/signin/factor");
+  EXPECT_FALSE(factor.says("name=\"code\"")) << "only the key is asked for";
   const auto fetched =
       rig.send(verb::post, "/signin/webauthn/options", R"({"purpose":"factor"})", {{"Content-Type", "application/json"}, {"X-CSRF-Token", factor.csrf()}});
   ASSERT_EQ(fetched.status, 200u) << fetched.body;

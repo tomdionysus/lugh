@@ -118,8 +118,10 @@ class Authenticator : public std::enable_shared_from_this<Authenticator> {
                 std::shared_ptr<EnrolmentLinks> links, std::shared_ptr<audit::AuditLog> audit, Settings settings);
 
   // A name or an address, and a password. On `next`, the sign-in is at the second factor,
-  // at enrolment (root's first), or complete.
-  void password(std::string login, Secret password, std::string source, Deadline deadline, Executor executor, Done<Step> done);
+  // at enrolment (root's first), or complete. `at_least` raises what the sign-in requires above
+  // the user's policy, never lowers it: what an application asked for (P11, W5b).
+  void password(std::string login, Secret password, std::string source, Deadline deadline, Executor executor, Done<Step> done,
+                Assurance at_least = Assurance::pwd);
 
   // How long this account or address must still wait, if it must: for a way of signing in that
   // has to honour the same back-off without going through password().

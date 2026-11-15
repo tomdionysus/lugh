@@ -189,3 +189,25 @@ TEST(SigninWebAuthn, TheScriptAndWhatGuardsItsEndpoints) {
   EXPECT_EQ(forged.status, 401u);
   EXPECT_TRUE(forged.says("Start again"));
 }
+
+// The level an application wants rides with the sign-in: known values only, and at phr the
+// factor page asks for the key alone.
+TEST(SigninWebAuthn, AWantedLevelRidesWithTheSignIn) {
+  SigninRig rig;
+  rig.enrolled("alice");
+  const auto wanted = rig.get("/signin?acr=urn%3Alugh%3Aacr%3Aphr");
+  EXPECT_EQ(wanted.between("name=\"acr\" value=\"", "\""), "urn:lugh:acr:phr");
+  EXPECT_TRUE(wanted.says("This needs your passkey or security key."));
+  EXPECT_FALSE(rig.get("/signin?acr=%3Cscript%3E").says("name=\"acr\"")) << "only a level Lugh knows";
+
+  ASSERT_EQ(rig.post("/signin", {{"csrf", wanted.csrf()}, {"login", "alice"}, {"password", kPassword}, {"acr", "urn:lugh:acr:phr"}}).location(),
+            "/signin/factor");
+  const auto factor = rig.get("/signin/factor");
+  EXPECT_TRUE(factor.says("data-webauthn=\"factor\""));
+  EXPECT_FALSE(factor.says("name=\"code\"")) << "no code is asked for";
+  EXPECT_FALSE(factor.says("name=\"recovery\""));
+  // A code posted anyway is refused.
+  const auto coded = rig.post("/signin/factor", {{"csrf", factor.csrf()}, {"code", rig.code_for(rig.secret)}});
+  EXPECT_EQ(coded.status, 401u);
+  EXPECT_FALSE(rig.jar.count("__Host-lugh_session"));
+}

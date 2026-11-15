@@ -124,7 +124,9 @@ void decide(const std::shared_ptr<Shared>& shared, const RouteContext& context, 
     if (needs_sign_in) {
       if (request.prompt == "none") return error_back(*shared, context, request, "login_required", "signing in is needed");
       const auto id = shared->pending.put(pending);
-      signin::write_redirect(context.response, "/signin?continue=" + encoded(id));
+      // The level wanted goes with it, so the sign-in asks for what will meet it (P11, W5b).
+      const auto wanted = required > authn::Assurance::pwd ? "&acr=" + encoded(std::string(authn::acr(required))) : std::string();
+      signin::write_redirect(context.response, "/signin?continue=" + encoded(id) + wanted);
       return context.done();
     }
 

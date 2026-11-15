@@ -467,3 +467,26 @@ TEST_F(WebAuthnSignInTest, PasskeyRefusalsLookTheSame) {
   for (int i = 0; i < 5; ++i) passkey(stranger, alice.id, "198.51.100." + std::to_string(i));
   EXPECT_EQ(passkey(stranger, alice.id, "198.51.100.99").kind, Kind::wait);
 }
+
+// An application asked for phr (W5b): the sign-in requires it, so a code will not finish it and
+// a credential will.
+TEST_F(WebAuthnSignInTest, WhereAnApplicationWantsPhrOnlyACredentialWillDo) {
+  soft_authenticator::Authenticator authenticator;
+  enrolled_with(authenticator);
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::authn::TotpSetup>>([&](lugh::Executor executor, auto done) {
+                rig.factors->totp_begin(rig.admin, sign_in.user_id, "Lugh", "alice", kTestDeadline, executor, done);
+              }).ok());
+
+  const auto step = keep(wait_for<lugh::authn::Step>(
+      [&](lugh::Executor executor, auto done) { auth->password("alice", text_secret(kPassword), kSource, kTestDeadline, executor, done, Assurance::phr); }));
+  ASSERT_EQ(step.kind, Kind::next);
+  EXPECT_EQ(sign_in.required, Assurance::phr);
+  EXPECT_EQ(totp("123456").kind, Kind::refused) << "a code is not phishing-resistant";
+  EXPECT_EQ(sign_in.wrong_codes, 1u);
+  ASSERT_EQ(second_factor(authenticator).kind, Kind::next);
+  EXPECT_EQ(sign_in.reached, Assurance::phr);
+
+  // A request can only raise what the policy requires.
+  ASSERT_EQ(password("alice", kPassword).kind, Kind::next);
+  EXPECT_EQ(sign_in.required, Assurance::mfa);
+}

@@ -94,10 +94,17 @@ std::string webauthn_parts(bool webauthn, const std::string& csrf, const std::st
   return out;
 }
 
-std::string password_form(const std::string& csrf, const std::string& warning, const std::string& login, const std::string& resume = "",
-                          bool webauthn = false) {
-  const auto carried = resume.empty() ? std::string() : "<input type=\"hidden\" name=\"continue\" value=\"" + escape(resume) + "\">\n";
-  return notice(warning) + "<form method=\"post\" action=\"/signin\">\n" + csrf_field(csrf) + carried +
+// The level an application asked for, as the sign-in carries it: an acr Lugh knows, or nothing.
+// It only raises what the sign-in requires, so one a visitor writes can make it no weaker.
+std::string wanted_of(const std::string& text) { return authn::assurance_from_acr(text) ? text : std::string(); }
+
+std::string password_form(const std::string& csrf, const std::string& warning, const std::string& login, const std::string& resume = "", bool webauthn = false,
+                          const std::string& wanted = "") {
+  auto carried = resume.empty() ? std::string() : "<input type=\"hidden\" name=\"continue\" value=\"" + escape(resume) + "\">\n";
+  if (!wanted.empty()) carried += "<input type=\"hidden\" name=\"acr\" value=\"" + escape(wanted) + "\">\n";
+  const bool phr = authn::assurance_from_acr(wanted) == authn::Assurance::phr;
+  return notice(phr ? "This needs your passkey or security key." : "") + notice(warning) + "<form method=\"post\" action=\"/signin\">\n" + csrf_field(csrf) +
+         carried +
          "<label for=\"login\">Name or email</label>\n"
          "<input id=\"login\" name=\"login\" type=\"text\" autocomplete=\"username webauthn\" autocapitalize=\"none\" spellcheck=\"false\" required value=\"" +
          escape(login) +
@@ -109,7 +116,12 @@ std::string password_form(const std::string& csrf, const std::string& warning, c
          webauthn_parts(webauthn, csrf, "passkey", "Sign in with a passkey", resume);
 }
 
-std::string factor_form(const std::string& csrf, const std::string& warning, bool webauthn = false) {
+std::string factor_form(const std::string& csrf, const std::string& warning, bool webauthn = false, bool phr = false) {
+  // phr wanted: a code will not do, so none is asked for.
+  if (phr) {
+    if (!webauthn) return notice(warning) + notice("This needs a passkey or security key, which this server does not offer.", true);
+    return notice(warning) + notice("This needs your passkey or security key.") + webauthn_parts(webauthn, csrf, "factor", "Use your passkey or security key");
+  }
   return notice(warning) + webauthn_parts(webauthn, csrf, "factor", "Use your passkey or security key") + "<form method=\"post\" action=\"/signin/factor\">\n" +
          csrf_field(csrf) +
          "<label for=\"code\">Code from your authenticator app</label>\n"
@@ -443,9 +455,10 @@ void webauthn_result(const std::shared_ptr<Pages::Shared>& shared, const RouteCo
           const auto sign_in = step.sign_in;
           advance(shared, context, handle, std::move(step), resume, [&](const std::string&) {
             shared->pre->put(handle, PreSession{sign_in, {}, {}, {}, resume});
-            answer_page(
-                context, http::status::unauthorized,
-                page("Your second factor", factor_form(shared->pre->csrf_token(handle), "That key did not sign you in.", kOffered), script_head(kOffered)));
+            answer_page(context, http::status::unauthorized,
+                        page("Your second factor",
+                             factor_form(shared->pre->csrf_token(handle), "That key did not sign you in.", kOffered, sign_in.required == authn::Assurance::phr),
+                             script_head(kOffered)));
           });
         });
   }
@@ -499,7 +512,9 @@ void Pages::register_routes(http::Router& router) {
     }
     const auto handle = visitor(context);
     const bool webauthn = shared->webauthn.has_value();
-    answer_page(context, http::status::ok, page("Sign in", password_form(shared->pre->csrf_token(handle), "", "", resume, webauthn), script_head(webauthn)));
+    const auto wanted = wanted_of(context.query.count("acr") ? context.query.at("acr") : "");
+    answer_page(context, http::status::ok,
+                page("Sign in", password_form(shared->pre->csrf_token(handle), "", "", resume, webauthn, wanted), script_head(webauthn)));
   });
 
   router.add_open(verb::post, "/signin", [shared](RouteContext context) {
@@ -508,15 +523,19 @@ void Pages::register_routes(http::Router& router) {
     if (!form) return;
     const auto login = field(*form, "login");
     const auto resume = resume_of(field(*form, "continue"));
+    const auto wanted = wanted_of(field(*form, "acr"));
+    const auto at_least = authn::assurance_from_acr(wanted).value_or(authn::Assurance::pwd);
     shared->authenticator->password(
-        login, text_secret(field(*form, "password")), context.remote, kPageDeadline, context.executor, [shared, context, handle, login, resume](Step step) {
+        login, text_secret(field(*form, "password")), context.remote, kPageDeadline, context.executor,
+        [shared, context, handle, login, resume, wanted](Step step) {
           advance(shared, context, handle, std::move(step), resume, [&](const std::string&) {
             const bool webauthn = shared->webauthn.has_value();
             answer_page(context, http::status::unauthorized,
-                        page("Sign in", password_form(shared->pre->csrf_token(handle), "That name and password do not match.", login, resume, webauthn),
+                        page("Sign in", password_form(shared->pre->csrf_token(handle), "That name and password do not match.", login, resume, webauthn, wanted),
                              script_head(webauthn)));
           });
-        });
+        },
+        at_least);
   });
 
   router.add_open(verb::get, "/signin/factor", [shared](RouteContext context) {
@@ -524,7 +543,8 @@ void Pages::register_routes(http::Router& router) {
     const auto pre = shared->pre->find(handle);
     if (!pre || pre->sign_in.stage != SignIn::Stage::second_factor) return answer_redirect(context, "/signin");
     const bool webauthn = shared->webauthn.has_value();
-    answer_page(context, http::status::ok, page("Your second factor", factor_form(shared->pre->csrf_token(handle), "", webauthn), script_head(webauthn)));
+    const bool phr = pre->sign_in.required == authn::Assurance::phr;
+    answer_page(context, http::status::ok, page("Your second factor", factor_form(shared->pre->csrf_token(handle), "", webauthn, phr), script_head(webauthn)));
   });
 
   router.add_open(verb::post, "/signin/factor", [shared](RouteContext context) {
@@ -540,7 +560,9 @@ void Pages::register_routes(http::Router& router) {
         shared->pre->put(handle, PreSession{sign_in, {}, {}, {}, resume});
         const bool webauthn = shared->webauthn.has_value();
         answer_page(context, http::status::unauthorized,
-                    page("Your second factor", factor_form(shared->pre->csrf_token(handle), "That code is not right.", webauthn), script_head(webauthn)));
+                    page("Your second factor",
+                         factor_form(shared->pre->csrf_token(handle), "That code is not right.", webauthn, sign_in.required == authn::Assurance::phr),
+                         script_head(webauthn)));
       });
     };
     if (const auto recovery = field(*form, "recovery"); !recovery.empty()) {
