@@ -9,6 +9,7 @@
 
 #include "lugh/authn/authenticator.h"
 #include "lugh/test/fixtures/authn_rig.h"
+#include "lugh/test/fixtures/soft_authenticator.h"
 
 using lugh::Fault;
 using lugh::Secret;
@@ -327,4 +328,142 @@ TEST_F(AuthenticatorTest, EveryStepIsAudited) {
     EXPECT_NE(std::find(actions.begin(), actions.end(), action), actions.end()) << action;
   }
   EXPECT_TRUE(audit_verify(rig.audit).ok);
+}
+
+// WebAuthn (TODO/2026-11-15-p11-webauthn.md, W4): enrolment by a credential, a credential as the
+// second factor, and a passkey alone, each reaching phr.
+namespace {
+
+class WebAuthnSignInTest : public AuthenticatorTest {
+ protected:
+  static constexpr const char* kChallenge = "a challenge of 32 bytes, random!";
+
+  static lugh::webauthn::Expected expected(bool user_verification = false) {
+    lugh::webauthn::Expected out;
+    out.rp_id = "localhost";
+    out.origins = {"https://localhost"};
+    out.challenge = kChallenge;
+    out.user_verification = user_verification;
+    return out;
+  }
+
+  static lugh::Bytes bytes_of(const std::vector<std::uint8_t>& in) { return lugh::Bytes(in.begin(), in.end()); }
+
+  std::string id_of(const soft_authenticator::Authenticator& authenticator) const {
+    return std::string(authenticator.credential_id().begin(), authenticator.credential_id().end());
+  }
+
+  // Alice, from her enrolment link to signed in by the credential: the setup for the rest.
+  lugh::directory::User enrolled_with(const soft_authenticator::Authenticator& authenticator) {
+    const auto alice = rig.person("alice");
+    const auto token = wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+                         rig.links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+                       }).value;
+    EXPECT_EQ(redeem(token, kPassword).kind, Kind::next);
+    const auto made = authenticator.create(kChallenge);
+    const auto step = keep(wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+      auth->enrol_webauthn(sign_in, "laptop", expected(true), bytes_of(made.client_data_json), bytes_of(made.attestation_object), kSource, kTestDeadline,
+                           executor, done);
+    }));
+    EXPECT_EQ(step.kind, Kind::next);
+    EXPECT_EQ(step.recovery_codes.size(), Factors::kRecoveryCodes);
+    return alice;
+  }
+
+  Step second_factor(soft_authenticator::Authenticator& authenticator) {
+    const auto proof = authenticator.get(kChallenge);
+    return keep(wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+      auth->webauthn(sign_in, id_of(authenticator), expected(), bytes_of(proof.client_data_json), bytes_of(proof.authenticator_data), bytes_of(proof.signature),
+                     kSource, kTestDeadline, executor, done);
+    }));
+  }
+
+  Step passkey(soft_authenticator::Authenticator& authenticator, const std::string& user_handle, const std::string& source = kSource) {
+    const auto proof = authenticator.get(kChallenge);
+    return keep(wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+      auth->passkey(user_handle, id_of(authenticator), expected(), bytes_of(proof.client_data_json), bytes_of(proof.authenticator_data),
+                    bytes_of(proof.signature), source, kTestDeadline, executor, done);
+    }));
+  }
+};
+
+}  // namespace
+
+TEST_F(WebAuthnSignInTest, EnrolmentByACredentialReachesPhr) {
+  soft_authenticator::Authenticator authenticator;
+  const auto alice = enrolled_with(authenticator);
+  EXPECT_EQ(sign_in.stage, Stage::complete);
+  EXPECT_EQ(sign_in.reached, Assurance::phr);
+  EXPECT_EQ(sign_in.amr, (std::vector<std::string>{"pwd", "hwk", "user"}));
+  EXPECT_TRUE(read_value<std::optional<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+                rig.directory->user(alice.id, kTestDeadline, executor, done);
+              })->enrolled);
+}
+
+TEST_F(WebAuthnSignInTest, APasswordThenACredential) {
+  soft_authenticator::Authenticator authenticator;
+  enrolled_with(authenticator);
+  ASSERT_EQ(password("alice", kPassword).kind, Kind::next);
+  ASSERT_EQ(sign_in.stage, Stage::second_factor);
+  // A security key without a PIN: still phishing-resistant, with the password.
+  authenticator.user_verified = false;
+  ASSERT_EQ(second_factor(authenticator).kind, Kind::next);
+  EXPECT_EQ(sign_in.reached, Assurance::phr);
+  EXPECT_EQ(sign_in.amr, (std::vector<std::string>{"pwd", "hwk"}));
+  EXPECT_TRUE(rig.audited("signin.complete"));
+}
+
+TEST_F(WebAuthnSignInTest, AWrongAssertionCountsAsAWrongCode) {
+  soft_authenticator::Authenticator authenticator;
+  enrolled_with(authenticator);
+  ASSERT_EQ(password("alice", kPassword).kind, Kind::next);
+  soft_authenticator::Authenticator stranger;
+  const auto proof = stranger.get(kChallenge);
+  const auto refused = keep(wait_for<lugh::authn::Step>([&](lugh::Executor executor, auto done) {
+    auth->webauthn(sign_in, id_of(authenticator), expected(), bytes_of(proof.client_data_json), bytes_of(proof.authenticator_data), bytes_of(proof.signature),
+                   kSource, kTestDeadline, executor, done);
+  }));
+  EXPECT_EQ(refused.kind, Kind::refused);
+  EXPECT_EQ(sign_in.wrong_codes, 1u);
+  EXPECT_TRUE(rig.audited("signin.webauthn.refused"));
+  EXPECT_EQ(second_factor(authenticator).kind, Kind::next) << "the right credential still signs in";
+}
+
+TEST_F(WebAuthnSignInTest, APasskeyAloneSignsInAtPhr) {
+  soft_authenticator::Authenticator authenticator;
+  authenticator.backup_eligible = true;
+  authenticator.backed_up = true;
+  const auto alice = enrolled_with(authenticator);
+  sign_in = {};
+  const auto step = passkey(authenticator, alice.id);
+  ASSERT_EQ(step.kind, Kind::next);
+  EXPECT_EQ(sign_in.user_id, alice.id);
+  EXPECT_EQ(sign_in.stage, Stage::complete);
+  EXPECT_EQ(sign_in.reached, Assurance::phr);
+  EXPECT_EQ(sign_in.amr, (std::vector<std::string>{"swk", "user"}));
+}
+
+TEST_F(WebAuthnSignInTest, APasskeyMustVerifyTheUser) {
+  soft_authenticator::Authenticator authenticator;
+  const auto alice = enrolled_with(authenticator);
+  authenticator.user_verified = false;
+  EXPECT_EQ(passkey(authenticator, alice.id).kind, Kind::refused) << "a key that only saw a touch is not a password";
+  EXPECT_TRUE(rig.audited("signin.passkey.refused"));
+}
+
+// Whatever is wrong, a passkey sign-in is refused the same way, and backs off.
+TEST_F(WebAuthnSignInTest, PasskeyRefusalsLookTheSame) {
+  soft_authenticator::Authenticator authenticator;
+  const auto alice = enrolled_with(authenticator);
+  EXPECT_EQ(passkey(authenticator, "no-such-user").kind, Kind::refused);
+  soft_authenticator::Authenticator stranger;
+  EXPECT_EQ(passkey(stranger, alice.id).kind, Kind::refused) << "a credential not hers";
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
+                rig.directory->disable_user(rig.admin, alice.id, true, std::nullopt, kTestDeadline, executor, done);
+              }).ok());
+  EXPECT_EQ(passkey(authenticator, alice.id).kind, Kind::refused) << "disabled";
+
+  // Each refusal counted against the account, from whatever address: past five, it waits.
+  for (int i = 0; i < 5; ++i) passkey(stranger, alice.id, "198.51.100." + std::to_string(i));
+  EXPECT_EQ(passkey(stranger, alice.id, "198.51.100.99").kind, Kind::wait);
 }

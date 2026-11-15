@@ -66,6 +66,7 @@ add_library(lugh STATIC
     audit/audit_log.cpp
     authn/app_passwords.cpp
     authn/authenticator.cpp
+    authn/challenges.cpp
     authn/enrolment_links.cpp
     authn/factors.cpp
     authn/genesis.cpp

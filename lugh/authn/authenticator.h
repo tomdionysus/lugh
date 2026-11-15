@@ -53,7 +53,8 @@ struct SignIn {
   Stage stage = Stage::ended;
   Assurance required = Assurance::mfa;
   Assurance reached = Assurance::pwd;
-  // RFC 8176's values, in the order used: "pwd", "otp".
+  // RFC 8176's values, in the order used: "pwd", "otp", and for WebAuthn "hwk" (a key bound to
+  // its device) or "swk" (a synced passkey), with "user" when the authenticator verified them.
   std::vector<std::string> amr;
   std::uint32_t wrong_codes = 0;
   std::chrono::steady_clock::time_point started{};
@@ -137,6 +138,28 @@ class Authenticator : public std::enable_shared_from_this<Authenticator> {
   void enrol_begin(SignIn sign_in, std::string source, Deadline deadline, Executor executor, Done<Outcome<TotpSetup>> done);
   void enrol_confirm(SignIn sign_in, std::string factor_id, std::string code, std::string source, Deadline deadline, Executor executor, Done<Step> done);
 
+  // WebAuthn (TODO/2026-11-15-p11-webauthn.md, W4). `expected` carries the RP ID, the origins
+  // and the challenge the caller issued and claimed; the ceremony's parts are as the browser
+  // returned them. A refused assertion counts as a wrong code does.
+  //
+  // At the second factor: an assertion by one of the user's credentials. A password and a
+  // WebAuthn credential reach phr (amr pwd and hwk or swk, and user when the authenticator
+  // verified them).
+  void webauthn(SignIn sign_in, std::string credential_id, webauthn::Expected expected, Bytes client_data_json, Bytes authenticator_data, Bytes signature,
+                std::string source, Deadline deadline, Executor executor, Done<Step> done);
+
+  // Passwordless: an assertion by a discoverable credential, for the user its user handle
+  // names, with the user verified (required here whatever `expected` says). It signs in alone
+  // at phr. An unknown handle, a disabled or service account, a person not enrolled and an
+  // assertion that fails all look the same, and back off as a wrong password does.
+  void passkey(std::string user_handle, std::string credential_id, webauthn::Expected expected, Bytes client_data_json, Bytes authenticator_data,
+               Bytes signature, std::string source, Deadline deadline, Executor executor, Done<Step> done);
+
+  // At enrolment, a WebAuthn credential in place of a TOTP secret. On `next` the user is
+  // enrolled, signed in, and given their recovery codes.
+  void enrol_webauthn(SignIn sign_in, std::string name, webauthn::Expected expected, Bytes client_data_json, Bytes attestation_object, std::string source,
+                      Deadline deadline, Executor executor, Done<Step> done);
+
   // Removes a factor, refusing the user's last while their policy requires one.
   void remove_factor(audit::Actor actor, std::string user_id, std::string factor_id, Deadline deadline, Executor executor, Done<Outcome<>> done);
 
@@ -152,6 +175,7 @@ class Authenticator : public std::enable_shared_from_this<Authenticator> {
   void _failed(const std::string& account, const std::string& address);
   void _code_refused(SignIn sign_in, std::string source, std::string action, Executor executor, Done<Step> done);
   void _complete(SignIn sign_in, std::string source, Executor executor, Done<Step> done);
+  void _enrolled(SignIn sign_in, std::string source, Executor executor, Done<Step> done);
   void _record(std::string action, std::string actor, std::string subject, std::string source, std::string detail, Executor executor, Then then);
 
   dannan::status::ScopedLogger _logger;
