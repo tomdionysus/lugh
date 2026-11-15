@@ -2,6 +2,52 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-15: P11, WebAuthn, passkeys and the phr level
+
+Plan and rulings: `2026-11-15-p11-webauthn.md`. The maintainer ruled P11 before the dashboard (P7). The other rulings:
+- attestation is `none`;
+- RS256 verification goes in Dannan, and CBOR and COSE in Lugh;
+- RS256 is accepted at 2048 bits and up;
+- passwordless sign-in is offered to everyone.
+
+What was built:
+- W1: CBOR (strict, canonical, bounded) and COSE keys for ES256, EdDSA and RS256, with a fuzz target. The UTF-8 check moved into
+  `core/encoding.h`, and jose gained `public_key_der()`, so both are kept once.
+- W2: the registration and assertion checks of WebAuthn Level 3, sections 7.1 and 7.2. The software authenticator in
+  `lugh/test/fixtures/soft_authenticator.h` is written from the specification, apart from `lugh/webauthn`.
+- W3: WebAuthn credentials in `Factors`. A credential id registered to anyone is refused, and the sign count is written at the
+  version read. A credential counts as a second factor, and as the last one.
+- W4: the authenticator's steps:
+  - a credential as the second factor (with the password, `phr`);
+  - a passkey alone (user verified, `phr`, refused the same way whatever is wrong);
+  - enrolment by a credential.
+  `authn::Challenges` holds nothing when it issues a challenge: random bytes and an expiry, MAC'd under the process's key and
+  bound to the visitor's cookie. A challenge is single use, claimed then released if the ceremony fails, and refused when the
+  used set is full. The pages gain one first-party script, the options as JSON, and the result as a form. WebAuthn is offered
+  only with `oauth.issuer`, whose host is the RP ID.
+- W5: applications and `acr_values` may require `phr`. The level wanted rides with the sign-in, which only raises what it
+  requires, and at `phr` only the key is asked for (TOTP and recovery codes are refused).
+- W6: `Caller` carries its `acr`, and an administrator's factor reset requires `phr` (a service acts with its key). Root's
+  first sign-in enrolling WebAuthn is deferred to P7 (the maintainer).
+- W7: on the real binary over TLS, a passkey is enrolled through a link, signs in alone, and outlives a restart; a cloned
+  authenticator and another origin are refused.
+- Dannan 0.8.3 (verify_rs256, the stream connector) pinned; RS256 assertions verified.
+
+Tests and checks:
+- 784 tests, from 725 at P11's start: 59 new, none removed.
+- Debug on node-d and node-b.
+- ASan with leak detection on node-b: green, no sanitizer report.
+- TSan on node-a (clang 19): green, no warning.
+- The new process, sign-in and challenge tests were repeated 20 times in debug, ASan and TSan, all green.
+- Found by clang: CBOR's `std::vector<std::pair<Value, Value>>` inside `Value` would not compile with libstdc++, so it became a
+  declared `Value::Entry`. TSan ran on the change and debug was rerun on it, green; the ASan rerun on it is in
+  `ACTIVE.md`'s resume note.
+
+Left for later:
+- adding a key after enrolment (`/signin/factors`);
+- the fuzz targets built on node-a's clang (`fuzz_webauthn` and `fuzz_client`, both written, both unbuilt);
+- root's enrolment at P7.
+
 ## 2026-11-15: step E, ClientAddress on Dannan's forwarded_for
 
 - `ClientAddress` keeps its face (`resolve(peer, request)`). Its own walk of X-Forwarded-For is deleted, and it calls `dannan::listen::forwarded_for()` with the trusted networks as `Prefix`es. Several header lines are joined in order (RFC 9110 5.3).
