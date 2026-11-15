@@ -70,8 +70,10 @@ class ApiRig : public AuthnRig {
 
   static std::shared_ptr<FixedCallers> make_callers() {
     auto made = std::make_shared<FixedCallers>();
-    made->add(kToken, lugh::http::Caller{lugh::http::Caller::Kind::user, kAdministrator, lugh::api::all_scopes()});
-    made->add("reader", lugh::http::Caller{lugh::http::Caller::Kind::user, "u-reader", {lugh::api::kDirectoryRead}});
+    // The administrator signed in with a passkey; another with a code, for what needs phr.
+    made->add(kToken, lugh::http::Caller{lugh::http::Caller::Kind::user, kAdministrator, lugh::api::all_scopes(), "urn:lugh:acr:phr"});
+    made->add("mfa-admin", lugh::http::Caller{lugh::http::Caller::Kind::user, kAdministrator, lugh::api::all_scopes(), "urn:lugh:acr:mfa"});
+    made->add("reader", lugh::http::Caller{lugh::http::Caller::Kind::user, "u-reader", {lugh::api::kDirectoryRead}, "urn:lugh:acr:mfa"});
     return made;
   }
 

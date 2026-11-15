@@ -30,7 +30,9 @@ const StillTime still_time;
 
 class Everyone : public lugh::http::CallerResolver {
  public:
-  lugh::http::Caller resolve(const lugh::http::HttpRequest&) const override { return lugh::http::Caller{lugh::http::Caller::Kind::user, "fuzz", {"s"}}; }
+  lugh::http::Caller resolve(const lugh::http::HttpRequest&) const override {
+    return lugh::http::Caller{lugh::http::Caller::Kind::user, "fuzz", {"s"}, "urn:lugh:acr:mfa"};
+  }
 };
 
 boost::asio::io_context io;

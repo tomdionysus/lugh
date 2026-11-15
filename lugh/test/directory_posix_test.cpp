@@ -209,7 +209,7 @@ TEST_F(PosixTest, TheEntries) {
   auto operations = std::make_shared<Operations>(tree, operation_settings);
   Bound reader;
   reader.dn = "uid=alice,ou=people,dc=example,dc=com";
-  reader.caller = lugh::http::Caller{lugh::http::Caller::Kind::user, "id", {lugh::scopes::kDirectoryRead}};
+  reader.caller = lugh::http::Caller{lugh::http::Caller::Kind::user, "id", {lugh::scopes::kDirectoryRead}, "urn:lugh:acr:pwd"};
 
   const auto search = [&](
                           const std::string& base, Filter filter = [] {
@@ -268,7 +268,7 @@ TEST_F(PosixTest, NoPrimaryGroupNoPosixAccount) {
   settings.primary_group = "nobody-made-this";
   auto operations = std::make_shared<Operations>(std::make_shared<Tree>(rig.directory, settings), Operations::Settings{});
   Bound reader;
-  reader.caller = lugh::http::Caller{lugh::http::Caller::Kind::user, "id", {lugh::scopes::kDirectoryRead}};
+  reader.caller = lugh::http::Caller{lugh::http::Caller::Kind::user, "id", {lugh::scopes::kDirectoryRead}, "urn:lugh:acr:pwd"};
   SearchRequest request;
   request.base = "uid=alice,ou=people,dc=example,dc=com";
   request.filter.kind = Filter::Kind::present;

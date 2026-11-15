@@ -82,7 +82,9 @@ void Binder::bind(std::string name, Secret password, std::string address, Deadli
         if (!held_scopes.ok()) return answer->finish(unavailable());
         Bound bound;
         bound.dn = self->_tree->dn_of(*user);
-        bound.caller = http::Caller{http::Caller::Kind::user, user->id, cut_to(match.value.app_password.scopes, held_scopes.value)};
+        // A simple bind is a password, whichever kind: pwd.
+        bound.caller = http::Caller{http::Caller::Kind::user, user->id, cut_to(match.value.app_password.scopes, held_scopes.value),
+                                    std::string(authn::acr(authn::Assurance::pwd))};
         bound.app_password = match.value.app_password.id;
         bound.app_password_scopes = match.value.app_password.scopes;
         self->_audit->record(audit::Event{"ldap.bind", user->id, user->id, "ldap:" + address, "app password " + match.value.app_password.id}, kStepDeadline,
@@ -103,7 +105,7 @@ void Binder::_password(std::string name, std::string dn, std::shared_ptr<Secret>
       if (!scopes.ok()) return answer->finish(unavailable());
       Bound bound;
       bound.dn = dn;
-      bound.caller = http::Caller{http::Caller::Kind::user, user_id, scopes.value};
+      bound.caller = http::Caller{http::Caller::Kind::user, user_id, scopes.value, std::string(authn::acr(authn::Assurance::pwd))};
       answer->finish(BindAnswer{{ResultCode::success, "", ""}, bound});
     });
   });

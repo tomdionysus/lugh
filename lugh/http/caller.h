@@ -32,6 +32,9 @@ struct Caller {
   // What the audit log records as the actor: a user ID, or a client ID.
   std::string id;
   std::vector<std::string> scopes;
+  // How sure Lugh is of a person: the acr their session or token carries ("urn:lugh:acr:phr");
+  // empty for a service, which signs in with its key.
+  std::string acr;
 
   bool authenticated() const { return kind != Kind::none; }
   bool has_scope(const std::string& scope) const { return std::find(scopes.begin(), scopes.end(), scope) != scopes.end(); }
