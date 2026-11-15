@@ -157,7 +157,7 @@ class FixedResolver : public http::CallerResolver {
   http::Caller resolve(const http::HttpRequest& request) const override {
     const auto header = request.find(http::field::authorization);
     if (header == request.end() || header->value() != "Bearer good") return {};
-    return http::Caller{http::Caller::Kind::user, "tester", {"read"}};
+    return http::Caller{http::Caller::Kind::user, "tester", {"read"}, "urn:lugh:acr:mfa"};
   }
 };
 

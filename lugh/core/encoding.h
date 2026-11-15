@@ -135,6 +135,46 @@ inline std::optional<Bytes> base64url_decode(std::string_view text) {
   return out;
 }
 
+// The length of the UTF-8 sequence (RFC 3629) starting at `at`, or 0 for one that is not
+// valid: overlong forms, surrogates and values past U+10FFFF included.
+inline std::size_t utf8_length(std::string_view text, std::size_t at) {
+  const auto byte = [&](std::size_t i) { return static_cast<unsigned char>(text[i]); };
+  const auto first = byte(at);
+  if (first < 0x80) return 1;
+  std::size_t length;
+  unsigned value;
+  if ((first & 0xe0) == 0xc0) {
+    length = 2;
+    value = first & 0x1f;
+  } else if ((first & 0xf0) == 0xe0) {
+    length = 3;
+    value = first & 0x0f;
+  } else if ((first & 0xf8) == 0xf0) {
+    length = 4;
+    value = first & 0x07;
+  } else {
+    return 0;
+  }
+  if (at + length > text.size()) return 0;
+  for (std::size_t i = 1; i < length; ++i) {
+    if ((byte(at + i) & 0xc0) != 0x80) return 0;
+    value = (value << 6) | (byte(at + i) & 0x3f);
+  }
+  static constexpr unsigned kLeast[] = {0, 0, 0x80, 0x800, 0x10000};
+  if (value < kLeast[length] || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) return 0;
+  return length;
+}
+
+// Whether all of `text` is valid UTF-8.
+inline bool valid_utf8(std::string_view text) {
+  for (std::size_t i = 0; i < text.size();) {
+    const auto length = utf8_length(text, i);
+    if (length == 0) return false;
+    i += length;
+  }
+  return true;
+}
+
 // RFC 4648 base64 with padding, the standard alphabet, as HTTP Basic credentials are written
 // (RFC 7617).
 inline std::string base64(std::span<const unsigned char> data) {

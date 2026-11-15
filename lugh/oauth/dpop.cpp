@@ -135,7 +135,9 @@ std::optional<http::Caller> api_caller(const TokenIssuer& issuer, DpopChecker& d
   const auto bearer = presented_token(issuer, dpop, request, issuer.issuer(), "lugh");
   // The API takes JWTs only: a handle is for the application's own resource servers.
   if (!bearer || bearer->opaque) return std::nullopt;
-  return http::Caller{bearer->service ? http::Caller::Kind::service : http::Caller::Kind::user, bearer->subject, bearer->scopes};
+  std::string acr;
+  if (const auto* claim = bearer->claims.if_contains("acr"); claim && claim->is_string() && !bearer->service) acr = std::string(claim->as_string());
+  return http::Caller{bearer->service ? http::Caller::Kind::service : http::Caller::Kind::user, bearer->subject, bearer->scopes, std::move(acr)};
 }
 
 }  // namespace lugh::oauth

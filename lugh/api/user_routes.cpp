@@ -245,6 +245,13 @@ void UserRoutes::_remove_factor(http::RouteContext context) {
 }
 
 void UserRoutes::_reset_factors(http::RouteContext context) {
+  // A reset lets someone else enrol in the user's name, so a person doing it must have signed in
+  // phishing-resistantly (docs/architecture.md, "Enrolment and recovery"). A service acts with
+  // its key, under the scope it was granted.
+  if (context.caller.kind == http::Caller::Kind::user && context.caller.acr != authn::acr(authn::Assurance::phr)) {
+    http::write_error(context.response, http::status::forbidden, "forbidden", "resetting someone's factors needs a phishing-resistant sign-in (phr)");
+    return context.done();
+  }
   if (!body_object(context, {})) return context.done();
   const auto id = context.parameter("id");
   _authenticator->reset_factors(actor_of(context), id, kRouteDeadline, context.executor, [context, id, sessions = _sessions](Outcome<> reset) {

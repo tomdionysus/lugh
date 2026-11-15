@@ -54,6 +54,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
       break;
     case 3:
       if (const auto totp = authn::decode_totp(input)) same(authn::encode(*totp), input);
+      if (const auto credential = authn::decode_webauthn(input)) same(authn::encode(*credential), input);
       break;
     case 4:
       if (const auto recovery = authn::decode_recovery(input)) same(authn::encode(*recovery), input);

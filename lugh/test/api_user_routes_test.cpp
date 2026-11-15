@@ -190,6 +190,10 @@ TEST_F(UserRoutesTest, RemovingFactorsAndResetting) {
   EXPECT_EQ(rig.request(verb::delete_, base + "totp-0000").status, 404u);
   EXPECT_EQ(rig.request(verb::delete_, base + "nonsense").status, 404u);
 
+  // A reset lets someone else enrol in her name: an administrator at mfa may not.
+  const auto at_mfa = rig.request(verb::post, base + "reset", "", {}, std::string("Bearer mfa-admin"));
+  EXPECT_EQ(at_mfa.status, 403u);
+  EXPECT_EQ(at_mfa.error(), "forbidden");
   EXPECT_EQ(rig.post(base + "reset", "").status, 204u);
   EXPECT_TRUE(rig.get("/api/v1/users/" + alice.id + "/factors").body.at("factors").as_array().empty());
   EXPECT_EQ(rig.get("/api/v1/users/" + alice.id).body.at("enrolled"), false);

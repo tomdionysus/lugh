@@ -75,10 +75,26 @@ inline std::string factor_key(std::string_view user_id, std::string_view id) {
 inline boost::json::object factor_json(const authn::FactorInfo& factor) {
   boost::json::object out;
   out["id"] = factor_id(factor.id);
-  out["kind"] = factor.kind == authn::FactorKind::totp ? "totp" : "recovery";
+  switch (factor.kind) {
+    case authn::FactorKind::totp:
+      out["kind"] = "totp";
+      break;
+    case authn::FactorKind::recovery:
+      out["kind"] = "recovery";
+      break;
+    case authn::FactorKind::webauthn:
+      out["kind"] = "webauthn";
+      break;
+  }
   out["confirmed"] = factor.confirmed;
   out["created_at"] = timestamp(factor.created);
   if (factor.kind == authn::FactorKind::recovery) out["remaining"] = factor.remaining;
+  if (factor.kind == authn::FactorKind::webauthn) {
+    out["name"] = factor.name;
+    out["aaguid"] = factor.aaguid;
+    out["backed_up"] = factor.backed_up;
+    out["last_used_at"] = factor.last_used == 0 ? boost::json::value(nullptr) : boost::json::value(timestamp(factor.last_used));
+  }
   return out;
 }
 

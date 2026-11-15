@@ -89,6 +89,8 @@ class SigninRig : public AuthnRig {
   };
 
   static constexpr const char* kIssuer = "https://id.example.com";
+  // WebAuthn's RP ID: the issuer's host.
+  static constexpr const char* kRpId = "id.example.com";
 
   SigninRig() {
     keys = std::make_shared<lugh::tokens::SigningKeys>(store, wall, audit, lugh::tokens::SigningKeys::Settings{});
@@ -105,6 +107,8 @@ class SigninRig : public AuthnRig {
         std::make_shared<lugh::session::SessionCallers>(
             sessions, [issuer = issuer, dpop = dpop](const lugh::http::HttpRequest& request) { return lugh::oauth::api_caller(*issuer, *dpop, request); }));
     pages = std::make_unique<lugh::signin::Pages>(authenticator, directory, sessions, pre);
+    challenges = std::make_shared<lugh::authn::Challenges>(time);
+    pages->webauthn({kRpId, {kIssuer}, "Lugh", challenges, factors});
     pages->register_routes(*router);
     me = std::make_unique<lugh::api::MeRoutes>(directory, sessions);
     me->register_routes(*router);
@@ -192,6 +196,7 @@ class SigninRig : public AuthnRig {
   std::shared_ptr<lugh::session::PreSessions> pre;
   std::shared_ptr<lugh::http::Router> router;
   std::unique_ptr<lugh::signin::Pages> pages;
+  std::shared_ptr<lugh::authn::Challenges> challenges;
   std::unique_ptr<lugh::api::MeRoutes> me;
   std::unique_ptr<lugh::api::UserRoutes> users;
   std::unique_ptr<lugh::api::SessionRoutes> session_routes;

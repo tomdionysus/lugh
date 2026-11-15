@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -26,20 +27,28 @@
 #include "lugh/directory/directory.h"
 #include "lugh/store/store.h"
 #include "lugh/store/store_calls.h"
+#include "lugh/webauthn/ceremony.h"
 
 namespace lugh::authn {
 
-enum class FactorKind : std::uint8_t { totp = 1, recovery = 2 };
+enum class FactorKind : std::uint8_t { totp = 1, recovery = 2, webauthn = 3 };
 
 // A factor as an administrator or its owner sees it: never its secret.
 struct FactorInfo {
   std::string id;
   FactorKind kind = FactorKind::totp;
-  // A TOTP factor counts once a code from it has been typed back; recovery codes always do.
+  // A TOTP factor counts once a code from it has been typed back; recovery codes and
+  // WebAuthn credentials always do.
   bool confirmed = false;
   std::uint64_t created = 0;
   // Recovery codes not yet used.
   std::size_t remaining = 0;
+  // WebAuthn: the name its owner gave it, the authenticator's claimed AAGUID (hex, unverified:
+  // attestation is none), whether it is a synced passkey, and when it was last used (0: never).
+  std::string name;
+  std::string aaguid;
+  bool backed_up = false;
+  std::uint64_t last_used = 0;
 };
 
 struct TotpSetup {
@@ -79,8 +88,9 @@ class Factors : public directory::Dependent, public std::enable_shared_from_this
 
   void list(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<std::vector<FactorInfo>>> done) const;
 
-  // Whether the user has a confirmed factor of their own. Recovery codes do not count:
-  // they stand in for a factor and do not replace one.
+  // Whether the user has a confirmed factor of their own: a confirmed TOTP secret or a
+  // WebAuthn credential. Recovery codes do not count: they stand in for a factor and do not
+  // replace one.
   void has_second_factor(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<bool>> done) const;
 
   // A new, unconfirmed TOTP secret. Any unconfirmed one before it is removed.
@@ -100,6 +110,21 @@ class Factors : public directory::Dependent, public std::enable_shared_from_this
 
   // Uses one code: the number left afterwards. refused for a wrong or used one.
   void recovery_use(std::string user_id, Secret code, Deadline deadline, Executor executor, Done<Outcome<std::size_t>> done);
+
+  // A WebAuthn credential from a registration ceremony (W3C WebAuthn 7.1), named by its owner.
+  // Refused when the ceremony fails its checks, and when the credential id is registered
+  // already, to this user or any other (7.1, step 26).
+  void webauthn_register(audit::Actor actor, std::string user_id, std::string name, webauthn::Expected expected, Bytes client_data_json,
+                         Bytes attestation_object, Deadline deadline, Executor executor, Done<Outcome<FactorInfo>> done);
+
+  // The user's credential ids, for a ceremony's allowCredentials.
+  void webauthn_credentials(std::string user_id, Deadline deadline, Executor executor, Done<Outcome<std::vector<std::string>>> done) const;
+
+  // An assertion (7.2) by the user's credential `credential_id`. The sign count and last use
+  // are written at the version read, so two sign-ins racing with one assertion cannot both
+  // pass. refused for a check that fails, a credential that is not the user's, or a lost race.
+  void webauthn_check(std::string user_id, webauthn::Expected expected, std::string credential_id, Bytes client_data_json, Bytes authenticator_data,
+                      Bytes signature, Deadline deadline, Executor executor, Done<Outcome<webauthn::Asserted>> done);
 
   void remove(audit::Actor actor, std::string user_id, std::string factor_id, Deadline deadline, Executor executor, Done<Outcome<>> done);
 
@@ -144,7 +169,21 @@ struct RecoveryRecord {
   std::vector<RecoverySlot> slots;
 };
 
+struct WebAuthnRecord {
+  std::uint64_t created = 0;
+  std::uint64_t last_used = 0;
+  std::string name;
+  std::string credential_id;
+  webauthn::PublicKey key;
+  std::uint32_t sign_count = 0;
+  bool backup_eligible = false;
+  bool backed_up = false;
+  std::array<std::uint8_t, 16> aaguid{};
+};
+
 SecureBuffer encode(const TotpRecord& record);
+SecureBuffer encode(const WebAuthnRecord& record);
+std::optional<WebAuthnRecord> decode_webauthn(std::span<const unsigned char> value);
 std::optional<TotpRecord> decode_totp(std::span<const unsigned char> value);
 SecureBuffer encode(const RecoveryRecord& record);
 std::optional<RecoveryRecord> decode_recovery(std::span<const unsigned char> value);

@@ -111,7 +111,7 @@ class LdapTest : public ::testing::Test {
   Bound as(const User& user, std::vector<std::string> scopes) {
     Bound out;
     out.dn = tree->dn_of(user);
-    out.caller = lugh::http::Caller{lugh::http::Caller::Kind::user, user.id, std::move(scopes)};
+    out.caller = lugh::http::Caller{lugh::http::Caller::Kind::user, user.id, std::move(scopes), "urn:lugh:acr:pwd"};
     return out;
   }
   Bound reader() { return as(alice, {lugh::scopes::kDirectoryRead}); }

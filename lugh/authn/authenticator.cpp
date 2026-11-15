@@ -56,7 +56,8 @@ Done<Step> to(std::shared_ptr<Completion<Step>> answer) {
 
 }  // namespace
 
-void Authenticator::password(std::string login, Secret password, std::string source, Deadline deadline, Executor executor, Done<Step> done) {
+void Authenticator::password(std::string login, Secret password, std::string source, Deadline deadline, Executor executor, Done<Step> done,
+                             Assurance at_least) {
   auto answer = stepping(deadline, executor, std::move(done));
   // Held where every step can reach it: a Secret is not copied.
   auto held = std::make_shared<Secret>(std::move(password));
@@ -113,7 +114,7 @@ void Authenticator::password(std::string login, Secret password, std::string sou
         if (!required.ok()) return answer->finish(Step::of(Step::Kind::failed));
         SignIn sign_in;
         sign_in.user_id = user->id;
-        sign_in.required = required.value;
+        sign_in.required = std::max(required.value, at_least);
         sign_in.started = self->_time.now();
         sign_in.amr = {"pwd"};
         if (user->enrolled) return then_factor(std::move(sign_in));
@@ -142,6 +143,8 @@ void Authenticator::password(std::string login, Secret password, std::string sou
 void Authenticator::totp(SignIn sign_in, std::string code, std::string source, Deadline deadline, Executor executor, Done<Step> done) {
   auto answer = stepping(deadline, executor, std::move(done));
   if (!_live(sign_in, SignIn::Stage::second_factor)) return answer->finish(Step::of(Step::Kind::ended, std::move(sign_in)));
+  // A code is not phishing-resistant: where phr is required, only a WebAuthn credential will do.
+  if (sign_in.required == Assurance::phr) return _code_refused(std::move(sign_in), source, "signin.totp.refused", executor, to(answer));
   const auto account = account_key(sign_in.user_id);
   const auto address = address_key(source);
   if (const auto wait = _waiting(account, address)) return answer->finish(waiting(*wait, std::move(sign_in)));
@@ -162,6 +165,7 @@ void Authenticator::totp(SignIn sign_in, std::string code, std::string source, D
 void Authenticator::recovery(SignIn sign_in, Secret code, std::string source, Deadline deadline, Executor executor, Done<Step> done) {
   auto answer = stepping(deadline, executor, std::move(done));
   if (!_live(sign_in, SignIn::Stage::second_factor)) return answer->finish(Step::of(Step::Kind::ended, std::move(sign_in)));
+  if (sign_in.required == Assurance::phr) return _code_refused(std::move(sign_in), source, "signin.recovery.refused", executor, to(answer));
   const auto account = account_key(sign_in.user_id);
   const auto address = address_key(source);
   if (const auto wait = _waiting(account, address)) return answer->finish(waiting(*wait, std::move(sign_in)));
@@ -259,18 +263,115 @@ void Authenticator::enrol_confirm(SignIn sign_in, std::string factor_id, std::st
   _factors->totp_confirm(actor, sign_in.user_id, std::move(factor_id), std::move(code), kStepDeadline, executor, [=](Outcome<> confirmed) mutable {
     if (confirmed.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
     if (!confirmed.ok()) return self->_code_refused(std::move(sign_in), source, "enrolment.totp.refused", executor, to(answer));
+    sign_in.amr.push_back("otp");
+    self->_enrolled(std::move(sign_in), source, executor, to(answer));
+  });
+}
 
-    self->_factors->recovery_generate(actor, sign_in.user_id, kStepDeadline, executor, [=](Outcome<std::vector<Secret>> codes) mutable {
-      if (!codes.ok()) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
-      auto kept = std::make_shared<std::vector<Secret>>(std::move(codes.value));
-      self->_directory->enrolled_set(actor, sign_in.user_id, true, kStepDeadline, executor, [=](Outcome<directory::User> enrolled) mutable {
-        if (!enrolled.ok()) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
-        self->_links->first_sign_in_spend(sign_in.user_id, kStepDeadline, executor, [=](Outcome<>) mutable {
-          sign_in.amr.push_back("otp");
-          self->_complete(std::move(sign_in), source, executor, [answer, kept](Step step) {
-            step.recovery_codes = std::move(*kept);
-            answer->finish(std::move(step));
-          });
+namespace {
+
+// RFC 8176's methods for a WebAuthn ceremony: a synced passkey is a software key, any other a
+// hardware one; "user" when the authenticator verified the user.
+void push_webauthn_methods(SignIn& sign_in, bool backed_up, bool user_verified) {
+  sign_in.amr.push_back(backed_up ? "swk" : "hwk");
+  if (user_verified) sign_in.amr.push_back("user");
+}
+
+}  // namespace
+
+void Authenticator::webauthn(SignIn sign_in, std::string credential_id, webauthn::Expected expected, Bytes client_data_json, Bytes authenticator_data,
+                             Bytes signature, std::string source, Deadline deadline, Executor executor, Done<Step> done) {
+  auto answer = stepping(deadline, executor, std::move(done));
+  if (!_live(sign_in, SignIn::Stage::second_factor)) return answer->finish(Step::of(Step::Kind::ended, std::move(sign_in)));
+  const auto account = account_key(sign_in.user_id);
+  const auto address = address_key(source);
+  if (const auto wait = _waiting(account, address)) return answer->finish(waiting(*wait, std::move(sign_in)));
+
+  auto self = shared_from_this();
+  _factors->webauthn_check(sign_in.user_id, std::move(expected), std::move(credential_id), std::move(client_data_json), std::move(authenticator_data),
+                           std::move(signature), kStepDeadline, executor, [=](Outcome<webauthn::Asserted> checked) mutable {
+                             if (checked.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
+                             if (!checked.ok()) {
+                               self->_failed(account, address);
+                               return self->_code_refused(std::move(sign_in), source, "signin.webauthn.refused", executor, to(answer));
+                             }
+                             self->_accounts.succeeded(account);
+                             push_webauthn_methods(sign_in, checked.value.backed_up, checked.value.user_verified);
+                             self->_complete(std::move(sign_in), source, executor, to(answer));
+                           });
+}
+
+void Authenticator::passkey(std::string user_handle, std::string credential_id, webauthn::Expected expected, Bytes client_data_json, Bytes authenticator_data,
+                            Bytes signature, std::string source, Deadline deadline, Executor executor, Done<Step> done) {
+  auto answer = stepping(deadline, executor, std::move(done));
+  // A passkey stands for the password too, so the user must have been verified.
+  expected.user_verification = true;
+  // An unknown handle backs off under its own key, as an unknown name does.
+  const auto account = account_key(user_handle.empty() ? "?" : user_handle);
+  const auto address = address_key(source);
+  if (const auto wait = _waiting(account, address)) return answer->finish(waiting(*wait));
+
+  auto self = shared_from_this();
+  const auto refused = [=](std::string subject, std::string why) {
+    self->_failed(account, address);
+    self->_record("signin.passkey.refused", "anonymous", std::move(subject), source, std::move(why), executor,
+                  [answer] { answer->finish(Step::of(Step::Kind::refused)); });
+  };
+  _directory->user(user_handle, kStepDeadline, executor, [=](Outcome<std::optional<directory::User>> found) {
+    if (!found.ok()) return answer->finish(Step::of(Step::Kind::failed));
+    const auto user = found.value;
+    if (!user) return refused("", "unknown");
+    if (user->kind != directory::Kind::person) return refused(user->id, "a service");
+    if (user->disabled) return refused(user->id, "disabled");
+    if (!user->enrolled) return refused(user->id, "not enrolled");
+    self->_factors->webauthn_check(user->id, expected, credential_id, client_data_json, authenticator_data, signature, kStepDeadline, executor,
+                                   [=](Outcome<webauthn::Asserted> checked) {
+                                     if (checked.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed));
+                                     if (!checked.ok()) return refused(user->id, checked.message);
+                                     self->_accounts.succeeded(account);
+                                     self->_policies->required(user->id, kStepDeadline, executor, [=](Outcome<Assurance> required) {
+                                       if (!required.ok()) return answer->finish(Step::of(Step::Kind::failed));
+                                       SignIn sign_in;
+                                       sign_in.user_id = user->id;
+                                       sign_in.required = required.value;
+                                       sign_in.started = self->_time.now();
+                                       push_webauthn_methods(sign_in, checked.value.backed_up, checked.value.user_verified);
+                                       self->_complete(std::move(sign_in), source, executor, to(answer));
+                                     });
+                                   });
+  });
+}
+
+void Authenticator::enrol_webauthn(SignIn sign_in, std::string name, webauthn::Expected expected, Bytes client_data_json, Bytes attestation_object,
+                                   std::string source, Deadline deadline, Executor executor, Done<Step> done) {
+  auto answer = stepping(deadline, executor, std::move(done));
+  if (!_live(sign_in, SignIn::Stage::enrolment)) return answer->finish(Step::of(Step::Kind::ended, std::move(sign_in)));
+  const audit::Actor actor{sign_in.user_id, source};
+  // Required, so the ceremony refused anything the authenticator did not verify.
+  const bool verified = expected.user_verification;
+  auto self = shared_from_this();
+  _factors->webauthn_register(actor, sign_in.user_id, std::move(name), std::move(expected), std::move(client_data_json), std::move(attestation_object),
+                              kStepDeadline, executor, [=](Outcome<FactorInfo> registered) mutable {
+                                if (registered.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
+                                if (!registered.ok())
+                                  return self->_code_refused(std::move(sign_in), source, "enrolment.webauthn.refused", executor, to(answer));
+                                push_webauthn_methods(sign_in, registered.value.backed_up, verified);
+                                self->_enrolled(std::move(sign_in), source, executor, to(answer));
+                              });
+}
+
+void Authenticator::_enrolled(SignIn sign_in, std::string source, Executor executor, Done<Step> done) {
+  const audit::Actor actor{sign_in.user_id, source};
+  auto self = shared_from_this();
+  _factors->recovery_generate(actor, sign_in.user_id, kStepDeadline, executor, [=](Outcome<std::vector<Secret>> codes) mutable {
+    if (!codes.ok()) return done(Step::of(Step::Kind::failed, std::move(sign_in)));
+    auto kept = std::make_shared<std::vector<Secret>>(std::move(codes.value));
+    self->_directory->enrolled_set(actor, sign_in.user_id, true, kStepDeadline, executor, [=](Outcome<directory::User> enrolled) mutable {
+      if (!enrolled.ok()) return done(Step::of(Step::Kind::failed, std::move(sign_in)));
+      self->_links->first_sign_in_spend(sign_in.user_id, kStepDeadline, executor, [=](Outcome<>) mutable {
+        self->_complete(std::move(sign_in), source, executor, [done, kept](Step step) {
+          step.recovery_codes = std::move(*kept);
+          done(std::move(step));
         });
       });
     });
@@ -284,17 +385,19 @@ void Authenticator::remove_factor(audit::Actor actor, std::string user_id, std::
   _factors->list(user_id, kStepDeadline, executor, [=](Outcome<std::vector<FactorInfo>> factors) {
     if (!factors.ok()) return answer->finish(Answer::from(factors));
     const FactorInfo* target = nullptr;
-    std::size_t confirmed_totp = 0;
+    // A second factor of their own: a confirmed TOTP secret or a WebAuthn credential.
+    const auto second = [](const FactorInfo& factor) { return factor.confirmed && (factor.kind == FactorKind::totp || factor.kind == FactorKind::webauthn); };
+    std::size_t seconds = 0;
     for (const auto& factor : factors.value) {
       if (factor.id == factor_id) target = &factor;
-      if (factor.kind == FactorKind::totp && factor.confirmed) ++confirmed_totp;
+      if (second(factor)) ++seconds;
     }
     if (target == nullptr) return answer->finish(Answer::failure(Fault::not_found, "no such factor"));
 
     const auto removing = [=] {
       self->_factors->remove(actor, user_id, factor_id, kStepDeadline, executor, [answer](Answer removed) { answer->finish(std::move(removed)); });
     };
-    const bool last = target->kind == FactorKind::totp && target->confirmed && confirmed_totp == 1;
+    const bool last = second(*target) && seconds == 1;
     if (!last) return removing();
     self->_policies->required(user_id, kStepDeadline, executor, [=](Outcome<Assurance> required) {
       if (!required.ok()) return answer->finish(Answer::from(required));
@@ -364,9 +467,15 @@ void Authenticator::_code_refused(SignIn sign_in, std::string source, std::strin
 }
 
 void Authenticator::_complete(SignIn sign_in, std::string source, Executor executor, Done<Step> done) {
+  // A WebAuthn credential is phishing-resistant: with a password, or alone when it verified the
+  // user (which passkey() requires). A TOTP or recovery code is a second factor.
   bool otp = false;
-  for (const auto& method : sign_in.amr) otp = otp || method == "otp";
-  sign_in.reached = otp ? Assurance::mfa : Assurance::pwd;
+  bool webauthn = false;
+  for (const auto& method : sign_in.amr) {
+    otp = otp || method == "otp";
+    webauthn = webauthn || method == "hwk" || method == "swk";
+  }
+  sign_in.reached = webauthn ? Assurance::phr : otp ? Assurance::mfa : Assurance::pwd;
   sign_in.stage = SignIn::Stage::complete;
   const auto reached = std::string(acr(sign_in.reached));
   const auto user_id = sign_in.user_id;

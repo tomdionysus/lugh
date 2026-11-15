@@ -9,6 +9,7 @@
 
 #include <boost/json.hpp>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -40,6 +41,11 @@ std::optional<boost::json::object> public_jwk(const VerifyKey& key);
 // The key a public JWK names; nothing for anything but a P-256 or Ed25519 public key, and for
 // a JWK that holds a private part.
 std::optional<VerifyKey> from_jwk(const boost::json::object& jwk);
+
+// The SubjectPublicKeyInfo (DER) for raw coordinates: P-256's x and y (32 bytes each), or
+// Ed25519's x (32 bytes, `y` empty). Nothing for a wrong length or a point not on its curve.
+// From a JWK here, and from a COSE key in WebAuthn.
+std::optional<Bytes> public_key_der(SigningAlgorithm algorithm, std::span<const unsigned char> x, std::span<const unsigned char> y);
 
 // The longest JWS Lugh reads: a token is kept under 8 KiB (TODO/2026-11-04-oauth.md).
 inline constexpr std::size_t kMostJwsBytes = 16 * 1024;

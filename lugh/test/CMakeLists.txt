@@ -24,6 +24,7 @@ add_executable(lugh_tests
     authn_app_passwords_test.cpp
     authn_authenticator_test.cpp
     authn_backoff_test.cpp
+    authn_challenges_test.cpp
     authn_enrolment_links_test.cpp
     authn_factors_test.cpp
     authn_genesis_test.cpp
@@ -83,17 +84,22 @@ add_executable(lugh_tests
     node_process_oauth_test.cpp
     node_process_signin_test.cpp
     node_process_tls_test.cpp
+    node_process_webauthn_test.cpp
     node_process_shutdown_test.cpp
     session_pre_sessions_test.cpp
     session_sessions_test.cpp
     signin_pages_test.cpp
     signin_qr_test.cpp
+    signin_webauthn_test.cpp
     store_async_test.cpp
     store_contract_test.cpp
     store_log_format_test.cpp
     store_sealed_store_test.cpp
     system_files_test.cpp
     tokens_signing_keys_test.cpp
+    webauthn_cbor_test.cpp
+    webauthn_ceremony_test.cpp
+    webauthn_cose_test.cpp
 )
 
 target_link_libraries(lugh_tests PRIVATE lugh GTest::gtest_main)

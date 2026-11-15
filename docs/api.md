@@ -91,7 +91,7 @@ the client reads again. Policies are settings written whole with `PUT`, and memb
 | `GET`, `POST /api/v1/me/app-passwords`, `DELETE /api/v1/me/app-passwords/{app_password}` | any caller | The same for the caller's own, never with a scope the caller does not hold |
 | `GET /api/v1/users/{id}/factors` | directory.read | Their factors: `id`, `kind`, `confirmed`, `created_at`, and `remaining` for recovery codes |
 | `DELETE /api/v1/users/{id}/factors/{factor}` | credentials.write | One factor; `409 refused` for the last while policy needs one |
-| `POST /api/v1/users/{id}/factors/reset` | credentials.write | Every factor gone and the user not enrolled, for one who lost them all |
+| `POST /api/v1/users/{id}/factors/reset` | credentials.write | Every factor gone and the user not enrolled, for one who lost them all. A person calling must be at `phr` (a passkey or security key), since a reset lets someone else enrol in the user's name: `403 forbidden` otherwise. A service acts with its key |
 | `POST /api/v1/users/{id}/enrolment` | credentials.write | A one-time enrolment link: `201 {token, expires_at}`, shown once, valid 72 hours, ending any before it |
 | `GET /api/v1/groups` | directory.read | Every group; `?name=` for one |
 | `POST /api/v1/groups` | directory.write | `{name, description?}` |

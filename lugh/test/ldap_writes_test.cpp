@@ -73,7 +73,7 @@ class LdapWritesTest : public ::testing::Test {
   Writes::Asking as(std::vector<std::string> scopes, std::optional<Filter> assertion = std::nullopt) {
     Writes::Asking out;
     out.bound.dn = person_dn("alice");
-    out.bound.caller = lugh::http::Caller{lugh::http::Caller::Kind::user, alice.id, std::move(scopes)};
+    out.bound.caller = lugh::http::Caller{lugh::http::Caller::Kind::user, alice.id, std::move(scopes), "urn:lugh:acr:pwd"};
     out.address = "192.0.2.7";
     out.assertion = std::move(assertion);
     return out;

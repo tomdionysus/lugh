@@ -136,6 +136,8 @@ Sessions, refresh tokens, consents, applications and signing keys are in the sto
 
 ## Not built
 
-- `phr`, and WebAuthn with it: P11. An application requiring `phr` is refused until then.
+- Asking the sign-in pages for `phr` directly. An application requiring `phr`, or a request asking for it, sends a user whose
+  session is below it back to sign in. A password with a WebAuthn credential, or a passkey alone, reaches it. The pages do not
+  yet hide TOTP when `phr` is wanted, so a user who answers with a code is sent back again (P11, W5b).
 - Dynamic client registration, front-channel logout, and the implicit and password grants: never,
   or not planned.

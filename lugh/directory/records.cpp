@@ -8,6 +8,7 @@
 #include "lugh/directory/records.h"
 
 #include "lugh/core/codec.h"
+#include "lugh/core/encoding.h"
 
 namespace lugh::directory {
 
@@ -36,37 +37,11 @@ char lower(char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' +
 
 bool letter_or_digit(char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'); }
 
-// The length of the UTF-8 sequence starting at `at`, or 0 for one that is not valid:
-// overlong forms, surrogates and values past U+10FFFF included.
+// A UTF-8 sequence's length as encoding::utf8_length gives it, but 0 for a C1 control
+// (U+0080 to U+009F, encoded C2 80 to C2 9F), which a printable name never holds.
 std::size_t utf8_length(std::string_view text, std::size_t at) {
-  const auto byte = [&](std::size_t i) { return static_cast<unsigned char>(text[i]); };
-  const auto first = byte(at);
-  if (first < 0x80) return 1;
-
-  std::size_t length;
-  unsigned value;
-  if ((first & 0xe0) == 0xc0) {
-    length = 2;
-    value = first & 0x1f;
-  } else if ((first & 0xf0) == 0xe0) {
-    length = 3;
-    value = first & 0x0f;
-  } else if ((first & 0xf8) == 0xf0) {
-    length = 4;
-    value = first & 0x07;
-  } else {
-    return 0;
-  }
-  if (at + length > text.size()) return 0;
-  for (std::size_t i = 1; i < length; ++i) {
-    if ((byte(at + i) & 0xc0) != 0x80) return 0;
-    value = (value << 6) | (byte(at + i) & 0x3f);
-  }
-
-  static constexpr unsigned kLeast[] = {0, 0, 0x80, 0x800, 0x10000};
-  if (value < kLeast[length] || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) return 0;
-  // C1 controls.
-  if (value >= 0x80 && value <= 0x9f) return 0;
+  const auto length = encoding::utf8_length(text, at);
+  if (length == 2 && static_cast<unsigned char>(text[at]) == 0xc2 && static_cast<unsigned char>(text[at + 1]) <= 0x9f) return 0;
   return length;
 }
 

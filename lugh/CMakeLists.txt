@@ -66,6 +66,7 @@ add_library(lugh STATIC
     audit/audit_log.cpp
     authn/app_passwords.cpp
     authn/authenticator.cpp
+    authn/challenges.cpp
     authn/enrolment_links.cpp
     authn/factors.cpp
     authn/genesis.cpp
@@ -124,6 +125,9 @@ add_library(lugh STATIC
     system/system_console.cpp
     system/system_files.cpp
     tokens/signing_keys.cpp
+    webauthn/cbor.cpp
+    webauthn/ceremony.cpp
+    webauthn/cose.cpp
 )
 
 target_include_directories(lugh

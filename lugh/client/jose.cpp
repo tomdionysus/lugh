@@ -68,6 +68,25 @@ std::optional<boost::json::object> public_jwk(const VerifyKey& key) {
   return out;
 }
 
+std::optional<Bytes> public_key_der(SigningAlgorithm algorithm, std::span<const unsigned char> x, std::span<const unsigned char> y) {
+  Bytes out;
+  if (algorithm == SigningAlgorithm::es256) {
+    if (x.size() != 32 || y.size() != 32) return std::nullopt;
+    out.assign(kP256Prefix.begin(), kP256Prefix.end());
+    out.push_back(0x04);
+    out.insert(out.end(), x.begin(), x.end());
+    out.insert(out.end(), y.begin(), y.end());
+  } else {
+    if (x.size() != 32 || !y.empty()) return std::nullopt;
+    out.assign(kEd25519Prefix.begin(), kEd25519Prefix.end());
+    out.insert(out.end(), x.begin(), x.end());
+  }
+  // A point not on the curve is no key: Dannan's parser says which algorithm a
+  // SubjectPublicKeyInfo is for only when OpenSSL can read it.
+  if (dannan::identity::algorithm_of_public_key(out) != algorithm) return std::nullopt;
+  return out;
+}
+
 std::optional<VerifyKey> from_jwk(const boost::json::object& jwk) {
   if (jwk.contains("d")) return std::nullopt;
   const auto kty = string_member(jwk, "kty");
@@ -79,25 +98,19 @@ std::optional<VerifyKey> from_jwk(const boost::json::object& jwk) {
 
   VerifyKey key;
   key.kid = string_member(jwk, "kid").value_or("");
+  std::optional<Bytes> der;
   if (*kty == "EC" && *crv == "P-256") {
     const auto y = string_member(jwk, "y");
     const auto y_bytes = y ? encoding::base64url_decode(*y) : std::nullopt;
-    if (!y_bytes || y_bytes->size() != 32) return std::nullopt;
+    if (!y_bytes) return std::nullopt;
     key.algorithm = SigningAlgorithm::es256;
-    key.public_key.assign(kP256Prefix.begin(), kP256Prefix.end());
-    key.public_key.push_back(0x04);
-    key.public_key.insert(key.public_key.end(), x_bytes->begin(), x_bytes->end());
-    key.public_key.insert(key.public_key.end(), y_bytes->begin(), y_bytes->end());
+    der = public_key_der(key.algorithm, *x_bytes, *y_bytes);
   } else if (*kty == "OKP" && *crv == "Ed25519") {
     key.algorithm = SigningAlgorithm::ed25519;
-    key.public_key.assign(kEd25519Prefix.begin(), kEd25519Prefix.end());
-    key.public_key.insert(key.public_key.end(), x_bytes->begin(), x_bytes->end());
-  } else {
-    return std::nullopt;
+    der = public_key_der(key.algorithm, *x_bytes, {});
   }
-  // A point not on the curve is no key: Dannan's parser says which algorithm a
-  // SubjectPublicKeyInfo is for only when OpenSSL can read it.
-  if (dannan::identity::algorithm_of_public_key(key.public_key) != key.algorithm) return std::nullopt;
+  if (!der) return std::nullopt;
+  key.public_key = std::move(*der);
   if (const auto alg = string_member(jwk, "alg"); alg && *alg != dannan::identity::algorithm_name(key.algorithm)) return std::nullopt;
   return key;
 }
