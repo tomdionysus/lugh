@@ -14,6 +14,7 @@
 #include "lugh/signin/html.h"
 #include "lugh/test/fixtures/dpop_proofs.h"
 #include "lugh/test/fixtures/signin_rig.h"
+#include "lugh/test/fixtures/soft_authenticator.h"
 
 using lugh::http::verb;
 using Strings = std::vector<std::string>;
@@ -209,9 +210,21 @@ TEST_F(OAuthFlowTest, RefusalsAtTheAuthorizationEndpoint) {
   // prompt=none without a session.
   const auto silent = rig.get(authorize_target(app.client_id, "&prompt=none"));
   EXPECT_EQ(query_value(silent.location(), "error"), "login_required");
-  // Asking for phr before WebAuthn exists.
+  // phr (P11): asked for and not yet held, the user goes to sign in, as for any other level.
   const auto phr = rig.get(authorize_target(app.client_id, "&acr_values=urn%3Alugh%3Aacr%3Aphr"));
-  EXPECT_EQ(query_value(phr.location(), "error"), "unmet_authentication_requirements");
+  EXPECT_EQ(phr.location().rfind("/signin?continue=", 0), 0u) << phr.location();
+}
+
+// A session at mfa is not enough for an application that needs phr: back to sign in, or, asked
+// not to prompt, login_required.
+TEST_F(OAuthFlowTest, PhrIsNotMetByAnMfaSession) {
+  const auto [app, secret] = register_web();
+  ASSERT_EQ(rig.sign_in("alice", kPassword).location(), "/signin/factor");
+  ASSERT_EQ(rig.post("/signin/factor", {{"csrf", rig.get("/signin/factor").csrf()}, {"code", rig.code_for(rig.secret)}}).location(), "/signin/done");
+  const auto phr = rig.get(authorize_target(app.client_id, "&acr_values=urn%3Alugh%3Aacr%3Aphr"));
+  EXPECT_EQ(phr.location().rfind("/signin?continue=", 0), 0u) << phr.location();
+  const auto silent = rig.get(authorize_target(app.client_id, "&acr_values=urn%3Alugh%3Aacr%3Aphr&prompt=none"));
+  EXPECT_EQ(query_value(silent.location(), "error"), "login_required");
 }
 
 TEST_F(OAuthFlowTest, OnlyTheAppsGroupsMayUseIt) {
@@ -792,4 +805,54 @@ TEST_F(OAuthFlowTest, TheDeviceGrant) {
                                    .body)
                 .at("error"),
             "access_denied");
+}
+
+// phr met (P11): an application asks for it, and a password with a security key reaches it, so
+// the code comes back and its tokens say so.
+TEST_F(OAuthFlowTest, PhrIsMetByAPasswordAndASecurityKey) {
+  const auto b64 = [](const std::vector<std::uint8_t>& bytes) { return lugh::encoding::base64url(bytes); };
+  soft_authenticator::Authenticator key;
+  key.rp_id = SigninRig::kRpId;
+  key.origin = SigninRig::kIssuer;
+  key.user_verified = false;
+  const auto created = key.create("registration challenge, 32 bytes");
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) {
+                rig.factors->webauthn_register(rig.admin, alice.id, "key", {SigninRig::kRpId, {SigninRig::kIssuer}, "registration challenge, 32 bytes", false},
+                                               lugh::Bytes(created.client_data_json.begin(), created.client_data_json.end()),
+                                               lugh::Bytes(created.attestation_object.begin(), created.attestation_object.end()), kTestDeadline, executor,
+                                               done);
+              }).ok());
+
+  const auto [app, secret] = register_web();
+  const auto first = rig.get(authorize_target(app.client_id, "&acr_values=urn%3Alugh%3Aacr%3Aphr"));
+  const auto form = rig.get(first.location());
+  const auto resume = form.between("name=\"continue\" value=\"", "\"");
+  ASSERT_EQ(rig.post("/signin", {{"csrf", form.csrf()}, {"login", "alice"}, {"password", kPassword}, {"continue", resume}}).location(), "/signin/factor");
+  const auto factor = rig.get("/signin/factor");
+  const auto fetched =
+      rig.send(verb::post, "/signin/webauthn/options", R"({"purpose":"factor"})", {{"Content-Type", "application/json"}, {"X-CSRF-Token", factor.csrf()}});
+  ASSERT_EQ(fetched.status, 200u) << fetched.body;
+  const auto challenge = std::string(boost::json::parse(fetched.body).at("challenge").as_string());
+  const auto raw = lugh::encoding::base64url_decode(challenge);
+  ASSERT_TRUE(raw);
+  const auto proof = key.get(std::string(raw->begin(), raw->end()));
+  const auto done = rig.post("/signin/webauthn", {{"csrf", factor.csrf()},
+                                                  {"purpose", "factor"},
+                                                  {"challenge", challenge},
+                                                  {"id", b64(key.credential_id())},
+                                                  {"client_data", b64(proof.client_data_json)},
+                                                  {"authenticator_data", b64(proof.authenticator_data)},
+                                                  {"signature", b64(proof.signature)}});
+  ASSERT_EQ(done.location().rfind("/oauth2/authorize/resume?id=", 0), 0u) << done.status << " " << done.body;
+  const auto back = rig.get(done.location()).location();
+  const auto code = query_value(back, "code");
+  ASSERT_FALSE(code.empty()) << back;
+
+  const auto tokens = redeem(app.client_id, secret, code);
+  ASSERT_EQ(tokens.status, 200u) << tokens.body;
+  const auto body = boost::json::parse(tokens.body);
+  const auto access = claims_of(std::string(body.at("access_token").as_string()));
+  EXPECT_EQ(access.at("acr"), "urn:lugh:acr:phr");
+  EXPECT_EQ(access.at("amr"), (boost::json::array{"pwd", "hwk"}));
+  EXPECT_EQ(claims_of(std::string(body.at("id_token").as_string())).at("acr"), "urn:lugh:acr:phr");
 }

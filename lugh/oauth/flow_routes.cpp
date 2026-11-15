@@ -114,9 +114,6 @@ void decide(const std::shared_ptr<Shared>& shared, const RouteContext& context, 
     auto required = authn::Assurance::pwd;
     if (const auto level = authn::assurance_from_acr(app.acr)) required = std::max(required, *level);
     if (request.acr) required = std::max(required, *request.acr);
-    // Nobody reaches phr before WebAuthn (P11): refused rather than given less.
-    if (required == authn::Assurance::phr)
-      return error_back(*shared, context, request, "unmet_authentication_requirements", "this application needs a phishing-resistant sign-in");
 
     const auto session = session_of(*shared, context);
     const auto now = shared->now();
