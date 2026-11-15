@@ -40,8 +40,9 @@ state:
   directory: "config/dev/state"
 
 proxy:
-  # A request from one of these is taken at the last address in its X-Forwarded-For, the
-  # one that proxy appended. Anything else is taken at its socket's address, and any
+  # A request from one of these is taken at the last address in its X-Forwarded-For that
+  # is not itself in these networks (so a chain of your own proxies is walked back to the
+  # client). Anything else is taken at its socket's address, and any
   # forwarding header it sends is ignored: anyone can write one. Empty, as here, means no
   # proxy is trusted and every request is its socket's address.
   trusted_networks: []

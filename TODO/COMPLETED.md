@@ -2,6 +2,17 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-15: step E, ClientAddress on Dannan's forwarded_for
+
+- `ClientAddress` keeps its face (`resolve(peer, request)`). Its own walk of X-Forwarded-For is deleted, and it calls `dannan::listen::forwarded_for()` with the trusted networks as `Prefix`es. Several header lines are joined in order (RFC 9110 5.3).
+- Changes in behaviour, each with a test:
+  - A chain of trusted proxies is now walked back to the first address that is not one. Before, the last entry was taken even when it was another of the operator's proxies.
+  - A chain made only of trusted proxies resolves to its first entry.
+  - `addr:port` and `[v6]` entries are read.
+  - An entry that is not an address stops the walk at the trusted proxy before it, never past it.
+- The comments in `config/config.yaml` and `lugh/node/config.h` now say so.
+- 725 tests (721 plus 4). One run each: debug and ASan with leak detection on node-b, TSan on node-a. All green, no sanitizer report. The new tests are pure functions with no threads, so they were not repeated.
+
 ## 2026-11-15: the listeners on dannan::listen, steps A to D, on Dannan 0.8.2
 
 On `feature/dannan-listen`, not yet merged.

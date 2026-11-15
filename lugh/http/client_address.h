@@ -8,10 +8,10 @@
 #pragma once
 
 #include <boost/asio/ip/address.hpp>
-#include <optional>
 #include <string>
 #include <vector>
 
+#include "dannan/listen/limits.h"
 #include "lugh/http/http_types.h"
 #include "lugh/network/cidr.h"
 
@@ -20,10 +20,12 @@ namespace lugh::http {
 // Who a request is from, for the back-off and the audit log.
 //
 // Lugh terminates its own TLS, so the socket's peer is the client unless the operator has
-// put a proxy in front and named it in proxy.trusted_networks. A request from a trusted
-// proxy is taken at the last entry of X-Forwarded-For, the one that proxy appended; earlier
-// entries are whatever the client sent and are never read. Any other peer is taken at its
-// socket's address, and any forwarding header it sends is ignored: anyone can write one.
+// put proxies in front and named them in proxy.trusted_networks. From a trusted proxy,
+// X-Forwarded-For is read from the right, past every trusted proxy, to the first address that
+// is not one (Dannan's forwarded_for); entries left of it are whatever the client sent and are
+// never read, and an entry that is not an address stops the walk short. Any other peer is
+// taken at its socket's address, and any forwarding header it sends is ignored: anyone can
+// write one.
 class ClientAddress {
  public:
   explicit ClientAddress(std::vector<network::Cidr> trusted_proxies);
@@ -31,9 +33,7 @@ class ClientAddress {
   std::string resolve(const boost::asio::ip::address& peer, const HttpRequest& request) const;
 
  private:
-  static std::optional<std::string> _last_forwarded(const HttpRequest& request);
-
-  std::vector<network::Cidr> _trusted_proxies;
+  std::vector<dannan::listen::Prefix> _trusted_proxies;
 };
 
 }  // namespace lugh::http

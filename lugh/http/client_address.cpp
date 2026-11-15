@@ -7,53 +7,29 @@
 
 #include "lugh/http/client_address.h"
 
-#include <utility>
-
 namespace lugh::http {
 
 namespace {
 
-std::string trim(const std::string& text) {
-  const auto first = text.find_first_not_of(" \t");
-  if (first == std::string::npos) return {};
-  const auto last = text.find_last_not_of(" \t");
-  return text.substr(first, last - first + 1);
-}
-
-// The address as text, or nullopt when it is not one.
-std::optional<std::string> address_text(const std::string& text) {
-  boost::system::error_code ec;
-  const auto address = boost::asio::ip::make_address(text, ec);
-  if (ec) return std::nullopt;
-  return network::unmapped(address).to_string();
+std::vector<dannan::listen::Prefix> prefixes_of(const std::vector<network::Cidr>& networks) {
+  std::vector<dannan::listen::Prefix> out;
+  out.reserve(networks.size());
+  for (const auto& network : networks) out.push_back(dannan::listen::Prefix{network.address(), static_cast<std::uint8_t>(network.prefix())});
+  return out;
 }
 
 }  // namespace
 
-ClientAddress::ClientAddress(std::vector<network::Cidr> trusted_proxies) : _trusted_proxies(std::move(trusted_proxies)) {}
+ClientAddress::ClientAddress(std::vector<network::Cidr> trusted_proxies) : _trusted_proxies(prefixes_of(trusted_proxies)) {}
 
 std::string ClientAddress::resolve(const boost::asio::ip::address& peer, const HttpRequest& request) const {
-  const auto direct = network::unmapped(peer);
-
-  for (const auto& network : _trusted_proxies) {
-    if (!network.contains(direct)) continue;
-    if (auto forwarded = _last_forwarded(request)) return *forwarded;
-    break;
+  // Several X-Forwarded-For lines are one list, in order (RFC 9110 5.3).
+  std::string forwarded;
+  for (auto [it, end] = request.equal_range("X-Forwarded-For"); it != end; ++it) {
+    if (!forwarded.empty()) forwarded += ',';
+    forwarded.append(it->value());
   }
-
-  return direct.to_string();
-}
-
-// A proxy appends to the last X-Forwarded-For line, so the last entry of the last line.
-std::optional<std::string> ClientAddress::_last_forwarded(const HttpRequest& request) {
-  std::string last_line;
-  for (auto [it, end] = request.equal_range("X-Forwarded-For"); it != end; ++it) last_line = std::string(it->value());
-  if (last_line.empty()) return std::nullopt;
-
-  const auto comma = last_line.rfind(',');
-  const auto entry = trim(comma == std::string::npos ? last_line : last_line.substr(comma + 1));
-
-  return address_text(entry);
+  return network::unmapped(dannan::listen::forwarded_for(forwarded, _trusted_proxies, network::unmapped(peer))).to_string();
 }
 
 }  // namespace lugh::http

@@ -89,8 +89,8 @@ struct Config {
   std::string ldap_home = "/home/{name}";
   std::string ldap_shell = "/bin/bash";
 
-  // A request from one of these is taken at the last X-Forwarded-For entry; everything else
-  // at its socket's address. Empty by default: no proxy is trusted until named.
+  // A request from one of these is taken at the last X-Forwarded-For entry not in them;
+  // everything else at its socket's address. Empty by default: no proxy is trusted until named.
   std::vector<network::Cidr> trusted_proxies;
 };
 
