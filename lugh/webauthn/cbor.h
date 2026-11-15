@@ -34,6 +34,9 @@ inline constexpr std::size_t kMostItems = 4096;
 
 struct Value {
   enum class Kind : std::uint8_t { integer, bytes, text, array, map, boolean, null };
+  // A map's key and value. Declared here and defined below, since a std::pair of a type still
+  // incomplete is refused by clang with libstdc++.
+  struct Entry;
 
   Kind kind = Kind::null;
   std::int64_t integer = 0;
@@ -41,7 +44,7 @@ struct Value {
   // A byte string's bytes or a text string's UTF-8.
   std::string string;
   std::vector<Value> items;
-  std::vector<std::pair<Value, Value>> entries;
+  std::vector<Entry> entries;
 
   bool is_integer() const { return kind == Kind::integer; }
   bool is_bytes() const { return kind == Kind::bytes; }
@@ -52,6 +55,11 @@ struct Value {
   // key is absent.
   const Value* find(std::int64_t key) const;
   const Value* find(std::string_view key) const;
+};
+
+struct Value::Entry {
+  Value first;
+  Value second;
 };
 
 // One item from the front of `in`. With `used`, what follows it is allowed and `*used`

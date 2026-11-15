@@ -95,7 +95,7 @@ class Decoder {
         std::vector<std::pair<std::size_t, std::size_t>> keys;
         keys.reserve(count);
         for (std::size_t i = 0; i < count; ++i) {
-          std::pair<Value, Value> entry;
+          Value::Entry entry;
           const auto key_from = _at;
           if (!item(entry.first, depth + 1)) return false;
           const std::pair<std::size_t, std::size_t> key{key_from, _at - key_from};
