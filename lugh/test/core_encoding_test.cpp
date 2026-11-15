@@ -106,3 +106,21 @@ TEST(Encoding, Base64KnownAnswers) {
     EXPECT_EQ(*base64_decode(base64(bytes)), bytes) << size;
   }
 }
+
+// RFC 3629: what is UTF-8 and what only looks like it.
+TEST(Encoding, Utf8) {
+  using lugh::encoding::valid_utf8;
+  EXPECT_TRUE(valid_utf8(""));
+  EXPECT_TRUE(valid_utf8("plain"));
+  EXPECT_TRUE(valid_utf8("\xc3\xbc"));
+  EXPECT_TRUE(valid_utf8("\xe2\x82\xac"));
+  EXPECT_TRUE(valid_utf8("\xf0\x9f\x8c\x8a"));
+  EXPECT_TRUE(valid_utf8("\xc2\x80")) << "a C1 control is UTF-8; refusing it is the directory's rule";
+  EXPECT_FALSE(valid_utf8("\xc0\x80")) << "overlong";
+  EXPECT_FALSE(valid_utf8("\xe0\x80\xaf")) << "overlong";
+  EXPECT_FALSE(valid_utf8("\xed\xa0\x80")) << "a surrogate";
+  EXPECT_FALSE(valid_utf8("\xf4\x90\x80\x80")) << "past U+10FFFF";
+  EXPECT_FALSE(valid_utf8("\xc3")) << "cut short";
+  EXPECT_FALSE(valid_utf8("\x80")) << "a continuation alone";
+  EXPECT_FALSE(valid_utf8("\xff"));
+}
