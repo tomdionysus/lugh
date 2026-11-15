@@ -95,6 +95,7 @@ add_executable(lugh_tests
     system_files_test.cpp
     tokens_signing_keys_test.cpp
     webauthn_cbor_test.cpp
+    webauthn_ceremony_test.cpp
     webauthn_cose_test.cpp
 )
 
