@@ -63,7 +63,11 @@ subscriber holds that and never `lugh:directory.read`.
 
 1. When: recommended after P8.1 (the audit log as a node-local Dagda space, `lugh-node` a Dannan node), so the outbox is
    built once on the store it keeps. Before P8, it would be built on the sealed store and moved.
-2. The MQTT client Lugh links (Lir's, or a small one in Dannan).
+2. ~~The MQTT client Lugh links.~~ Answered 2026-11-15: Lir's `lir::client`, approved by the maintainer (Lir develop 542517c). It
+   speaks MQTT 5.0 and 3.1.1 over TCP or TLS, with QoS 0 and 1, retained messages, a will and reconnect with backoff. The
+   password is a function asked at each CONNECT, so Lugh issues itself a fresh token every time. It is fetched with
+   `LIR_BUILD_SERVER=OFF` and linked against Lugh's own `dannan::dannan`, and moves onto Dannan's `StreamConnector`
+   (0.8.3) underneath.
 3. Whether hosted systems also want group events (a group's members changed) or only per-principal ones.
 
 ## Tests
