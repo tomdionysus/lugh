@@ -50,6 +50,7 @@ std::vector<dannan::config::Setting> ConfigLoader::settings() {
       {"tls.key", Kind::value, "--tls-key", "LUGH_TLS_KEY", "a path"},
       {"proxy.trusted_networks", Kind::list, "", "", "networks, as 10.0.0.0/8"},
       {"state.directory", Kind::value, "--state-directory", "LUGH_STATE_DIRECTORY", "a path"},
+      {"static.directory", Kind::value, "--static-directory", "LUGH_STATIC_DIRECTORY", "a path"},
       {"authn.breached_passwords", Kind::value, "", "", "a path"},
       {"oauth.allow_client_secrets", Kind::toggle, "", "", "true or false"},
       {"oauth.issuer", Kind::value, "--issuer", "LUGH_ISSUER", "an https URL without a query, fragment or trailing '/'"},
@@ -121,6 +122,7 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
     if (const auto certificate = read.path_of("tls.certificate")) config.tls_certificate = *certificate;
     if (const auto key = read.path_of("tls.key")) config.tls_key = *key;
     if (const auto directory = read.path_of("state.directory")) config.state_directory = *directory;
+    if (const auto directory = read.path_of("static.directory")) config.static_directory = *directory;
     if (const auto breached = read.text("authn.breached_passwords")) config.breached_passwords = *breached;
     if (const auto secrets = read.toggle("oauth.allow_client_secrets")) config.allow_client_secrets = *secrets;
     if (const auto issuer = read.text("oauth.issuer")) {

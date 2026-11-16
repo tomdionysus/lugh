@@ -35,6 +35,12 @@ struct Caller {
   // How sure Lugh is of a person: the acr their session or token carries ("urn:lugh:acr:phr");
   // empty for a service, which signs in with its key.
   std::string acr;
+  // Whether it came through a Lugh session (the dashboard), not a bearer or DPoP token. A
+  // session must be at phr to administer (the maintainer, 2026-11-16).
+  bool through_session = false;
+
+  // The acr a session must carry for a scoped route.
+  static constexpr const char* kAdministerAcr = "urn:lugh:acr:phr";
 
   bool authenticated() const { return kind != Kind::none; }
   bool has_scope(const std::string& scope) const { return std::find(scopes.begin(), scopes.end(), scope) != scopes.end(); }

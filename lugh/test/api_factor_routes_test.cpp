@@ -144,6 +144,10 @@ TEST_F(FactorRoutesTest, AddingASecondTotpAndRemovingTheFirst) {
   const auto setup = boost::json::parse(made.body);
   const auto second = text(setup, "id");
   EXPECT_NE(text(setup, "uri").find("otpauth://totp/"), std::string::npos);
+  // Its QR symbol, as modules row by row, for the dashboard to draw.
+  const auto size = setup.at("qr").at("size").as_int64();
+  EXPECT_GE(size, 21);
+  EXPECT_EQ(static_cast<std::int64_t>(setup.at("qr").at("modules").as_string().size()), size * size);
   const auto secret = lugh::text_secret(text(setup, "secret"));
 
   EXPECT_EQ(call(verb::post, "/api/v1/me/factors/totp/" + second + "/confirm", R"({"code":"000000"})").status, 409u);

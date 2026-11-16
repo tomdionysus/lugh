@@ -32,7 +32,7 @@ http::Caller SessionCallers::resolve(const http::HttpRequest& request) const {
     const auto token = request.find(kCsrfHeader);
     if (token == request.end() || !Sessions::csrf_ok(*session, std::string_view(token->value()))) return {};
   }
-  return http::Caller{http::Caller::Kind::user, session->user_id, session->scopes, std::string(authn::acr(session->acr))};
+  return http::Caller{http::Caller::Kind::user, session->user_id, session->scopes, std::string(authn::acr(session->acr)), true};
 }
 
 }  // namespace lugh::session

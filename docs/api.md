@@ -50,6 +50,8 @@ secret.
 | 400 | `invalid` | Not a JSON object, an unknown or mistyped field, a value out of bounds |
 | 401 | `unauthorized` | No credential, or one that does not resolve |
 | 403 | `forbidden` | The credential lacks the route's scope |
+| 403 | `phr_required` | A session below `phr` on a scoped route: administering through a session needs a passkey or security key sign-in. Tokens are not affected, nor a person's own `/api/v1/me` routes |
+| 403 | `reauthentication_required` | A change to a person's own factors outside the re-authentication window |
 | 404 | `not_found` | No such endpoint, user, group, membership or factor |
 | 405 | `method_not_allowed` | The path does not take that method |
 | 409 | `duplicate` | A name or address another record has |

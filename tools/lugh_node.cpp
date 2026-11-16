@@ -51,6 +51,7 @@
 #include "lugh/http/outbound.h"
 #include "lugh/http/rate_limiter.h"
 #include "lugh/http/router.h"
+#include "lugh/http/static_site.h"
 #include "lugh/keys/keyring_manager.h"
 #include "lugh/ldap/ldap_server.h"
 #include "lugh/ldap/operations.h"
@@ -466,9 +467,21 @@ int run(const cli::Options& options) {
 
   auto server = std::make_shared<http::HttpServer>(log, io_context, certificates, client_address);
 
-  // The router first, under the paths it owns; anything left is a 404. The dashboard
-  // joins the chain after the API, in P7.
+  // The router first, under the paths it owns; then the dashboard, when there is one, for every
+  // other path; anything left is a 404.
   for (const auto* prefix : {"/health", "/ready", "/api", "/oauth2", "/.well-known", "/signin", "/signout"}) server->middleware_add(router->middleware(prefix));
+  if (!config.static_directory.empty()) {
+    try {
+      const http::StaticSite site(http::StaticSite::read(config.static_directory));
+      server->middleware_add(site.middleware());
+      logger.info("The dashboard: " + std::to_string(site.size()) + " files from " + config.static_directory);
+    } catch (const std::exception& refused) {
+      logger.error(refused.what());
+      return 1;
+    }
+  } else {
+    logger.info("No static.directory: the dashboard is not served");
+  }
 
   if (const auto listening = server->listen(config.address, config.port); !listening.ok) {
     logger.error(listening.error);

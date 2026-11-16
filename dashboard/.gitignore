@@ -1,0 +1,13 @@
+.DS_Store
+.env
+/node_modules/
+
+# React Router
+/.react-router/
+
+# Build output: produced at install time, never committed
+/build/
+
+# Playwright
+/test-results/
+/playwright-report/

@@ -11,6 +11,7 @@
 #include "lugh/api/representations.h"
 #include "lugh/api/session_routes.h"
 #include "lugh/core/encoding.h"
+#include "lugh/signin/qr.h"
 
 namespace lugh::api {
 
@@ -231,11 +232,18 @@ void totp_begin(const std::shared_ptr<Shared>& shared, const RouteContext& conte
     shared->factors->totp_begin(actor_of(context), user_id, shared->totp_issuer, found.value->name, kRouteDeadline, context.executor,
                                 [context](Outcome<authn::TotpSetup> made) {
                                   if (!made.ok()) return answer_fault(context, made);
-                                  // The secret leaves here once, to its owner, under Cache-Control: no-store.
-                                  answer_json(context, http::status::created,
-                                              boost::json::object{{"id", factor_id(made.value.factor_id)},
-                                                                  {"secret", std::string(secret_text(made.value.secret))},
-                                                                  {"uri", std::string(secret_text(made.value.uri))}});
+                                  // The secret leaves here once, to its owner, under Cache-Control: no-store; with
+                                  // its QR symbol's modules, row by row, for the dashboard to draw.
+                                  boost::json::object out{{"id", factor_id(made.value.factor_id)},
+                                                          {"secret", std::string(secret_text(made.value.secret))},
+                                                          {"uri", std::string(secret_text(made.value.uri))}};
+                                  if (const auto code = signin::qr_encode(secret_text(made.value.uri))) {
+                                    std::string modules;
+                                    modules.reserve(code->dark.size());
+                                    for (const bool dark : code->dark) modules.push_back(dark ? '1' : '0');
+                                    out["qr"] = boost::json::object{{"size", code->size}, {"modules", std::move(modules)}};
+                                  }
+                                  answer_json(context, http::status::created, out);
                                 });
   });
 }

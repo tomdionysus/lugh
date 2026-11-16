@@ -49,7 +49,8 @@ class NodeProcessClient : public ::testing::Test {
     serving.emplace(workspace, node.state, node.credentials, std::nullopt, std::vector<std::string>{"--config", config_path.string()}, port);
     ASSERT_TRUE(serving->up()) << serving->log();
     root.port = port;
-    root.sign_in_and_enrol(password);
+    // At phr, so root may administer through the session.
+    root.sign_in_and_enrol_passkey(password, issuer);
     ASSERT_FALSE(HasFatalFailure());
     register_service();
   }

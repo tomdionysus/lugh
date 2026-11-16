@@ -32,11 +32,13 @@ class NodeProcessLdap : public ::testing::Test {
     ldaps_port = dannan::test::free_port();
     plain_port = dannan::test::free_port();
     const auto config = workspace.path("config.yaml");
-    write_file(config, "ldap: { port: " + std::to_string(ldaps_port) + ", starttls_port: " + std::to_string(plain_port) + ", base_dn: '" + kBase + "' }\n");
+    // An issuer, so root's first sign-in can enrol a passkey and administer at phr.
+    write_file(config, "ldap: { port: " + std::to_string(ldaps_port) + ", starttls_port: " + std::to_string(plain_port) + ", base_dn: '" + kBase +
+                           "' }\noauth: { issuer: " + RootBrowser::kTestIssuer + " }\n");
     serving.emplace(workspace, node.state, node.credentials, std::nullopt, std::vector<std::string>{"--config", config.string()});
     ASSERT_TRUE(serving->up()) << serving->log();
     root.port = serving->port();
-    root.sign_in_and_enrol(password);
+    root.sign_in_and_enrol_passkey(password);
     ASSERT_FALSE(HasFatalFailure());
 
     const auto made = root.api(http::verb::post, "/api/v1/me/app-passwords", R"({"name":"the test","scopes":["lugh:directory.read"]})");
@@ -162,11 +164,13 @@ TEST(NodeProcessLdapPosix, TheBackfillOnTheRealBinary) {
   const auto ldaps_port = dannan::test::free_port();
   const auto config = workspace.path("config.yaml");
   write_file(config, "ldap: { port: " + std::to_string(ldaps_port) + ", base_dn: '" + kBase +
-                         "', posix: { uid_range: 10000-19999, gid_range: 20000-29999, primary_group: administrators, shell: /bin/zsh } }\n");
+                         "', posix: { uid_range: 10000-19999, gid_range: 20000-29999, primary_group: administrators, shell: /bin/zsh } }\n" +
+                         "oauth: { issuer: " + RootBrowser::kTestIssuer + " }\n");
   Serving serving(workspace, node.state, node.credentials, std::nullopt, {"--config", config.string()});
   ASSERT_TRUE(serving.up()) << serving.log();
   RootBrowser root(serving.port());
-  root.sign_in_and_enrol(root_password(node.made.err));
+  // At phr: numbering the directory is administering.
+  root.sign_in_and_enrol_passkey(root_password(node.made.err));
   ASSERT_FALSE(HasFatalFailure());
 
   const auto made = root.api(http::verb::post, "/api/v1/me/app-passwords", R"({"name":"the test"})");

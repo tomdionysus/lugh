@@ -69,7 +69,8 @@ TEST(NodeProcessSignin, RootsFirstSignInOpensTheApi) {
   EXPECT_NE(codes->body.find("Your recovery codes"), std::string::npos);
   ASSERT_TRUE(jar.has("__Host-lugh_session"));
 
-  // The session opens the API; reading needs nothing more, a change its CSRF token.
+  // The session opens the API: a person's own routes at mfa; reading needs nothing more, a change
+  // its CSRF token. Administering needs phr (the maintainer, 2026-11-16), which a TOTP sign-in is not.
   const auto me = as_browser(http::verb::get, "/api/v1/me");
   ASSERT_TRUE(me);
   ASSERT_EQ(me->status, 200u) << me->body;
@@ -80,16 +81,20 @@ TEST(NodeProcessSignin, RootsFirstSignInOpensTheApi) {
 
   const auto users = as_browser(http::verb::get, "/api/v1/users");
   ASSERT_TRUE(users);
-  EXPECT_EQ(users->status, 200u) << users->body;
+  EXPECT_EQ(users->status, 403u) << users->body;
+  EXPECT_EQ(boost::json::parse(users->body).at("error").at("code"), "phr_required");
   const auto json = std::vector<std::pair<std::string, std::string>>{{"Content-Type", "application/json"}};
   auto with_token = json;
   with_token.emplace_back("X-CSRF-Token", token);
-  const auto forged = as_browser(http::verb::post, "/api/v1/groups", R"({"name":"staff"})", json);
+  const auto forged = as_browser(http::verb::post, "/api/v1/me/app-passwords", R"({"name":"mail"})", json);
   ASSERT_TRUE(forged);
   EXPECT_EQ(forged->status, 401u) << forged->body;
-  const auto made = as_browser(http::verb::post, "/api/v1/groups", R"({"name":"staff"})", with_token);
+  const auto made = as_browser(http::verb::post, "/api/v1/me/app-passwords", R"({"name":"mail"})", with_token);
   ASSERT_TRUE(made);
   EXPECT_EQ(made->status, 201u) << made->body;
+  const auto refused = as_browser(http::verb::post, "/api/v1/groups", R"({"name":"staff"})", with_token);
+  ASSERT_TRUE(refused);
+  EXPECT_EQ(refused->status, 403u) << refused->body;
 
   // The same password signs in again, now to the second factor: the first sign-in's allowance
   // was used once.

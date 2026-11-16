@@ -39,6 +39,12 @@ state:
   # tools/lugh_dev_init.sh fills; the unit points at /var/lib/lugh.
   directory: "config/dev/state"
 
+static:
+  # The dashboard's built files, read once at start and served for every path Lugh's own do not
+  # take. Left out, there is no dashboard. In development, after `npm ci && npm run build` in
+  # dashboard/; the unit points at the installed copy.
+  # directory: "dashboard/build/client"
+
 proxy:
   # A request from one of these is taken at the last address in its X-Forwarded-For that
   # is not itself in these networks (so a chain of your own proxies is walked back to the

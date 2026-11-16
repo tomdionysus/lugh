@@ -47,7 +47,8 @@ class NodeProcessWebAuthn : public ::testing::Test {
     config_path = workspace.path("config.yaml");
     write_file(config_path, std::string("oauth: { issuer: ") + kIssuer + " }\n");
     start();
-    root.sign_in_and_enrol(password);
+    // Root's first sign-in enrols a passkey (offered beside TOTP), so root administers at phr.
+    root.sign_in_and_enrol_passkey(password, kIssuer);
     ASSERT_FALSE(HasFatalFailure());
   }
 
@@ -199,4 +200,19 @@ TEST_F(NodeProcessWebAuthn, AClonedKeyAndAnotherOriginAreRefused) {
   ASSERT_TRUE(relayed);
   EXPECT_EQ(relayed->status, 401u) << relayed->body;
   EXPECT_FALSE(elsewhere.jar.has("__Host-lugh_session"));
+}
+
+// Root's first sign-in is offered a passkey as well as TOTP (the maintainer, 2026-11-16, P7): the passkey root
+// enrolled there signs root in alone, at phr, which administering through a session needs.
+TEST_F(NodeProcessWebAuthn, RootsFirstSignInMayEnrolAPasskey) {
+  EXPECT_EQ(acr_of(root), "urn:lugh:acr:phr");
+  RootBrowser later(serving->port());
+  const auto signed_in = passkey(later, root.key, root.root_id);
+  ASSERT_TRUE(signed_in);
+  ASSERT_EQ(signed_in->status, 303u) << signed_in->body;
+  EXPECT_EQ(acr_of(later), "urn:lugh:acr:phr");
+  later.csrf_token = std::string(boost::json::parse(later.browser(http::verb::get, "/api/v1/me")->body).at("session").at("csrf_token").as_string());
+  const auto made = later.api(http::verb::post, "/api/v1/groups", R"({"name":"operators"})");
+  ASSERT_TRUE(made);
+  EXPECT_EQ(made->status, 201u) << made->body;
 }

@@ -58,8 +58,9 @@ those that follow), but nothing in it is specific to them.
 - **Management API.** `/api/v1` for users, groups, memberships, factors, enrolment links,
   policies and the audit log: JSON, scoped permissions, ETags, and one error shape
   ([docs/api.md](docs/api.md)).
-- **Dashboard** (planned). A React admin interface on the same API, same-origin, with no
-  token in the browser.
+- **Dashboard.** A React admin interface (`dashboard/`) on the same API, same-origin, with no
+  token in the browser, served by the node from `static.directory`. Everyone manages their own
+  factors, sessions and app passwords there; administering needs a passkey sign-in.
 - **LDAP** (planned). A second front end on the same directory for mail servers, NAS boxes,
   VPNs and PAM: bind, search and compare, and writes mapped onto Lugh's own fields, never
   a general LDAP server ([TODO/2026-11-04-ldap.md](TODO/2026-11-04-ldap.md)).

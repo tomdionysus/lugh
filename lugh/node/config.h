@@ -55,6 +55,10 @@ struct Config {
   // authenticate with private_key_jwt or tls_client_auth.
   bool allow_client_secrets = false;
 
+  // The dashboard's built files (P7), read once at start and served for every path the routers do
+  // not own. Empty: no dashboard, and such a path is a 404.
+  std::string static_directory;
+
   // The issuer: `iss` in every token, and the base of every URL in the metadata. An https
   // URL without a query, fragment or trailing '/'. Empty: no metadata is served.
   std::string issuer;

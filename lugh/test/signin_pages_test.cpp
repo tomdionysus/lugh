@@ -167,13 +167,16 @@ TEST(SigninPages, RootsFirstSignIn) {
   const auto codes = rig.post("/signin/enrol/totp", {{"csrf", add.csrf()}, {"code", rig.code_for(lugh::text_secret(add.totp_secret()))}});
   ASSERT_EQ(codes.status, 200u) << codes.body;
 
-  // Root's session holds every Lugh scope, so the API opens to it.
+  // Root's session holds every Lugh scope; a TOTP sign-in is mfa, so administering waits for a
+  // passkey (the maintainer, 2026-11-16).
   const auto me = rig.get("/api/v1/me");
   ASSERT_EQ(me.status, 200u) << me.body;
   const auto body = boost::json::parse(me.body);
   EXPECT_EQ(body.at("user").at("name"), "root");
   EXPECT_EQ(body.at("scopes").as_array().size(), lugh::scopes::lugh_scopes().size());
-  EXPECT_EQ(rig.get("/api/v1/users").status, 200u);
+  const auto users = rig.get("/api/v1/users");
+  EXPECT_EQ(users.status, 403u);
+  EXPECT_EQ(boost::json::parse(users.body).at("error").at("code"), "phr_required");
 }
 
 // A session opens the API; a change through it needs its CSRF token, which /api/v1/me gives.
@@ -198,4 +201,26 @@ TEST(SigninPages, TheApiThroughASession) {
   EXPECT_EQ(rig.request(verb::post, "/api/v1/users", {}, {{"Content-Type", "application/json"}}).status, 401u);
   EXPECT_EQ(rig.request(verb::post, "/api/v1/users", {}, {{"Content-Type", "application/json"}, {"X-CSRF-Token", token}}).status, 403u);
   EXPECT_EQ(rig.request(verb::post, "/api/v1/users", {}, {{"Content-Type", "application/json"}, {"X-CSRF-Token", token + "x"}}).status, 401u);
+}
+
+// The dashboard (P7) sends a sign-in, and a step-up, with continue=dashboard, and is where it
+// comes back: the root, never a place the request names.
+TEST(SigninPages, TheDashboardIsWhereItsSignInReturns) {
+  SigninRig rig;
+  rig.enrolled("alice");
+  const auto form = rig.get("/signin?continue=dashboard");
+  ASSERT_EQ(form.status, 200u);
+  ASSERT_EQ(rig.post("/signin", {{"csrf", form.csrf()}, {"login", "alice"}, {"password", kPassword}, {"continue", "dashboard"}}).location(), "/signin/factor");
+  const auto factor = rig.get("/signin/factor");
+  const auto done = rig.post("/signin/factor", {{"csrf", factor.csrf()}, {"code", rig.code_for(rig.secret)}});
+  EXPECT_EQ(done.status, 303u) << done.body;
+  EXPECT_EQ(done.location(), "/");
+
+  // Signed in at mfa, asking for phr: the form again, not "signed in already".
+  const auto step_up = rig.get("/signin?continue=dashboard&acr=urn:lugh:acr:phr");
+  EXPECT_EQ(step_up.status, 200u);
+  EXPECT_FALSE(step_up.csrf().empty());
+  // Anything else as continue goes nowhere but the sign-in's own pages.
+  EXPECT_EQ(rig.get("/signin").location(), "/signin/done");
+  EXPECT_EQ(rig.get("/signin?continue=https://evil.example/").location(), "/signin/done");
 }

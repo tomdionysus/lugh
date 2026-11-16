@@ -85,6 +85,7 @@ add_library(lugh STATIC
     http/http_server.cpp
     http/outbound.cpp
     http/router.cpp
+    http/static_site.cpp
     ldap/authz.cpp
     ldap/ber.cpp
     ldap/connection.cpp
