@@ -217,6 +217,13 @@ if (LUGH_INSTALL_SYSTEM)
 
     install(CODE "
         if (NOT \"\$ENV{LUGH_SKIP_SYSTEM}\")
+            # Dannan's shared library went into the prefix's lib directory with the node: the
+            # loader's cache must know it before lugh-node can run (found by the first test install
+            # on the build nodes, 2026-11-16).
+            find_program(LDCONFIG ldconfig PATHS /usr/sbin /sbin)
+            if (LDCONFIG)
+                execute_process(COMMAND \${LDCONFIG})
+            endif()
             find_program(SYSTEMCTL systemctl)
             if (SYSTEMCTL)
                 message(STATUS \"Preparing the host\")
