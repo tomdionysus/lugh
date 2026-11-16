@@ -27,7 +27,10 @@ Next is the maintainer's choice: P13 (the SSO rollout) or P8 (the cluster on Dag
 
 ## Waiting on others
 
-- **Dagda** is paused for Macha's port (the maintainer, 2026-11-14). Its slice 1 is tagged 0.2.0 locally and not pushed; P8.0 to P8.4 start on
+- **Dagda** (asked 2026-11-16): slice 1 is built, gated and tagged 0.2.0 locally, not pushed; P8.0 can start on it the day the maintainer
+  releases it, which he ruled waits until Macha runs on Dagda as well as before, proven. Dagda's repair redesign (2026-11-16)
+  changes nothing P8.0 to P8.4 relies on; whether a large value can ever leave the head for a data object is unverified on
+  Dagda's side. Dagda is paused for Macha's port (the maintainer, 2026-11-14). Its slice 1 is tagged 0.2.0 locally and not pushed; P8.0 to P8.4 start on
   it (`2026-11-13-p8-plan.md`). P8.5 also waits on the follower-lag fix (slice 2): a disable must be seen on another build node within about
   a second (the maintainer, 2026-11-14).
 - **Dannan 0.9.0's agreement primitive.** TOTP, recovery codes and key rotation become registers on it, with no interim lease or
