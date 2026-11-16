@@ -2,23 +2,20 @@
 
 What is being worked on now and what comes next. When an item ships, move it to `COMPLETED.md` with the date and the outcome.
 
-## Resume here (2026-11-15, end of session)
+## Resume here (2026-11-16)
 
-**P11 (WebAuthn, passkeys, `phr`) is done**: debug, ASan and TSan each green at 784 tests on the final code, and
-`feature/webauthn` merged into `develop` (not pushed; ask the maintainer before pushing). Its record is `COMPLETED.md`, "2026-11-15: P11",
-and its plan with the maintainer's rulings is `2026-11-15-p11-webauthn.md`.
+P11 is done and pushed. Since then, on `develop` (not pushed; ask the maintainer before pushing), each green in debug, ASan and TSan at 799
+tests (`COMPLETED.md`, 2026-11-16):
+- `HttpsClient` on Dannan's `StreamConnector` (merged; Louhi links lugh_client at a34770f and is to be told when this is pushed);
+- a person's own factors, `/api/v1/me/factors`, behind the re-authentication window, on `feature/self-factors`, to merge.
+
+Next, by the maintainer's word (2026-11-15, "3 then 1"): the small open items, then P7, the dashboard.
 
 Still uncommitted, on purpose: `lugh/fuzz/client_fuzz.cpp`, `lugh/fuzz/webauthn_fuzz.cpp` and their lines in
-`lugh/fuzz/CMakeLists.txt`. They wait until every fuzz target is built on node-a's clang (P12).
-
-After P11, the next phase is the maintainer's choice. P7, the dashboard, is unblocked (he put it after P11); P12 is the other candidate. P8
-waits on Dagda.
+`lugh/fuzz/CMakeLists.txt`. They wait until every fuzz target is built (P12).
 
 ## Open, not scheduled
 
-- **`lugh/client/https.cpp` onto Dannan's `StreamConnector`**, which is now in the pinned 0.8.3, with a `ClientTrust` built at
-  start. Its face and tests stay.
-- **Adding a key after enrolment** (`/signin/factors`), which P11's plan named, and re-authentication before a factor change.
 - **Socket activation** for the listeners. Deferred, since `inherited_socket` checks LISTEN_PID and a test cannot set it
   (`2026-11-15-dannan-0.8.md`).
 - **Root's first sign-in enrolling WebAuthn**: at P7 (the maintainer, 2026-11-15).
@@ -55,9 +52,12 @@ in `/srv/build/lugh/dannan` (rsync `../dannan/.git/` there when a new tag is pin
 
 | Machine | Lugh's use |
 |---|---|
-| node-a `.11` | TSan only: clang 19, 4K pages, `~/lugh/build-tsan`. Usually busy with Dagda; queue for it |
-| node-b `.12` | `~/lugh/build` (debug) and `~/lugh/build-asan` |
-| node-d `.14` | `~/lugh/build` (debug), 4 GB, Node 20.19 |
+| node-a `.11` | TSan: clang 19, `~/lugh/build-tsan`. Often busy with Dagda; queue for it |
+| node-b `.12` | `~/lugh/build` (debug) and `~/lugh/build-asan`; clang 19 too, so TSan can run here |
+| node-d `.14` | `~/lugh/build` (debug), 4 GB, Node 20.19. No sanitizer builds: it runs out of memory |
+
+Since 2026-11-16 every build node boots 4K pages, so TSan runs on any of them (clang 19 on node-a, node-b and node-c). Check
+`free -m` before a sanitizer build. TSan on the Mac only to hunt a specific bug (the maintainer, 2026-11-16).
 | node-c `.13` | Not Lugh's; LED Config's services, no reboots |
 
 The claim board (0.2.0):
@@ -70,6 +70,7 @@ The claim board (0.2.0):
 
 ## Documents
 
+- `2026-11-15-self-factors.md`: a person's own factors and the re-authentication window, with the maintainer's rulings. Done.
 - `2026-11-15-p11-webauthn.md`: P11, its steps W1 to W7, the maintainer's rulings and progress.
 - `2026-11-13-p8-plan.md`: P8, the rewrite against Dagda's spaces, steps P8.0 to P8.9, the maintainer's rulings (TOTP on agreement registers,
   the named acknowledgement levels).

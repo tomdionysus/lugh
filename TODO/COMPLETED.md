@@ -2,6 +2,26 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-16: a person's own factors, and HttpsClient on Dannan's connector
+
+A person's own factors (`2026-11-15-self-factors.md`), on the maintainer's rulings of 2026-11-15:
+- `/api/v1/me/factors` (`lugh/api/factor_routes`), from the person's own session only: list, add a TOTP factor (shown once, then
+  confirmed with a code), add a passkey, rename a passkey, remove a factor under the last-factor rule, and new recovery codes.
+- Every change needs the session's re-authentication window (`session::Reauthentications`): ten minutes, by sid, in memory, so a
+  restart closes it. `Authenticator::reauthenticate_totp` and `reauthenticate_webauthn` open it, with the sign-in's back-off and
+  audit (`reauth.*`). Never the password alone, never a recovery code; a code is refused where the policy is phr.
+- `Factors::webauthn_rename`. The pages and these routes share one set of WebAuthn challenges, bound here to the session's sid.
+- Notifying the person of a change waits on principal events over Lir.
+- Found on the way: `factor_key` refused a `webauthn-` ID, so an administrator could not remove a passkey by its listed ID. Fixed.
+
+`HttpsClient` (`lugh/client/https.cpp`) now connects through Dannan 0.8.3's `StreamConnector`, its face and tests kept. The roots
+and the client certificate are read once at construction; an empty CA path reads the system's bundle file. Louhi, which links
+lugh_client, was told what changes for it and is unaffected.
+
+Tests: 799, from 784; 15 new, none removed (the window 3, the authenticator 1, the routes 9, a process test on the real
+`lugh-node` 1, an HTTPS port test 1). Debug and ASan with leak detection on node-b, TSan on node-a (clang 19): one
+run each, all green, no sanitizer report. The new tests repeated 20 times in each build, with the HTTPS tests, all green.
+
 ## 2026-11-15: P11, WebAuthn, passkeys and the phr level
 
 Plan and rulings: `2026-11-15-p11-webauthn.md`. The maintainer ruled P11 before the dashboard (P7). The other rulings:
