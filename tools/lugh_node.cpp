@@ -27,6 +27,7 @@
 #include "lugh/api/app_password_routes.h"
 #include "lugh/api/app_routes.h"
 #include "lugh/api/audit_routes.h"
+#include "lugh/api/factor_routes.h"
 #include "lugh/api/group_routes.h"
 #include "lugh/api/key_routes.h"
 #include "lugh/api/ldap_routes.h"
@@ -67,6 +68,7 @@
 #include "lugh/oauth/refresh_tokens.h"
 #include "lugh/scopes/grants.h"
 #include "lugh/session/pre_sessions.h"
+#include "lugh/session/reauthentications.h"
 #include "lugh/session/session_callers.h"
 #include "lugh/session/sessions.h"
 #include "lugh/signin/pages.h"
@@ -426,15 +428,22 @@ int run(const cli::Options& options) {
   app_password_routes.register_routes(*router);
   auto pre_sessions = std::make_shared<session::PreSessions>(time, authn::Authenticator::Settings{}.lifetime);
   signin::Pages pages(services.authenticator, services.directory, services.sessions, pre_sessions);
+  // A person's own factors, behind the re-authentication window (TODO/2026-11-15-self-factors.md).
+  api::FactorRoutes factor_routes(services.sessions, std::make_shared<session::Reauthentications>(time), services.directory, services.factors,
+                                  services.authenticator, authn::Authenticator::Settings{}.issuer);
   // WebAuthn (P11): the RP ID is the issuer's host and the issuer's origin is where ceremonies
-  // come from, so it is offered only when the issuer is set.
+  // come from, so it is offered only when the issuer is set. The pages and the factor routes share
+  // one set of challenges.
   if (const auto where = config.issuer.empty() ? std::nullopt : client::https_target(config.issuer)) {
     const auto origin = "https://" + where->host + (where->port == "443" ? std::string() : ":" + where->port);
-    pages.webauthn({where->host, {origin}, "Lugh", std::make_shared<authn::Challenges>(time), services.factors});
+    const auto challenges = std::make_shared<authn::Challenges>(time);
+    pages.webauthn({where->host, {origin}, "Lugh", challenges, services.factors});
+    factor_routes.webauthn({where->host, {origin}, "Lugh", challenges});
   } else {
     logger.warn("No oauth.issuer: WebAuthn is not offered, so nobody can reach the phr level");
   }
   pages.register_routes(*router);
+  factor_routes.register_routes(*router);
   oauth::MetadataRoutes metadata_routes(services.keys, {config.issuer, config.allow_client_secrets, config.mtls_port});
   metadata_routes.register_routes(*router);
   if (config.issuer.empty()) logger.warn("No oauth.issuer: the OAuth metadata, the code flow and the token endpoint are not served");

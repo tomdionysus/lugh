@@ -56,6 +56,7 @@ add_library(lugh STATIC
     api/key_routes.cpp
     api/ldap_routes.cpp
     api/me_routes.cpp
+    api/factor_routes.cpp
     api/group_routes.cpp
     api/policy_routes.cpp
     api/scope_routes.cpp
@@ -116,6 +117,7 @@ add_library(lugh STATIC
     oauth/request.cpp
     store/log_format.cpp
     session/pre_sessions.cpp
+    session/reauthentications.cpp
     session/session_callers.cpp
     session/sessions.cpp
     signin/html.cpp

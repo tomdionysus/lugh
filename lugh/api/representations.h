@@ -68,7 +68,7 @@ inline std::string factor_key(std::string_view user_id, std::string_view id) {
   if (dash == std::string_view::npos) return {};
   const auto kind = id.substr(0, dash);
   const auto instance = id.substr(dash + 1);
-  if ((kind != "totp" && kind != "recovery") || instance.empty() || instance.find('/') != std::string_view::npos) return {};
+  if ((kind != "totp" && kind != "recovery" && kind != "webauthn") || instance.empty() || instance.find('/') != std::string_view::npos) return {};
   return std::string(user_id) + "/" + std::string(kind) + "/" + std::string(instance);
 }
 

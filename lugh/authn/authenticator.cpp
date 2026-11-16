@@ -378,6 +378,53 @@ void Authenticator::_enrolled(SignIn sign_in, std::string source, Executor execu
   });
 }
 
+void Authenticator::reauthenticate_totp(std::string user_id, std::string code, std::string source, Deadline deadline, Executor executor, Done<Step> done) {
+  auto answer = stepping(deadline, executor, std::move(done));
+  const auto account = account_key(user_id);
+  const auto address = address_key(source);
+  if (const auto wait = _waiting(account, address)) return answer->finish(waiting(*wait));
+  auto self = shared_from_this();
+  _policies->required(user_id, kStepDeadline, executor, [=](Outcome<Assurance> required) mutable {
+    if (!required.ok()) return answer->finish(Step::of(Step::Kind::failed));
+    // Not a guess, so no back-off: the code was never checked.
+    if (required.value == Assurance::phr)
+      return self->_record("reauth.totp.refused", user_id, user_id, source, "a code where phr is required", executor,
+                           [answer] { answer->finish(Step::of(Step::Kind::refused)); });
+    self->_factors->totp_check(user_id, std::move(code), kStepDeadline, executor, [=](Outcome<> checked) {
+      if (checked.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed));
+      if (!checked.ok()) {
+        self->_failed(account, address);
+        return self->_record("reauth.totp.refused", user_id, user_id, source, "wrong code", executor,
+                             [answer] { answer->finish(Step::of(Step::Kind::refused)); });
+      }
+      self->_accounts.succeeded(account);
+      self->_record("reauth.totp.accepted", user_id, user_id, source, {}, executor, [answer] { answer->finish(Step::of(Step::Kind::next)); });
+    });
+  });
+}
+
+void Authenticator::reauthenticate_webauthn(std::string user_id, std::string credential_id, webauthn::Expected expected, Bytes client_data_json,
+                                            Bytes authenticator_data, Bytes signature, std::string source, Deadline deadline, Executor executor,
+                                            Done<Step> done) {
+  auto answer = stepping(deadline, executor, std::move(done));
+  const auto account = account_key(user_id);
+  const auto address = address_key(source);
+  if (const auto wait = _waiting(account, address)) return answer->finish(waiting(*wait));
+  auto self = shared_from_this();
+  _factors->webauthn_check(user_id, std::move(expected), std::move(credential_id), std::move(client_data_json), std::move(authenticator_data),
+                           std::move(signature), kStepDeadline, executor, [=](Outcome<webauthn::Asserted> checked) {
+                             if (checked.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed));
+                             if (!checked.ok()) {
+                               self->_failed(account, address);
+                               return self->_record("reauth.webauthn.refused", user_id, user_id, source, checked.message, executor,
+                                                    [answer] { answer->finish(Step::of(Step::Kind::refused)); });
+                             }
+                             self->_accounts.succeeded(account);
+                             self->_record("reauth.webauthn.accepted", user_id, user_id, source, {}, executor,
+                                           [answer] { answer->finish(Step::of(Step::Kind::next)); });
+                           });
+}
+
 void Authenticator::remove_factor(audit::Actor actor, std::string user_id, std::string factor_id, Deadline deadline, Executor executor, Done<Outcome<>> done) {
   using Answer = Outcome<>;
   auto answer = answering<Nothing>(deadline, executor, std::move(done), "the factor was not removed within the deadline; it may yet be");

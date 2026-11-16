@@ -292,6 +292,27 @@ TEST_F(AuthenticatorTest, TheLastFactorStaysWhilePolicyNeedsIt) {
               }).ok());
 }
 
+// Re-authentication (TODO/2026-11-15-self-factors.md): a code proves a factor again, once, with
+// the sign-in's audit; where the policy is phr a code is not enough.
+TEST_F(AuthenticatorTest, ReauthenticatingWithACode) {
+  const auto alice = rig.enrolled("alice");
+  const auto reauthenticate = [&](const std::string& code) {
+    return wait_for<lugh::authn::Step>(
+        [&](lugh::Executor executor, auto done) { auth->reauthenticate_totp(alice.id, code, "192.0.2.1", kTestDeadline, executor, done); });
+  };
+  const auto code = rig.code_for(rig.secret);
+  EXPECT_EQ(reauthenticate("000000").kind, Kind::refused);
+  EXPECT_EQ(reauthenticate(code).kind, Kind::next);
+  EXPECT_EQ(reauthenticate(code).kind, Kind::refused) << "a code works once";
+  EXPECT_TRUE(rig.audited("reauth.totp.accepted"));
+  EXPECT_TRUE(rig.audited("reauth.totp.refused"));
+
+  wait_for<lugh::Outcome<lugh::Nothing>>(
+      [&](lugh::Executor executor, auto done) { rig.policies->global_set(rig.admin, Assurance::phr, kTestDeadline, executor, done); });
+  rig.advance(std::chrono::seconds(30));
+  EXPECT_EQ(reauthenticate(rig.code_for(rig.secret)).kind, Kind::refused) << "phr needs a WebAuthn credential";
+}
+
 TEST_F(AuthenticatorTest, AResetMeansEnrollingAgain) {
   const auto alice = rig.enrolled("alice");
   ASSERT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {

@@ -12,6 +12,7 @@ add_executable(lugh_tests
     api_app_routes_test.cpp
     api_audit_routes_test.cpp
     api_concurrency_test.cpp
+    api_factor_routes_test.cpp
     api_group_routes_test.cpp
     api_key_routes_test.cpp
     api_policy_routes_test.cpp
@@ -82,11 +83,13 @@ add_executable(lugh_tests
     node_process_init_test.cpp
     node_process_ldap_test.cpp
     node_process_oauth_test.cpp
+    node_process_factors_test.cpp
     node_process_signin_test.cpp
     node_process_tls_test.cpp
     node_process_webauthn_test.cpp
     node_process_shutdown_test.cpp
     session_pre_sessions_test.cpp
+    session_reauthentications_test.cpp
     session_sessions_test.cpp
     signin_pages_test.cpp
     signin_qr_test.cpp
