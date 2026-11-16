@@ -57,6 +57,19 @@ inline bool on_disk(const std::filesystem::path& directory, const std::string& n
   return false;
 }
 
+// An empty configuration of the test's own, so a node under test never reads the host's
+// installed one (/usr/local/etc/lugh/config.yaml), which a host running Lugh has and its
+// service alone may read (found on the build nodes, 2026-11-16). A test's own --config wins over it.
+inline std::filesystem::path empty_config() {
+  static const auto path = [] {
+    const auto made = std::filesystem::path(DANNAN_TEST_TEMP_ROOT) / "lugh-empty-config.yaml";
+    std::filesystem::create_directories(made.parent_path());
+    std::ofstream(made, std::ios::binary | std::ios::trunc) << "# Nothing: the defaults and the command line.\n";
+    return made;
+  }();
+  return path;
+}
+
 // This process's environment without anything that would configure Lugh, so the test says
 // what the node sees; with CREDENTIALS_DIRECTORY when there are credentials.
 inline std::vector<std::string> environment(const std::optional<std::filesystem::path>& credentials = std::nullopt) {
@@ -66,6 +79,7 @@ inline std::vector<std::string> environment(const std::optional<std::filesystem:
     if (variable.rfind("LUGH_", 0) == 0 || variable.rfind("CREDENTIALS_DIRECTORY=", 0) == 0) continue;
     out.push_back(variable);
   }
+  out.push_back("LUGH_CONFIG=" + empty_config().string());
   if (credentials) out.push_back("CREDENTIALS_DIRECTORY=" + credentials->string());
   return out;
 }
