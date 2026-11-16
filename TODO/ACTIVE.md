@@ -4,19 +4,13 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here (2026-11-16)
 
-**P7, the dashboard, is built** (`COMPLETED.md`, "2026-11-16: P7"; plan and rulings `2026-11-16-p7-dashboard.md`), on
-merged into `develop` and pushed. **Owed: its ASan run.** ASan cannot start on the 4K-page kernels (39-bit VMA), under g++ or
-clang; the maintainer (2026-11-16) has node-b going back to the 16K kernel for ASan (asked of the the coordinator session). When it
-is back: GCC's `build-asan` on node-b, the full run and the new process tests 20 times, then record it in P7's entry. The maintainer may push without asking (2026-11-16). The GitHub repository is public (the maintainer, 2026-11-16).
+**P12, hardening, is done** (`COMPLETED.md`, "2026-11-16: P12"; plan `2026-11-16-p12-hardening.md`), merged into `develop` and
+pushed. P7 before it is done too. Lugh runs as a test service on all four build nodes, each its own genesis; root's password for each is in
+`/root/lugh-root-password` there.
 
-Waiting on the maintainer:
-- the CSP departure: a page's inline scripts allowed by hash, since React Router's SPA page carries one;
-- whether an app password with an administering scope needs the session at phr (recommended yes; the phr gate does not see LDAP).
+Left from P12: hour-long fuzz campaigns, and binary seeds for the record and protocol targets.
 
-Next is the maintainer's choice: P12 (hardening, the fuzz targets first) is the other unblocked phase; P8 waits on Dagda.
-
-Still uncommitted, on purpose: `lugh/fuzz/client_fuzz.cpp`, `lugh/fuzz/webauthn_fuzz.cpp` and their lines in
-`lugh/fuzz/CMakeLists.txt`. They wait until every fuzz target is built (P12).
+Next is the maintainer's choice: P13 (the SSO rollout) or P8 (the cluster on Dagda, which waits on Dagda).
 
 ## Open, not scheduled
 
@@ -24,11 +18,11 @@ Still uncommitted, on purpose: `lugh/fuzz/client_fuzz.cpp`, `lugh/fuzz/webauthn_
   (`2026-11-15-dannan-0.8.md`).
 - **Principal events over Lir**, and the narrow status read `lugh:principals.status` (the maintainer, 2026-11-15, asked by Mimir and Louhi):
   `2026-11-15-principal-events.md`. Recommended after P8.1. The MQTT client is Lir's `lir::client`.
-- **`authn::Backoff` into Dannan** as `dannan::listen::Backoff` in 0.9 (asked by Kvasir, agreed by Dannan and Lugh, 2026-11-16,
+- **(done) `authn::Backoff` into Dannan** as `dannan::listen::Backoff` in 0.9 (asked by Kvasir, agreed by Dannan and Lugh, 2026-11-16,
   stack rule 3; its time point becomes Dannan's `contract::TimePoint`): when 0.9 is tagged, move the pin, switch the
   authenticator, and delete `lugh/authn/backoff.h` with `authn_backoff_test.cpp` (its 5 tests go to Dannan; record the drop).
-  Summing failures across the cluster stays Lugh's (P8). 0.9.0 is cut only when Dannan's whole 0.9 plan is done; Dannan has
-  asked the maintainer whether Backoff (header-only, ABI-safe) may go out in an 0.8.x patch instead. Nothing changes for Lugh until a tag.
+  Summing failures across the cluster stays Lugh's (P8). The maintainer chose a patch: it comes in Dannan 0.8.5
+  (in its gate, 2026-11-16; 0.8.4 is out, ABI kept, nothing Lugh needs). When 0.8.5 is tagged, move the pin to it and switch.
 - **Hashing on `sched::WorkerPool`**, at P8.1. Until then the hashing queue is unbounded, a known gap.
 
 ## Waiting on others
@@ -41,11 +35,10 @@ Still uncommitted, on purpose: `lugh/fuzz/client_fuzz.cpp`, `lugh/fuzz/webauthn_
 - **The maintainer, at P13**: `docs/architecture.md` question 10 (TLS for T.O.M.S sites, or sign-in only at the hub).
 - **Not merged, by the maintainer's choice**: GitHub's `main` carries aaac977 (Alpine and OpenRC for Raven). Raven is dropped for now (the maintainer,
   2026-11-13); when it returns, merge `origin/main` into `develop` (about ten conflicts), test, fast-forward `main`, push.
-- **Not yet tried on Linux**: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DONTDUMP`. No fuzz target has been built yet.
 
 ## Dependencies pinned
 
-- Dannan **0.8.3** (`LUGH_DANNAN_REF`, a tag in `../dannan`), giving:
+- Dannan **0.8.5** (`LUGH_DANNAN_REF`, a tag in `../dannan`), giving the sign-in back-off besides:
   - the listener and the connector;
   - `verify_rs256`;
   - the worker pool.
@@ -61,14 +54,12 @@ in `/srv/build/lugh/dannan` (rsync `../dannan/.git/` there when a new tag is pin
 | Machine | Lugh's use |
 |---|---|
 | node-a `.11` | TSan: clang 19, `~/lugh/build-tsan`. Often busy with Dagda; queue for it |
-| node-b `.12` | `~/lugh/build` (debug), `~/lugh/build-asan` (ASan, GCC, once back on the 16K kernel), Node 20.19 and Playwright's Chromium (the dashboard) |
+| node-b `.12` | `~/lugh/build` (debug), `~/lugh/build-asan`, `~/lugh/build-fuzz` (clang), Node 20.19 and Playwright's Chromium (the dashboard) |
 | node-d `.14` | `~/lugh/build` (debug), 4 GB, Node 20.19. No sanitizer builds: it runs out of memory |
 
-Since 2026-11-16 every build node boots 4K pages (a 39-bit VMA): TSan runs on any of them, and ASan on none, g++'s or clang's ("CHECK
-failed: sanitizer_allocator_primary64.h", the allocator at 0x500000000000). node-b is to go back to the 16K kernel as the ASan build node
-(the maintainer, 2026-11-16). Check `free -m` before a sanitizer build. TSan on
-the Mac only to hunt a specific bug (the maintainer, 2026-11-16).
-| node-c `.13` | Not Lugh's; LED Config's services, no reboots |
+Since 2026-11-16 every build node runs a 4K-page, 48-bit-VA kernel (6.18.62-v8-va48+): ASan, UBSan and TSan all work under g++ and
+clang 19 on any of them (node-d has no clang, and is too small for sanitizer builds). Delete a build tree's `*.gch` after a kernel
+change, or GCC crashes on its old precompiled headers. TSan on the Mac only to hunt a specific bug (the maintainer, 2026-11-16).
 
 The claim board (0.2.0):
 - `claims_list`, then `claim_take` with only the cores the job needs, and `-j` no more than those. `until` is honest.
@@ -80,6 +71,7 @@ The claim board (0.2.0):
 
 ## Documents
 
+- `2026-11-16-p12-hardening.md`: P12, hardening. Done.
 - `2026-11-16-p7-dashboard.md`: P7, the dashboard, with the maintainer's rulings (phr on the server for administering; root offered both). Done.
 - `2026-11-15-self-factors.md`: a person's own factors and the re-authentication window, with the maintainer's rulings. Done.
 - `2026-11-15-p11-webauthn.md`: P11, its steps W1 to W7, the maintainer's rulings and progress.
@@ -121,5 +113,5 @@ without a reason (the maintainer, 2026-11-14).
 | P9 | Writable LDAP | done |
 | P10 | `lugh_client` | done |
 | P11 | WebAuthn, passkeys and `phr` (`2026-11-15-p11-webauthn.md`) | done |
-| P12 | Hardening: fuzzing campaigns (build every target on node-a first), sandbox review, key rotation drills, threat model | not started |
+| P12 | Hardening: fuzzing, the sandbox on real hosts, key rotation drills, the threat model (`2026-11-16-p12-hardening.md`) | done |
 | P13 | SSO rollout: blackraven-admin, T.O.M.S, AthenaSIP admin, Macha; one break-glass account each | not started |

@@ -122,7 +122,8 @@ P7), before the cluster moves onto Dagda (P8). Where a defence is a plan rather 
 - **The unit** runs as `lugh`, with `ProtectSystem=strict`, private `/tmp` and devices, no new privileges, a system call filter,
   only `CAP_NET_BIND_SERVICE`, `MemoryMax=256M`, `LimitCORE=0`, and the master key as an encrypted credential (to the TPM where there
   is one). The state directory is the one place it may write.
-- **Not yet tried on Linux**: `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DONTDUMP` (P12, H3).
+- **Proved on Linux** (P12, on four build nodes): `systemd-analyze security` scores the unit 1.4 (OK); `LoadCredentialEncrypted=` opens the
+  store with the sealed key; `LimitMEMLOCK` holds the key memory locked; the key mappings are `MADV_DONTDUMP` and cores are off.
 
 ### The cluster (P8)
 
@@ -138,5 +139,4 @@ node that issued them, and fail closed when it cannot be reached.
 | Back-off and the re-authentication window are per node | Across a cluster a guesser gets N times the limit; a window opened on one node is not open on another (which fails closed) | P8, summed by gossip |
 | The audit chain is tamper-evident, not tamper-proof | Someone with the master key and the disk can rewrite it from a point onwards; `/api/v1/audit/verify` finds a break, not a consistent rewrite | Shipping it off the node (not planned) |
 | Notifying a person of a change to their factors | Not yet: a stolen session that proved a factor could change factors unseen until the audit log is read | Principal events over Lir |
-| ASan has not run on P7 | The build nodes' 4K-page kernels stop ASan from starting; P7 is green in debug and TSan | node-b's 16K kernel, then a 4K kernel with 48-bit VA |
-| No fuzz campaign has run yet | Every target is written; none has run for long | P12, H1 and H2 |
+| Fuzzing has run for minutes, not hours | Two campaigns of ten minutes a target (about 650 million inputs in the second, clean); two finds fixed | Hour-long campaigns, and binary seeds for the record and protocol targets |

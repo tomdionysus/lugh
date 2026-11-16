@@ -2,6 +2,33 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-16: P12, hardening
+
+Plan: `2026-11-16-p12-hardening.md`. The maintainer's rulings: an app password with any scope beyond `lugh:directory.read` needs a phr
+session; the dashboard's CSP keeps its inline scripts by hash; the test install goes on every build node ("Lugh is a cluster. Install
+on all of them, as a test").
+- **Fuzzing (H1, H2)**: the libFuzzer check never passed (it linked a main of its own), so no target had ever built; it now
+  builds an entry point, and all 13 targets build with clang 19, `fuzz_client` and `fuzz_webauthn` among them. Seeds for the six
+  text targets; `lugh/fuzz/campaign.sh`. The first campaign (10 minutes a target) found two things: `encode_topic` wrote `"` and
+  `\` literally, making a scope that was no scope (fixed, with a test), and `fuzz_records` held an old-format record to its bytes
+  (its property fixed). Targets now abort rather than trap, since SIGTRAP left no input. The second campaign: about 650 million
+  inputs, nothing found. Hour-long campaigns remain.
+- **The sandbox (H3)**: Lugh installed by `cmake --install` as a service on all four build nodes, each its own genesis until P8. On each:
+  `systemd-analyze security` 1.4 (OK); `LoadCredentialEncrypted=`, `LimitMEMLOCK` and `MADV_DONTDUMP` proved on Linux for the
+  first time. Found: GCC 14's release build stopped on a false "maybe uninitialized" (rewritten), and the install never ran
+  `ldconfig`, so the node could not find Dannan's library on a clean host (it does now). Root's password for each is in
+  `/root/lugh-root-password` there, root only.
+- **Key rotation drill (H4)** on the real binary: tokens issued before a rotation verify after it, and after a restart.
+- **The threat model (H5)**: `docs/threat-model.md`.
+- **Also**: app passwords at phr for any administering scope; Dannan 0.8.5 pinned, its `Backoff` used and Lugh's deleted (Kvasir's
+  ask, so the two link one copy). The process tests now give their nodes an empty config, since a host running Lugh has an
+  installed one its service alone may read.
+
+Tests: 808, from 810 at P7: plus the app password rule 1, the topic scope's quote 1, the rotation drill 1; minus the five
+`Backoff` tests, which moved with the class to Dannan (`dannan/test/listen_backoff_test.cpp`). Debug on node-d, ASan on node-c,
+TSan on node-a (all on the 4K-page, 48-bit-VA kernel): green, no sanitizer report, on the final code; the rotation drill
+repeated 20 times in each.
+
 ## 2026-11-16: P7, the dashboard
 
 Plan and rulings: `2026-11-16-p7-dashboard.md`. The maintainer, 2026-11-16: phr is enforced on the server for administering, and root's
