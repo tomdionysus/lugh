@@ -1,0 +1,1 @@
+{"issuer":"https://id.example.com","jwks_uri":"https://id.example.com/oauth2/jwks","authorization_endpoint":"https://id.example.com/oauth2/authorize","token_endpoint":"https://id.example.com/oauth2/token","device_authorization_endpoint":"https://id.example.com/oauth2/device"}
