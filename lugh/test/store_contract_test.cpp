@@ -183,13 +183,25 @@ TYPED_TEST(StoreContract, BoundsAreKept) {
 }
 
 TYPED_TEST(StoreContract, ConcurrentWritersAllLand) {
+  // Each writer's io_context outlives every writer: a waiter's lock is handed on by posting to its
+  // executor from another writer's thread, and an io_context must not be destroyed while another
+  // thread is still inside a post to it (TSan, 2026-11-16).
+  std::vector<std::unique_ptr<boost::asio::io_context>> contexts;
+  for (int t = 0; t < 4; ++t) contexts.push_back(std::make_unique<boost::asio::io_context>());
+  const auto on = [](boost::asio::io_context& io, auto task) {
+    auto future = boost::asio::co_spawn(io, std::move(task), boost::asio::use_future);
+    io.restart();
+    io.run();
+    return future.get();
+  };
   std::vector<std::thread> writers;
   for (int t = 0; t < 4; ++t) {
-    writers.emplace_back([this, t] {
+    writers.emplace_back([this, t, &contexts, &on] {
+      auto& io = *contexts[static_cast<std::size_t>(t)];
       for (int i = 0; i < 25; ++i) {
         const auto key = "t" + std::to_string(t) + "-" + std::to_string(i);
-        run(this->store->put("groups", key, secure(key)));
-        run(this->store->get("groups", key));
+        on(io, this->store->put("groups", key, secure(key)));
+        on(io, this->store->get("groups", key));
       }
     });
   }
