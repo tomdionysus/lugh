@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <span>
 
 #include "lugh/store/log_format.h"
@@ -22,6 +23,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   const std::span<const unsigned char> file(data, size);
   (void)lugh::store::decode_file_header(file);
   const auto scan = lugh::store::scan_log(file, "users", key_for);
-  if (scan.ok && scan.value.valid_length > size) __builtin_trap();
+  if (scan.ok && scan.value.valid_length > size) std::abort();
   return 0;
 }

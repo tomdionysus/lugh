@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <span>
 
 #include "lugh/webauthn/cbor.h"
@@ -23,13 +24,13 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   std::size_t used = 0;
   const auto front = cbor::decode(input, &used);
   if (front) {
-    if (used == 0 || used > size) __builtin_trap();
+    if (used == 0 || used > size) std::abort();
     const auto alone = cbor::decode(input.first(used));
-    if (!alone) __builtin_trap();
+    if (!alone) std::abort();
     (void)public_key(*front);
   }
 
   const auto whole = cbor::decode(input);
-  if (whole && (!front || used != size)) __builtin_trap();
+  if (whole && (!front || used != size)) std::abort();
   return 0;
 }

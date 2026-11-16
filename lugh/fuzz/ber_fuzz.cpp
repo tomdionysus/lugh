@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <span>
 
 #include "lugh/ldap/ber.h"
@@ -18,10 +19,10 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   using namespace lugh::ldap;
   const std::span<const unsigned char> bytes(data, size);
   const auto framed = ber::frame(bytes, kMostMessageBytes);
-  if (framed.state == ber::Frame::State::complete && framed.size > size) __builtin_trap();
+  if (framed.state == ber::Frame::State::complete && framed.size > size) std::abort();
 
   if (const auto message = parse_message(bytes)) {
-    if (message->id <= 0) __builtin_trap();
+    if (message->id <= 0) std::abort();
     for (const auto& control : message->controls) {
       if (control.value) {
         (void)parse_paged_results(*control.value);

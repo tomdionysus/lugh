@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 
 #include "lugh/http/forms.h"
@@ -24,7 +25,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
 
   if (const auto form = http::parse_form(body)) {
     for (const auto& [name, value] : *form) {
-      if (name.empty()) __builtin_trap();
+      if (name.empty()) std::abort();
     }
   }
   http::HttpRequest request{http::verb::post, "/signin", 11};
