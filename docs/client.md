@@ -72,7 +72,9 @@ keys->start();
 `HttpsClient` (`https.h`) is the library's HTTPS: GET, POST, PATCH, PUT and DELETE, with headers and a body, answering the
 status, type, caching, ETag and a body of at most 64 KiB. The server's certificate and name are always verified, with no way to
 turn that off; a redirect is an answer, never followed. Given a certificate chain and key, it presents them when a server asks
-(RFC 8705).
+(RFC 8705). Each request is one connection made by Dannan's `StreamConnector`. The roots (a PEM bundle, or the system's bundle
+file) and the client's certificate are read once when the client is made, so a bad path is an error then, not at the first
+request.
 
 ## The flows
 

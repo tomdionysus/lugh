@@ -8,8 +8,8 @@
 #pragma once
 
 #include <boost/asio/io_context.hpp>
-#include <boost/asio/ssl/context.hpp>
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -22,7 +22,13 @@
 // HTTPS to another server, as lugh_client and a Lugh node need it: discovery, JWKS, the token
 // endpoint, a back-channel logout. The server's certificate and name are always verified, with no
 // way to turn that off (docs/architecture.md, "Outbound"); a redirect is an answer, never
-// followed; an answer's body is bounded. One request per connection.
+// followed; an answer's body is bounded. One request per connection, made by Dannan's connector.
+namespace dannan::listen {
+class Certificates;
+class ClientTrust;
+class StreamConnector;
+}  // namespace dannan::listen
+
 namespace lugh::client {
 
 // An https URL taken apart.
@@ -76,16 +82,23 @@ class HttpsClient final : public Https {
     std::string key_path;
   };
 
-  // The roots servers' certificates are checked against: `ca_path` if given, otherwise the
-  // system's; and the client's own certificate, if it has one. Throws std::runtime_error for roots,
-  // a chain or a key that cannot be read, or a key that is not the certificate's, naming the path.
+  // The roots servers' certificates are checked against: the PEM bundle `ca_path` if given,
+  // otherwise the system's bundle file; and the client's own certificate, if it has one. All are
+  // read here, once. Throws std::runtime_error for roots, a chain or a key that cannot be read, or
+  // a key that is not the certificate's, naming the path.
   explicit HttpsClient(boost::asio::io_context& io_context, const std::string& ca_path = "", std::optional<Certificate> certificate = std::nullopt);
+  // Closes any connection still open.
+  ~HttpsClient() override;
+  HttpsClient(const HttpsClient&) = delete;
+  HttpsClient& operator=(const HttpsClient&) = delete;
 
   void send(HttpsRequest request, Deadline deadline, Executor executor, Done<Outcome<HttpsResponse>> done) override;
 
  private:
   boost::asio::io_context& _io_context;
-  boost::asio::ssl::context _tls;
+  std::shared_ptr<const dannan::listen::ClientTrust> _trust;
+  std::shared_ptr<dannan::listen::Certificates> _certificate;
+  std::unique_ptr<dannan::listen::StreamConnector> _connector;
 };
 
 }  // namespace lugh::client

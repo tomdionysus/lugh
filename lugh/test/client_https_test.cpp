@@ -173,6 +173,17 @@ TEST_F(HttpsTest, AnAnswerLargerThanTheBoundIsRefused) {
   EXPECT_EQ(answer.message, "the answer is larger than the bound");
 }
 
+TEST_F(HttpsTest, APortOutOfRangeIsNotAnHttpsUrl) {
+  for (const auto* url : {"https://localhost:0/", "https://localhost:65536/", "https://localhost:44x/"}) {
+    HttpsRequest request;
+    request.url = url;
+    const auto answer = send(request);
+    EXPECT_FALSE(answer.ok()) << url;
+    EXPECT_EQ(answer.message, "not an https URL") << url;
+  }
+  EXPECT_TRUE(seen().method.empty());
+}
+
 TEST_F(HttpsTest, OnlyTheMethodsLughTakesAreSent) {
   HttpsRequest request;
   request.method = "TRACE";
