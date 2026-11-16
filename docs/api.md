@@ -104,7 +104,7 @@ the node's memory, so a restart closes it.
 | `GET /api/v1/users/{id}/app-passwords` | directory.read | Their app passwords: `id`, `name`, `scopes`, `networks`, `created_at`; never the password |
 | `POST /api/v1/users/{id}/app-passwords` | credentials.write | `{name, scopes?, networks?}`: a new app password, `201` with `password` shown this once. `scopes` defaults to `lugh:directory.read`; at most 32 per user |
 | `DELETE /api/v1/users/{id}/app-passwords/{app_password}` | credentials.write | Revokes it alone |
-| `GET`, `POST /api/v1/me/app-passwords`, `DELETE /api/v1/me/app-passwords/{app_password}` | any caller | The same for the caller's own, never with a scope the caller does not hold |
+| `GET`, `POST /api/v1/me/app-passwords`, `DELETE /api/v1/me/app-passwords/{app_password}` | any caller | The same for the caller's own, never with a scope the caller does not hold. Through a session, one with any scope beyond `lugh:directory.read` needs the session at `phr` (`403 phr_required`), since it administers over LDAP |
 | `GET /api/v1/users/{id}/factors` | directory.read | Their factors: `id`, `kind`, `confirmed`, `created_at`, `remaining` for recovery codes, and for a WebAuthn credential its `name`, `aaguid`, `backed_up` and `last_used_at` |
 | `DELETE /api/v1/users/{id}/factors/{factor}` | credentials.write | One factor; `409 refused` for the last while policy needs one |
 | `POST /api/v1/users/{id}/factors/reset` | credentials.write | Every factor gone and the user not enrolled, for one who lost them all. A person calling must be at `phr` (a passkey or security key), since a reset lets someone else enrol in the user's name: `403 forbidden` otherwise. A service acts with its key |

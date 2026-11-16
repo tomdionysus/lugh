@@ -67,3 +67,32 @@ TEST(AppPasswordRoutes, YourOwnWithinYourScopes) {
   ASSERT_EQ(listed.status, 200u) << listed.body;
   EXPECT_EQ(boost::json::parse(listed.body).at("app_passwords").as_array().size(), 1u);
 }
+
+// One that may change anything administers over LDAP, where the router's gate does not reach, so a
+// session must be at phr to make it (the maintainer, 2026-11-16); a read-only one is open at mfa.
+TEST(AppPasswordRoutes, OneThatMayChangeAnythingNeedsPhr) {
+  SigninRig rig;
+  const auto alice = rig.enrolled("alice");
+  ASSERT_EQ(rig.sign_in("alice", "correct horse battery").location(), "/signin/factor");
+  const auto factor = rig.get("/signin/factor");
+  ASSERT_EQ(rig.post("/signin/factor", {{"csrf", factor.csrf()}, {"code", rig.code_for(rig.secret)}}).status, 303u);
+  const auto ops = wait_for<lugh::Outcome<lugh::directory::Group>>([&](lugh::Executor executor, auto done) {
+                     rig.directory->create_group(rig.admin, "ops", "", kTestDeadline, executor, done);
+                   }).value;
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::scopes::Granted>>([&](lugh::Executor executor, auto done) {
+                rig.grants->group_set(rig.admin, ops.id, {"lugh:directory.read", "lugh:directory.write"}, std::nullopt, kTestDeadline, executor, done);
+              }).ok());
+  ASSERT_TRUE(wait_for<lugh::Outcome<>>([&](lugh::Executor executor, auto done) {
+                rig.directory->add_member(rig.admin, ops.id, alice.id, kTestDeadline, executor, done);
+              }).ok());
+  ASSERT_TRUE(wait_for<lugh::Status>([&](lugh::Executor executor, auto done) { rig.sessions->refresh(kTestDeadline, executor, done); }).ok);
+
+  EXPECT_EQ(rig.json(verb::post, "/api/v1/me/app-passwords", R"({"name":"mail","scopes":["lugh:directory.read"]})").status, 201u);
+  const auto refused = rig.json(verb::post, "/api/v1/me/app-passwords", R"({"name":"provisioning","scopes":["lugh:directory.write"]})");
+  EXPECT_EQ(refused.status, 403u);
+  EXPECT_EQ(boost::json::parse(refused.body).at("error").at("code"), "phr_required");
+
+  rig.at_phr(alice.id);
+  ASSERT_FALSE(HasFatalFailure());
+  EXPECT_EQ(rig.json(verb::post, "/api/v1/me/app-passwords", R"({"name":"provisioning","scopes":["lugh:directory.write"]})").status, 201u);
+}

@@ -80,6 +80,15 @@ void create(const std::shared_ptr<authn::AppPasswords>& passwords, http::RouteCo
         return context.done();
       }
     }
+    // An app password that may change anything administers over LDAP, where the router's phr gate
+    // does not reach, so a session must be at phr to make one (the maintainer, 2026-11-16). One that only reads
+    // stays open at mfa, for mail and the like.
+    const bool administers = std::any_of(effective.begin(), effective.end(), [](const std::string& scope) { return scope != scopes::kDirectoryRead; });
+    if (administers && context.caller.through_session && context.caller.acr != http::Caller::kAdministerAcr) {
+      http::write_error(context.response, http::status::forbidden, "phr_required",
+                        "an app password that may change anything needs a sign-in with a passkey or security key");
+      return context.done();
+    }
   }
   passwords->create(actor_of(context), std::move(user_id), name.value_or(""), std::move(wanted), std::move(networks), kRouteDeadline, context.executor,
                     [context](Outcome<authn::AppPasswords::Made> made) {

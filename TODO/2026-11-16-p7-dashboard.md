@@ -30,10 +30,8 @@ components and `lib/API.ts`, Playwright against a real `lugh-node`. Node on node
 
 - `continue=dashboard` is the sign-in's way back to `/` (a fixed word, never a URL), and `acr=urn:lugh:acr:phr` with it is the
   step-up. The TOTP setup's answer carries its QR modules, which the dashboard draws, so the encoder is the server's alone.
-- A page's CSP allows its inline scripts by hash, since React Router's SPA page carries one: a departure from "no inline script"
-  in `docs/architecture.md`, for the maintainer to confirm.
-- For the maintainer: a session at `mfa` may still make an app password holding an administering scope (`/api/v1/me/app-passwords` is a
-  person's own route), and then use it over LDAP, which the phr gate does not see. Recommended: an app password with any scope but
-  `lugh:directory.read` needs the session at `phr`.
+- A page's CSP allows its inline scripts by hash, since React Router's SPA page carries one. The maintainer confirmed it (2026-11-16).
+- An app password with any scope beyond `lugh:directory.read`, made through a session, needs the session at `phr`, since it
+  administers over LDAP where the router's gate does not reach (the maintainer, 2026-11-16). Done.
 - Left for later: editing an application's every field (the API takes them; the screen registers and manages the common ones),
   the wordmark's display face, and a dark-only check of contrast.
