@@ -7,16 +7,17 @@
 
 #include "lugh/client/https.h"
 
-#include <openssl/ssl.h>
-
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ssl/host_name_verification.hpp>
+#include <boost/asio/dispatch.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
-#include <boost/beast/ssl.hpp>
+#include <charconv>
 #include <memory>
-#include <stdexcept>
+
+#include "dannan/listen/certificates.h"
+#include "dannan/listen/connector.h"
+#include "dannan/listen/stream.h"
 
 namespace lugh::client {
 
@@ -24,19 +25,16 @@ namespace {
 
 namespace beast = boost::beast;
 namespace net = boost::asio;
-namespace ssl = boost::asio::ssl;
-using tcp = net::ip::tcp;
+using dannan::listen::Stream;
 
-// One exchange: resolve, connect, handshake, write, read; whichever step fails answers.
+// One exchange: the connector resolves, connects and checks the server, then a write and a read;
+// whichever step fails answers. Everything runs on one strand, the stream's too, and the whole
+// exchange is bounded by the caller's deadline: when it passes, the connection is cut.
 class Exchange : public std::enable_shared_from_this<Exchange> {
  public:
-  Exchange(net::io_context& io_context, ssl::context& tls, HttpsTarget where, beast::http::verb method, HttpsRequest request, Deadline deadline,
+  Exchange(net::io_context& io_context, HttpsTarget where, uint16_t port, beast::http::verb method, HttpsRequest request, Deadline deadline,
            std::shared_ptr<Completion<Outcome<HttpsResponse>>> answer)
-      : _resolver(net::make_strand(io_context)),
-        _stream(_resolver.get_executor(), tls),
-        _where(std::move(where)),
-        _deadline(deadline),
-        _answer(std::move(answer)) {
+      : _strand(net::make_strand(io_context)), _timer(_strand), _where(std::move(where)), _port(port), _deadline(deadline), _answer(std::move(answer)) {
     _request.method(method);
     _request.target(_where.target);
     _request.version(11);
@@ -49,51 +47,69 @@ class Exchange : public std::enable_shared_from_this<Exchange> {
     _request.prepare_payload();
   }
 
-  void start() {
-    // The name asked for in the handshake, and the name the certificate must carry.
-    if (SSL_set_tlsext_host_name(_stream.native_handle(), _where.host.c_str()) != 1) return _failed("the host name cannot be used");
-    _stream.set_verify_mode(ssl::verify_peer);
-    _stream.set_verify_callback(ssl::host_name_verification(_where.host));
-    _resolver.async_resolve(_where.host, _where.port, [self = shared_from_this()](boost::system::error_code resolved, tcp::resolver::results_type found) {
-      if (resolved) return self->_failed("the name did not resolve");
-      beast::get_lowest_layer(self->_stream).expires_after(self->_deadline);
-      beast::get_lowest_layer(self->_stream).async_connect(found, [self](boost::system::error_code connected, const tcp::endpoint&) {
-        if (connected) return self->_failed("the connection failed");
-        self->_stream.async_handshake(ssl::stream_base::client, [self](boost::system::error_code shaken) {
-          if (shaken) return self->_failed("the TLS handshake or the certificate failed");
-          beast::http::async_write(self->_stream, self->_request, [self](boost::system::error_code written, std::size_t) {
-            if (written) return self->_failed("the request could not be written");
-            self->_parser.body_limit(HttpsClient::kMostAnswerBytes);
-            beast::http::async_read(self->_stream, self->_buffer, self->_parser, [self](boost::system::error_code answered, std::size_t) {
-              if (answered == beast::http::error::body_limit) return self->_failed("the answer is larger than the bound");
-              if (answered) return self->_failed("no answer came");
-              auto& message = self->_parser.get();
-              HttpsResponse response;
-              response.status = message.result_int();
-              response.content_type = std::string(message[beast::http::field::content_type]);
-              response.cache_control = std::string(message[beast::http::field::cache_control]);
-              response.etag = std::string(message[beast::http::field::etag]);
-              response.body = std::move(message.body());
-              self->_answer->finish(Outcome<HttpsResponse>::success(std::move(response)));
-            });
-          });
+  void start(dannan::listen::StreamConnector& connector, dannan::listen::ClientTls tls) {
+    net::dispatch(_strand, [self = shared_from_this()] {
+      self->_timer.expires_after(self->_deadline);
+      self->_timer.async_wait([self](boost::system::error_code waited) {
+        if (waited) return;
+        self->_expired = true;
+        if (self->_stream) self->_stream->abort();
+      });
+    });
+    connector.connect(_strand, _where.host, _port, std::move(tls), _deadline, [self = shared_from_this()](std::shared_ptr<Stream> stream, std::string why) {
+      if (!stream) return self->_failed("the connection failed: " + why);
+      if (self->_expired) return stream->abort();
+      self->_stream = std::move(stream);
+      beast::http::async_write(*self->_stream, self->_request, [self](boost::system::error_code written, std::size_t) {
+        if (written) return self->_failed("the request could not be written");
+        self->_parser.body_limit(HttpsClient::kMostAnswerBytes);
+        beast::http::async_read(*self->_stream, self->_buffer, self->_parser, [self](boost::system::error_code answered, std::size_t) {
+          if (answered == beast::http::error::body_limit) return self->_failed("the answer is larger than the bound");
+          if (answered) return self->_failed("no answer came");
+          self->_timer.cancel();
+          self->_stream->close();
+          auto& message = self->_parser.get();
+          HttpsResponse response;
+          response.status = message.result_int();
+          response.content_type = std::string(message[beast::http::field::content_type]);
+          response.cache_control = std::string(message[beast::http::field::cache_control]);
+          response.etag = std::string(message[beast::http::field::etag]);
+          response.body = std::move(message.body());
+          self->_answer->finish(Outcome<HttpsResponse>::success(std::move(response)));
         });
       });
     });
   }
 
  private:
-  void _failed(const std::string& why) { _answer->finish(Outcome<HttpsResponse>::failure(Fault::failed, why)); }
+  // On the strand.
+  void _failed(const std::string& why) {
+    _timer.cancel();
+    if (_stream) _stream->abort();
+    _answer->finish(Outcome<HttpsResponse>::failure(Fault::failed, why));
+  }
 
-  tcp::resolver _resolver;
-  beast::ssl_stream<beast::tcp_stream> _stream;
+  net::strand<net::io_context::executor_type> _strand;
+  net::steady_timer _timer;
   HttpsTarget _where;
+  uint16_t _port;
   Deadline _deadline;
   std::shared_ptr<Completion<Outcome<HttpsResponse>>> _answer;
+  // On the strand.
+  std::shared_ptr<Stream> _stream;
+  bool _expired = false;
   beast::http::request<beast::http::string_body> _request;
   beast::flat_buffer _buffer;
   beast::http::response_parser<beast::http::string_body> _parser;
 };
+
+// A port from 1 to 65535, written as digits and nothing else.
+std::optional<uint16_t> port_number(const std::string& text) {
+  unsigned value = 0;
+  const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+  if (error != std::errc{} || end != text.data() + text.size() || value == 0 || value > 65535) return std::nullopt;
+  return static_cast<uint16_t>(value);
+}
 
 }  // namespace
 
@@ -125,32 +141,25 @@ std::optional<HttpsTarget> https_target(std::string_view url) {
 }
 
 HttpsClient::HttpsClient(boost::asio::io_context& io_context, const std::string& ca_path, std::optional<Certificate> certificate)
-    : _io_context(io_context), _tls(ssl::context::tls_client) {
-  SSL_CTX_set_min_proto_version(_tls.native_handle(), TLS1_2_VERSION);
-  boost::system::error_code ec;
-  if (ca_path.empty()) {
-    _tls.set_default_verify_paths(ec);
-  } else {
-    _tls.load_verify_file(ca_path, ec);
-  }
-  if (ec) throw std::runtime_error("cannot load the roots for outbound TLS: " + ec.message());
-  _tls.set_verify_mode(ssl::verify_peer);
+    : _io_context(io_context), _trust(std::make_shared<const dannan::listen::ClientTrust>(ca_path)) {
   if (certificate) {
-    _tls.use_certificate_chain_file(certificate->chain_path, ec);
-    if (ec) throw std::runtime_error("cannot read the client certificate " + certificate->chain_path + ": " + ec.message());
-    _tls.use_private_key_file(certificate->key_path, ssl::context::pem, ec);
-    if (ec) throw std::runtime_error("cannot read the client key " + certificate->key_path + ": " + ec.message());
-    if (SSL_CTX_check_private_key(_tls.native_handle()) != 1) {
-      throw std::runtime_error("the client key " + certificate->key_path + " is not the key of " + certificate->chain_path);
-    }
+    _certificate = std::make_shared<dannan::listen::Certificates>(dannan::listen::CertificatePaths{certificate->chain_path, certificate->key_path, {}});
   }
+  // The exchange's own strand carries each stream, its timer and its callbacks.
+  dannan::listen::ConnectorConfig config;
+  config.name = "https-out";
+  config.strand_per_stream = false;
+  _connector = std::make_unique<dannan::listen::StreamConnector>(io_context, std::move(config));
 }
+
+HttpsClient::~HttpsClient() = default;
 
 void HttpsClient::send(HttpsRequest request, Deadline deadline, Executor executor, Done<Outcome<HttpsResponse>> done) {
   using Answer = Outcome<HttpsResponse>;
   auto answer = Completion<Answer>::start(deadline, executor, std::move(done), [] { return Answer::failure(Fault::failed, "no answer within the deadline"); });
   auto where = https_target(request.url);
-  if (!where) return answer->finish(Answer::failure(Fault::failed, "not an https URL"));
+  const auto port = where ? port_number(where->port) : std::nullopt;
+  if (!port) return answer->finish(Answer::failure(Fault::failed, "not an https URL"));
   // The methods Lugh's endpoints and API take, and nothing else.
   beast::http::verb method;
   if (request.method == "GET") {
@@ -166,7 +175,11 @@ void HttpsClient::send(HttpsRequest request, Deadline deadline, Executor executo
   } else {
     return answer->finish(Answer::failure(Fault::failed, "not a method this client sends: " + request.method));
   }
-  std::make_shared<Exchange>(_io_context, _tls, std::move(*where), method, std::move(request), deadline, answer)->start();
+  dannan::listen::ClientTls tls;
+  tls.trust = _trust;
+  tls.certificate = _certificate;
+  tls.minimum = dannan::listen::TlsVersion::tls12;
+  std::make_shared<Exchange>(_io_context, std::move(*where), *port, method, std::move(request), deadline, answer)->start(*_connector, std::move(tls));
 }
 
 }  // namespace lugh::client
