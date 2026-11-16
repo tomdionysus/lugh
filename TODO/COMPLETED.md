@@ -26,9 +26,9 @@ first sign-in is offered a passkey and TOTP both.
 
 Tests: 810 in `lugh_tests`, from 799; 11 new, none removed (the router's gate 1, the static site 5, the dashboard on the real node
 3, root's passkey 1, the sign-in's way back 1). Debug on node-b, TSan on node-a (clang 19): green, no warning, on the final code.
-ASan not yet run: since the 4K-page kernels (39-bit VMA) ASan cannot start on any build node, under g++ or clang (its allocator wants
-0x500000000000). The maintainer (2026-11-16): one build node (node-b) goes back to the 16K kernel for ASan, and P7 merges and pushes meanwhile; its
-ASan run is owed and is recorded here when made. The new process tests repeated 20 times in TSan and ASan, and the store test 20 times in TSan. The dashboard: Vitest
+ASan with leak detection: 810, green, no sanitizer report, on node-b back on the 16K kernel (GCC; the 4K-page kernels' 39-bit
+VMA stops ASan starting under g++ or clang, so P7 merged first and ran it after, at the maintainer's word). Its stale precompiled headers
+crashed GCC after the kernel change and were removed. The new process tests repeated 20 times in TSan and ASan, and the store test 20 times in TSan. The dashboard: Vitest
 15, and Playwright 5 on a real `lugh-node` on node-b (root's first sign-in with Chromium's virtual authenticator, a user, a group,
 the account and the audit chain, and root back with the passkey alone).
 
