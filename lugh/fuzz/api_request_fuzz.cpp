@@ -12,6 +12,7 @@
 #include <boost/asio/io_context.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <string>
 
@@ -94,6 +95,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   middleware(request, "192.0.2.1", response, [&answered](bool) { answered = true; });
   io.restart();
   io.run();
-  if (!answered) __builtin_trap();
+  if (!answered) std::abort();
   return 0;
 }

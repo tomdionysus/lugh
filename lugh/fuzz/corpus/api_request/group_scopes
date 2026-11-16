@@ -1,0 +1,3 @@
+/api/v1/groups/g_1/scopes
+*
+{"scopes":["lugh:directory.read","lir:sub:site/+/power"]}

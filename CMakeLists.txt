@@ -48,12 +48,13 @@ find_package(OpenSSL 3.0 REQUIRED)
 # Dannan, the network layer Lugh hosts on, at a release tag, or at a commit while Lugh needs
 # something not yet tagged: from the sibling checkout, cloned into the build tree, so
 # building Lugh never touches ../dannan. Linked as dannan::dannan, the name an installed
-# Dannan exports too (find_package(dannan 0.8 CONFIG)). Now: 0.8.3, the public listener and its outbound
-# connector, the worker pool, and RS256 verification for WebAuthn; its patches keep its ABI
+# Dannan exports too (find_package(dannan 0.8 CONFIG)). Now: 0.8.5, the public listener and its outbound
+# connector, the worker pool, RS256 verification for WebAuthn, and the sign-in back-off (Backoff,
+# Lugh's until 0.8.5, shared with Kvasir); its patches keep its ABI
 # (libdannan.so.0.8).
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_REF "0.8.3")
+set(LUGH_DANNAN_REF "0.8.5")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -216,6 +217,13 @@ if (LUGH_INSTALL_SYSTEM)
 
     install(CODE "
         if (NOT \"\$ENV{LUGH_SKIP_SYSTEM}\")
+            # Dannan's shared library went into the prefix's lib directory with the node: the
+            # loader's cache must know it before lugh-node can run (found by the first test install
+            # on the build nodes, 2026-11-16).
+            find_program(LDCONFIG ldconfig PATHS /usr/sbin /sbin)
+            if (LDCONFIG)
+                execute_process(COMMAND \${LDCONFIG})
+            endif()
             find_program(SYSTEMCTL systemctl)
             if (SYSTEMCTL)
                 message(STATUS \"Preparing the host\")

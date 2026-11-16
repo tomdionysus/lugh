@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 
 #include "lugh/scopes/scope.h"
@@ -23,7 +24,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   (void)grantable(input);
   if (const auto words = split(input)) {
     for (const auto& word : *words) {
-      if (!well_formed(word)) __builtin_trap();
+      if (!well_formed(word)) std::abort();
       (void)grantable(word);
     }
     (void)join(*words);
@@ -31,9 +32,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
 
   if (const auto topic = decode_topic(input)) {
     const auto encoded = encode_topic(*topic);
-    if (!encoded) __builtin_trap();
+    if (!encoded) std::abort();
     const auto again = decode_topic(*encoded);
-    if (!again || !(*again == *topic)) __builtin_trap();
+    if (!again || !(*again == *topic)) std::abort();
   }
   return 0;
 }

@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <span>
 #include <string_view>
 
@@ -31,7 +32,19 @@ namespace {
 // What parses must say the same when written again.
 template <typename Encoded>
 void same(const Encoded& again, std::span<const unsigned char> input) {
-  if (again.size() != input.size() || !std::equal(again.begin(), again.end(), input.begin())) __builtin_trap();
+  if (again.size() != input.size() || !std::equal(again.begin(), again.end(), input.begin())) std::abort();
+}
+
+// A user or group in format 1, which is still read and never written: it is written in the
+// current format, so the bytes differ by design. What it says must survive instead: rewritten,
+// read and rewritten again, it is the same (fuzz_records, 2026-11-16).
+template <typename Record, typename Decode>
+void same_or_upgraded(const Record& record, std::span<const unsigned char> input, Decode decode) {
+  const auto written = lugh::directory::encode(record);
+  if (input.empty() || input[0] != 1) return same(written, input);
+  const auto read = decode(std::span<const unsigned char>(written.data(), written.size()));
+  if (!read) std::abort();
+  same(lugh::directory::encode(*read), std::span<const unsigned char>(written.data(), written.size()));
 }
 
 }  // namespace
@@ -44,10 +57,10 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   using namespace lugh;
   switch (data[0] % 11) {
     case 0:
-      if (const auto user = directory::decode_user(input)) same(directory::encode(*user), input);
+      if (const auto user = directory::decode_user(input)) same_or_upgraded(*user, input, directory::decode_user);
       break;
     case 1:
-      if (const auto group = directory::decode_group(input)) same(directory::encode(*group), input);
+      if (const auto group = directory::decode_group(input)) same_or_upgraded(*group, input, directory::decode_group);
       break;
     case 2:
       if (const auto membership = directory::decode_membership(input)) same(directory::encode(*membership), input);
@@ -75,12 +88,12 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
       if (const auto decoded = encoding::base32_decode(text)) {
         auto upper = std::string(text);
         for (auto& c : upper) c = (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
-        if (encoding::base32(*decoded) != upper) __builtin_trap();
+        if (encoding::base32(*decoded) != upper) std::abort();
       }
       break;
     default:
-      if (const auto name = directory::normal_name(text); name && directory::normal_name(*name) != name) __builtin_trap();
-      if (const auto email = directory::normal_email(text); email && directory::normal_email(*email) != email) __builtin_trap();
+      if (const auto name = directory::normal_name(text); name && directory::normal_name(*name) != name) std::abort();
+      if (const auto email = directory::normal_email(text); email && directory::normal_email(*email) != email) std::abort();
       (void)directory::printable(text, 1024);
       (void)authn::normal_recovery_code(text);
       break;

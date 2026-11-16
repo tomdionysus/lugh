@@ -42,9 +42,11 @@ std::optional<TopicAction> action_of(std::string_view text) {
 
 const dannan::encoding::PercentSet& literal_set() {
   // Printable ASCII stays literal, '/', '+', '#' and '$' among it; space, controls and
-  // non-ASCII are encoded by the set, '%' always, and braces so that an unencoded brace
-  // is only ever the subject's place.
-  static const auto set = dannan::encoding::PercentSet::printable_ascii().encode("{}");
+  // non-ASCII are encoded by the set, '%' always, braces so that an unencoded brace is only
+  // ever the subject's place, and '"' and '\', which no scope token may hold (RFC 6749
+  // section 3.3): left literal, a level holding one encoded to a scope that is not a scope
+  // (fuzz_scope, 2026-11-16).
+  static const auto set = dannan::encoding::PercentSet::printable_ascii().encode("{}\"\\");
   return set;
 }
 

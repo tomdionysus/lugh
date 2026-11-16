@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <string_view>
 
 #include "lugh/ldap/dn.h"
@@ -18,7 +19,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   const auto parsed = parse_dn(std::string_view(reinterpret_cast<const char*>(data), size));
   if (!parsed) return 0;
   const auto again = parse_dn(to_string(*parsed));
-  if (!again || *again != *parsed) __builtin_trap();
+  if (!again || *again != *parsed) std::abort();
   (void)within(normalised(*parsed), normalised(*again));
   return 0;
 }

@@ -13,6 +13,7 @@
 #include <boost/json.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <string_view>
 
 #include "lugh/client/jose.h"
@@ -33,9 +34,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   if (ec || !parsed.is_object()) return 0;
   if (const auto jwk = from_jwk(parsed.as_object())) {
     const auto again = public_jwk(*jwk);
-    if (!again) __builtin_trap();
+    if (!again) std::abort();
     const auto back = from_jwk(*again);
-    if (!back || back->public_key != jwk->public_key) __builtin_trap();
+    if (!back || back->public_key != jwk->public_key) std::abort();
   }
   return 0;
 }

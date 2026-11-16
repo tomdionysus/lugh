@@ -174,3 +174,73 @@ TEST_F(NodeProcessClient, ARelyingPartyAgainstTheRealNode) {
   const auto text = serving->stop();
   EXPECT_EQ(text.find(token), std::string::npos) << "an access token is never logged";
 }
+
+// A key rotation drill on the real node (P12, H4): an administrator rotates the ES256 key while a
+// relying party holds tokens. The new key is published at once and signs only from an hour on, so
+// every token signed before still verifies against what the node publishes, and a restart changes
+// none of it.
+TEST_F(NodeProcessClient, ARotationLosesNoToken) {
+  const auto& wall = dannan::contract::system_wall_clock();
+  client::Verifier verifier({issuer}, wall);
+  auto keys = client::HttpsKeySource::make(verifier, https, io.get_executor(), dannan::contract::steady_time_source(), {});
+  keys->start();
+  ASSERT_TRUE(pump([&] { return keys->status().front().state == client::HttpsKeySource::State::fresh; })) << keys->status().front().last_error;
+  const auto published_before = keys->status().front().keys;
+
+  client::HttpsRequest discovery;
+  discovery.url = issuer + "/.well-known/openid-configuration";
+  const auto document = wait<client::HttpsResponse>([&](auto done) { https.send(discovery, kCall, io.get_executor(), done); });
+  ASSERT_TRUE(document.ok()) << document.message;
+  const auto endpoints = client::Endpoints::from_discovery(boost::json::parse(document.value.body).as_object(), issuer);
+  ASSERT_TRUE(std::holds_alternative<client::Endpoints>(endpoints));
+  client::ClientIdentity identity;
+  identity.client_id = client_id;
+  identity.method = client::ClientIdentity::Method::private_key_jwt;
+  identity.key = service_key;
+  identity.kid = "rp1";
+  client::OAuthClient oauth(std::get<client::Endpoints>(endpoints), identity, https, verifier, wall);
+  const auto token_now = [&] {
+    const auto tokens = wait<client::TokenSet>([&](auto done) { oauth.client_credentials({"lugh:directory.read"}, kCall, io.get_executor(), done); });
+    EXPECT_TRUE(tokens.ok()) << tokens.message;
+    const auto& access = *tokens.value.access_token;
+    return std::string(access.reveal().begin(), access.reveal().end());
+  };
+  const auto verifies = [&](const std::string& token) { return std::holds_alternative<client::AccessToken>(verifier.verify_access(token, "lugh")); };
+
+  const auto before = token_now();
+  ASSERT_TRUE(verifies(before));
+
+  // Root rotates, at phr through the dashboard's session.
+  const auto rotated = root.api(http::verb::post, "/api/v1/keys/rotate", R"({"algorithm":"ES256"})");
+  ASSERT_TRUE(rotated);
+  ASSERT_EQ(rotated->status, 201u) << rotated->body;
+
+  // Published at once; the relying party picks it up and every token still verifies.
+  keys->refresh_now();
+  ASSERT_TRUE(pump([&] { return keys->status().front().keys == published_before + 1; })) << keys->status().front().last_error;
+  EXPECT_TRUE(verifies(before));
+  const auto during = token_now();
+  EXPECT_TRUE(verifies(during)) << "still signed by the old key, which is still published";
+
+  // A restart keeps the keys and what they publish.
+  serving->stop();
+  serving.reset();
+  serving.emplace(workspace, node.state, node.credentials, std::nullopt, std::vector<std::string>{"--config", config_path.string()}, root.port);
+  ASSERT_TRUE(serving->up()) << serving->log();
+  keys->refresh_now();
+  ASSERT_TRUE(pump([&] { return keys->status().front().state == client::HttpsKeySource::State::fresh && keys->status().front().failures == 0; }));
+  EXPECT_EQ(keys->status().front().keys, published_before + 1);
+  EXPECT_TRUE(verifies(before));
+  EXPECT_TRUE(verifies(during));
+  EXPECT_TRUE(verifies(token_now()));
+
+  const auto audit = root.browser(http::verb::get, "/api/v1/audit?from=1&limit=1000");
+  ASSERT_TRUE(audit);
+  EXPECT_NE(audit->body.find("key.rotate"), std::string::npos);
+
+  keys->stop();
+  for (int i = 0; i < 5; ++i) {
+    io.restart();
+    io.run_for(std::chrono::milliseconds(20));
+  }
+}
