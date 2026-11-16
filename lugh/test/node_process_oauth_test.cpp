@@ -109,7 +109,8 @@ class NodeProcessOAuth : public ::testing::Test {
     config_path = workspace.path("config.yaml");
     write_file(config_path, std::string("oauth: { issuer: ") + kIssuer + ", outbound_ca: " + workspace.certificate.string() + " }\n");
     start();
-    root.sign_in_and_enrol(password);
+    // At phr, so root may administer through the session.
+    root.sign_in_and_enrol_passkey(password, kIssuer);
     ASSERT_FALSE(HasFatalFailure());
     register_application();
   }
@@ -276,7 +277,6 @@ TEST_F(NodeProcessOAuth, TheWholeFlow) {
 
   const auto text = serving->stop();
   EXPECT_EQ(text.find(password), std::string::npos) << "root's password is never logged";
-  EXPECT_EQ(text.find(root.secret), std::string::npos) << "nor the TOTP secret";
   EXPECT_EQ(text.find(refresh_token), std::string::npos) << "nor a refresh token";
   EXPECT_EQ(text.find(id_token), std::string::npos) << "nor an ID token";
 }

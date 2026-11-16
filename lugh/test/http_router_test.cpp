@@ -13,6 +13,7 @@
 
 #include "dannan/test/fixtures/stepped_time.h"
 #include "lugh/http/router.h"
+#include "lugh/test/fixtures/fixed_callers.h"
 #include "lugh/test/fixtures/route_call.h"
 
 using lugh::http::RateLimits;
@@ -281,4 +282,37 @@ TEST(Router, AHandlerThatThrowsIsAnsweredOnce) {
   EXPECT_EQ(response->result(), http::status::internal_server_error);
   EXPECT_EQ(boost::json::parse(response->body()).at("error").at("code").as_string(), "failed");
   EXPECT_EQ(response->body().find("a handler that fails"), std::string::npos);
+}
+
+// Administering through a session needs phr (the maintainer, 2026-11-16): a scoped route refuses a session
+// below it with phr_required; a person's own unscoped routes and a bearer token at mfa are not
+// affected.
+TEST(Router, AdministeringThroughASessionNeedsPhr) {
+  boost::asio::io_context io;
+  dannan::test::SteppedTime time;
+  using lugh::http::Caller;
+  auto callers = std::make_shared<FixedCallers>();
+  callers->add("mfa-session", Caller{Caller::Kind::user, "u1", {"read"}, "urn:lugh:acr:mfa", true});
+  callers->add("phr-session", Caller{Caller::Kind::user, "u1", {"read"}, "urn:lugh:acr:phr", true});
+  callers->add("mfa-token", Caller{Caller::Kind::user, "u1", {"read"}, "urn:lugh:acr:mfa", false});
+  callers->add("service", Caller{Caller::Kind::service, "app", {"read"}, "", false});
+  const auto router = std::make_shared<Router>(io.get_executor(), std::make_shared<Throttle>(time, RateLimits{{1000, 1000}, {1000, 1000}}), callers);
+  const auto ok = [](RouteContext context) {
+    context.response->result(http::status::ok);
+    context.done();
+  };
+  router->add(http::verb::get, "/api/v1/things", "read", ok);
+  router->add_authenticated(http::verb::get, "/api/v1/me/things", ok);
+  const auto as = [&](const std::string& token, const std::string& target) {
+    return call(io, router->middleware("/api/"), http::verb::get, target, "192.0.2.1", "",
+                std::vector<std::pair<std::string, std::string>>{{"Authorization", "Bearer " + token}});
+  };
+
+  const auto refused = as("mfa-session", "/api/v1/things");
+  EXPECT_EQ(refused.response->result(), http::status::forbidden);
+  EXPECT_EQ(error_code(refused), "phr_required");
+  EXPECT_EQ(as("phr-session", "/api/v1/things").response->result(), http::status::ok);
+  EXPECT_EQ(as("mfa-token", "/api/v1/things").response->result(), http::status::ok);
+  EXPECT_EQ(as("service", "/api/v1/things").response->result(), http::status::ok);
+  EXPECT_EQ(as("mfa-session", "/api/v1/me/things").response->result(), http::status::ok) << "a person's own routes stay open at mfa";
 }

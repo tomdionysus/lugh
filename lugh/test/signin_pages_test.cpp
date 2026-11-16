@@ -167,13 +167,16 @@ TEST(SigninPages, RootsFirstSignIn) {
   const auto codes = rig.post("/signin/enrol/totp", {{"csrf", add.csrf()}, {"code", rig.code_for(lugh::text_secret(add.totp_secret()))}});
   ASSERT_EQ(codes.status, 200u) << codes.body;
 
-  // Root's session holds every Lugh scope, so the API opens to it.
+  // Root's session holds every Lugh scope; a TOTP sign-in is mfa, so administering waits for a
+  // passkey (the maintainer, 2026-11-16).
   const auto me = rig.get("/api/v1/me");
   ASSERT_EQ(me.status, 200u) << me.body;
   const auto body = boost::json::parse(me.body);
   EXPECT_EQ(body.at("user").at("name"), "root");
   EXPECT_EQ(body.at("scopes").as_array().size(), lugh::scopes::lugh_scopes().size());
-  EXPECT_EQ(rig.get("/api/v1/users").status, 200u);
+  const auto users = rig.get("/api/v1/users");
+  EXPECT_EQ(users.status, 403u);
+  EXPECT_EQ(boost::json::parse(users.body).at("error").at("code"), "phr_required");
 }
 
 // A session opens the API; a change through it needs its CSRF token, which /api/v1/me gives.

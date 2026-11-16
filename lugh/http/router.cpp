@@ -102,6 +102,14 @@ void Router::_handle(const std::string& prefix, const HttpRequest& request, cons
         return next(false);
       }
 
+      // Administering through a session needs a phishing-resistant sign-in (the maintainer, 2026-11-16): the
+      // dashboard asks for the step-up. A person's own routes are unscoped, so a session at mfa
+      // can still add its first passkey.
+      if (!route.scope.empty() && context.caller.through_session && context.caller.acr != Caller::kAdministerAcr) {
+        write_error(response, status::forbidden, "phr_required", "administering needs a sign-in with a passkey or security key");
+        return next(false);
+      }
+
       if (!_decode(context, query)) return next(false);
       return _dispatch(route.handler, std::move(context));
     }

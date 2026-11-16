@@ -121,12 +121,17 @@ TEST_F(SessionRoutesTest, GuessingThroughASessionBacksOff) {
 TEST_F(SessionRoutesTest, AnAdministratorsView) {
   EXPECT_EQ(rig.get("/api/v1/users/" + alice.id + "/sessions").status, 403u);
   grant({"lugh:directory.read", "lugh:sessions.write", "lugh:directory.write"});
+  const auto at_mfa = rig.get("/api/v1/users/" + alice.id + "/sessions");
+  EXPECT_EQ(at_mfa.status, 403u) << "administering needs phr";
+  EXPECT_EQ(boost::json::parse(at_mfa.body).at("error").at("code"), "phr_required");
+  rig.at_phr(alice.id);
+  ASSERT_FALSE(HasFatalFailure());
   const auto listed = rig.get("/api/v1/users/" + alice.id + "/sessions");
   ASSERT_EQ(listed.status, 200u) << listed.body;
-  EXPECT_EQ(boost::json::parse(listed.body).at("sessions").as_array().size(), 1u);
+  EXPECT_EQ(boost::json::parse(listed.body).at("sessions").as_array().size(), 2u) << "the mfa one and the phr one";
   const auto ended = rig.json(verb::delete_, "/api/v1/users/" + alice.id + "/sessions", "");
   ASSERT_EQ(ended.status, 200u) << ended.body;
-  EXPECT_EQ(boost::json::parse(ended.body).at("ended"), 1);
+  EXPECT_EQ(boost::json::parse(ended.body).at("ended"), 2);
   EXPECT_EQ(rig.get("/api/v1/me").status, 401u);
 }
 
@@ -134,7 +139,9 @@ TEST_F(SessionRoutesTest, AnAdministratorsView) {
 TEST_F(SessionRoutesTest, DisablingEndsSessionsAtOnce) {
   const auto other = second_browser();
   grant({"lugh:directory.read", "lugh:directory.write"});
-  ASSERT_EQ(rig.sessions->of_user(alice.id).size(), 2u);
+  rig.at_phr(alice.id);
+  ASSERT_FALSE(HasFatalFailure());
+  ASSERT_EQ(rig.sessions->of_user(alice.id).size(), 3u);
   const auto version = read_value<std::optional<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
                          rig.directory->user(alice.id, kTestDeadline, executor, done);
                        })->version;

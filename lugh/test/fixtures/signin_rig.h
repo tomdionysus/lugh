@@ -188,6 +188,16 @@ class SigninRig : public AuthnRig {
     return page;
   }
 
+  // The browser's session replaced by a new one for `user_id` at phr, as a passkey sign-in would
+  // leave it: administering through a session needs phr (the maintainer, 2026-11-16).
+  void at_phr(const std::string& user_id) {
+    auto created = wait_for<lugh::Outcome<lugh::session::Sessions::Created>>([&](lugh::Executor executor, auto done) {
+      sessions->create(admin, user_id, lugh::authn::Assurance::phr, {"pwd", "hwk"}, kTestDeadline, executor, done);
+    });
+    ASSERT_TRUE(created.ok()) << created.message;
+    jar[lugh::session::Sessions::kCookie] = std::string(lugh::secret_text(created.value.handle));
+  }
+
   Page get(const std::string& target) { return request(lugh::http::verb::get, target); }
   Page post(const std::string& target, const std::map<std::string, std::string>& form) { return request(lugh::http::verb::post, target, form); }
 
