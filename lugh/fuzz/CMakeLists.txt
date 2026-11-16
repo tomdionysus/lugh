@@ -7,8 +7,18 @@
 
 # One libFuzzer target per parser of untrusted bytes, <format>_fuzz.cpp, built only with
 # LUGH_BUILD_FUZZING and a clang that ships libFuzzer. Apple's clang does not.
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag(-fsanitize=fuzzer LUGH_HAS_FUZZER)
+# A fuzz target, compiled and linked: a plain flag check links a main() of its own, which
+# libFuzzer's main collides with, so it fails even where libFuzzer is installed.
+include(CheckCXXSourceCompiles)
+set(CMAKE_REQUIRED_FLAGS "-fsanitize=fuzzer")
+set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=fuzzer")
+check_cxx_source_compiles("
+#include <cstddef>
+#include <cstdint>
+extern \"C\" int LLVMFuzzerTestOneInput(const std::uint8_t*, std::size_t) { return 0; }
+" LUGH_HAS_FUZZER)
+unset(CMAKE_REQUIRED_FLAGS)
+unset(CMAKE_REQUIRED_LINK_OPTIONS)
 if (NOT LUGH_HAS_FUZZER)
     message(FATAL_ERROR "LUGH_BUILD_FUZZING is on but ${CMAKE_CXX_COMPILER} has no libFuzzer (-fsanitize=fuzzer)")
 endif()
@@ -31,8 +41,10 @@ lugh_fuzz_target(fuzz_records records_fuzz.cpp)
 lugh_fuzz_target(fuzz_api_request api_request_fuzz.cpp)
 lugh_fuzz_target(fuzz_scope scope_fuzz.cpp)
 lugh_fuzz_target(fuzz_jws jws_fuzz.cpp)
+lugh_fuzz_target(fuzz_client client_fuzz.cpp)
 lugh_fuzz_target(fuzz_form form_fuzz.cpp)
 lugh_fuzz_target(fuzz_ber ber_fuzz.cpp)
 lugh_fuzz_target(fuzz_filter filter_fuzz.cpp)
 lugh_fuzz_target(fuzz_dn dn_fuzz.cpp)
 lugh_fuzz_target(fuzz_envelope envelope_fuzz.cpp)
+lugh_fuzz_target(fuzz_webauthn webauthn_fuzz.cpp)
