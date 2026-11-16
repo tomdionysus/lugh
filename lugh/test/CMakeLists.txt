@@ -24,7 +24,6 @@ add_executable(lugh_tests
     audit_log_test.cpp
     authn_app_passwords_test.cpp
     authn_authenticator_test.cpp
-    authn_backoff_test.cpp
     authn_challenges_test.cpp
     authn_enrolment_links_test.cpp
     authn_factors_test.cpp

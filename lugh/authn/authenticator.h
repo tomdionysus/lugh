@@ -17,9 +17,9 @@
 #include <vector>
 
 #include "dannan/contract/time_source.h"
+#include "dannan/listen/backoff.h"
 #include "dannan/status/log.h"
 #include "lugh/audit/audit_log.h"
-#include "lugh/authn/backoff.h"
 #include "lugh/authn/enrolment_links.h"
 #include "lugh/authn/factors.h"
 #include "lugh/authn/passwords.h"
@@ -31,6 +31,9 @@
 #include "lugh/directory/directory.h"
 
 namespace lugh::authn {
+
+// Dannan's since 0.8.5: Lugh's sign-in back-off, moved so Lugh and Kvasir link one copy.
+using dannan::listen::Backoff;
 
 // One person part way through signing in, held by the caller between steps (P6 keeps it
 // server side, behind the pre-session cookie). It says who and how far, never a secret.
