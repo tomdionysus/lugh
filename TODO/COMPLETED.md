@@ -2,6 +2,36 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-16: P7, the dashboard
+
+Plan and rulings: `2026-11-16-p7-dashboard.md`. The maintainer, 2026-11-16: phr is enforced on the server for administering, and root's
+first sign-in is offered a passkey and TOTP both.
+- **The phr gate**: `http::Caller` says whether it came through a session; the router refuses a scoped route to a session below phr
+  with `403 phr_required`. `/api/v1/me/*` stays open at mfa, so a person adds their first passkey there; tokens are unaffected.
+- **Root's passkey**: root's first sign-in was already offered one; proved on the real binary, and the process tests that
+  administer through a session now enrol root with a passkey (`RootBrowser::sign_in_and_enrol_passkey`).
+- **The static site** (`lugh/http/static_site`): `static.directory` read once at start into memory (4096 files, 64 MiB at most),
+  links and dot-files left out; SPA routes get `index.html`, a missing file a JSON 404; `assets/` immutable, the rest revalidated
+  by ETag; each page's CSP allows this origin and its inline scripts by hash (a departure, for the maintainer). A directory that cannot serve
+  stops the start. `cmake --install` copies `dashboard/build/client`, refusing a missing build; the unit passes `--static-directory`.
+- **The dashboard** (`dashboard/`): React 19, React Router 7 (SPA), Vite 7, TypeScript 5.9, T.O.M.S's tokens. The account
+  (factors behind the re-authentication window, sessions, password, app passwords), users, groups (members, scopes with a diff),
+  policies, applications, keys and the audit log; its own confirmation dialog. Sign-in and step-up through
+  `/signin?continue=dashboard[&acr=phr]`, a fixed word that comes back to `/`. A TOTP setup's answer carries its QR modules.
+- **Found on the way**: the group members route answers `{members}` (the client read `{users}`; Playwright found it). The store's
+  concurrent-writer test destroyed an `io_context` another thread could still be posting to (TSan, once in a full run): each
+  writer's context now outlives every writer. node-b's new 4K-page kernel (39-bit VMA) stops g++'s ASan from starting at all, so
+  Lugh's ASan is now clang 19 (`build-asan-clang`).
+- **Asked of the maintainer**: the CSP departure; whether an app password with an administering scope needs a phr session (recommended).
+
+Tests: 810 in `lugh_tests`, from 799; 11 new, none removed (the router's gate 1, the static site 5, the dashboard on the real node
+3, root's passkey 1, the sign-in's way back 1). Debug on node-b, TSan on node-a (clang 19): green, no warning, on the final code.
+ASan not yet run: since the 4K-page kernels (39-bit VMA) ASan cannot start on any build node, under g++ or clang (its allocator wants
+0x500000000000). The maintainer (2026-11-16): one build node (node-b) goes back to the 16K kernel for ASan, and P7 merges and pushes meanwhile; its
+ASan run is owed and is recorded here when made. The new process tests repeated 20 times in TSan and ASan, and the store test 20 times in TSan. The dashboard: Vitest
+15, and Playwright 5 on a real `lugh-node` on node-b (root's first sign-in with Chromium's virtual authenticator, a user, a group,
+the account and the audit chain, and root back with the passkey alone).
+
 ## 2026-11-16: a person's own factors, and HttpsClient on Dannan's connector
 
 A person's own factors (`2026-11-15-self-factors.md`), on the maintainer's rulings of 2026-11-15:
