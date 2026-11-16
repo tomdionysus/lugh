@@ -5,6 +5,8 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
+#include "lugh/scopes/scope.h"
+
 #include <gtest/gtest.h>
 
 #include "lugh/scopes/topic_scope.h"
@@ -53,6 +55,18 @@ TEST(TopicScope, PlusIsTheWildcardNotASpace) {
   // Encoded or not, '+' inside a level is no MQTT filter.
   EXPECT_FALSE(decode_topic("lir:sub:a%2Bb"));
   EXPECT_EQ(decode_topic("lir:sub:%2B")->levels.back(), text("+"));
+}
+
+// A level may hold '"' or '\', which a scope token may not (RFC 6749 section 3.3), so they are
+// written encoded and the scope still decodes to what it was (fuzz_scope, 2026-11-16).
+TEST(TopicScope, AQuoteOrBackslashInALevelIsWrittenEncoded) {
+  const auto decoded = decode_topic("lir:pub:say%22hi%22/a%5Cb");
+  ASSERT_TRUE(decoded);
+  EXPECT_EQ(decoded->levels, (std::vector<TopicLevel>{text("say\"hi\""), text("a\\b")}));
+  const auto encoded = encode_topic(*decoded);
+  ASSERT_TRUE(encoded);
+  EXPECT_TRUE(well_formed(*encoded)) << *encoded;
+  EXPECT_EQ(decode_topic(*encoded), decoded);
 }
 
 TEST(TopicScope, PercentEncodingIsStrict) {
