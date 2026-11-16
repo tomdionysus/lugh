@@ -202,3 +202,25 @@ TEST(SigninPages, TheApiThroughASession) {
   EXPECT_EQ(rig.request(verb::post, "/api/v1/users", {}, {{"Content-Type", "application/json"}, {"X-CSRF-Token", token}}).status, 403u);
   EXPECT_EQ(rig.request(verb::post, "/api/v1/users", {}, {{"Content-Type", "application/json"}, {"X-CSRF-Token", token + "x"}}).status, 401u);
 }
+
+// The dashboard (P7) sends a sign-in, and a step-up, with continue=dashboard, and is where it
+// comes back: the root, never a place the request names.
+TEST(SigninPages, TheDashboardIsWhereItsSignInReturns) {
+  SigninRig rig;
+  rig.enrolled("alice");
+  const auto form = rig.get("/signin?continue=dashboard");
+  ASSERT_EQ(form.status, 200u);
+  ASSERT_EQ(rig.post("/signin", {{"csrf", form.csrf()}, {"login", "alice"}, {"password", kPassword}, {"continue", "dashboard"}}).location(), "/signin/factor");
+  const auto factor = rig.get("/signin/factor");
+  const auto done = rig.post("/signin/factor", {{"csrf", factor.csrf()}, {"code", rig.code_for(rig.secret)}});
+  EXPECT_EQ(done.status, 303u) << done.body;
+  EXPECT_EQ(done.location(), "/");
+
+  // Signed in at mfa, asking for phr: the form again, not "signed in already".
+  const auto step_up = rig.get("/signin?continue=dashboard&acr=urn:lugh:acr:phr");
+  EXPECT_EQ(step_up.status, 200u);
+  EXPECT_FALSE(step_up.csrf().empty());
+  // Anything else as continue goes nowhere but the sign-in's own pages.
+  EXPECT_EQ(rig.get("/signin").location(), "/signin/done");
+  EXPECT_EQ(rig.get("/signin?continue=https://evil.example/").location(), "/signin/done");
+}

@@ -1,0 +1,222 @@
+.admin {
+	position: relative;
+
+	/* Exactly the viewport, so the bars stay put and the screen between them is what
+	   scrolls. `flex: none` is load-bearing: as a flex item of .main with flex: 1 the
+	   height is ignored and the page grows instead. */
+	flex: none;
+	height: 100vh;
+	height: 100dvh;
+
+	display: flex;
+	flex-direction: column;
+
+	padding: 14px 24px 24px;
+	gap: 14px;
+
+	background-color: var(--bg);
+}
+
+/* The wordmark. */
+.brand {
+	justify-self: start;
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	text-decoration: none;
+	min-width: 0;
+}
+
+.brand:focus {
+	outline: none;
+}
+
+.brand:focus-visible .brand-name {
+	white-space: nowrap;
+	font-weight: 700;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+}
+
+.admin > * {
+	position: relative;
+}
+
+.admin > .topbar,
+.admin > .bottombar {
+	flex: none;
+}
+
+.admin > .screen {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+
+	/* Room for the scrollbar on every page, on both sides, so a page that scrolls sits
+	   exactly where one that does not would. */
+	scrollbar-gutter: stable both-edges;
+}
+
+.topbar {
+	min-height: calc(var(--bar-row) + var(--bar-pad));
+
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	align-items: center;
+	gap: 16px;
+
+	padding-bottom: var(--bar-pad);
+	border-bottom: 1px solid var(--border);
+}
+
+.topbar-right {
+	justify-self: end;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+}
+
+/* Who is signed in, and the way out. */
+.account {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.account-name {
+	font-size: 12px;
+	line-height: 14px;
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 160px;
+}
+
+.account-signout {
+	font: inherit;
+	font-size: 11px;
+	line-height: 14px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	padding: 6px 12px;
+	background: none;
+	border: 1px solid var(--border-strong);
+	border-radius: 999px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.account-signout:hover {
+	color: var(--text);
+}
+
+.bottombar {
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
+	gap: 16px;
+
+	padding-top: 6px;
+	border-top: 1px solid var(--border);
+}
+
+.bottombar .version,
+.bottombar .host {
+	font-family: var(--font);
+	font-size: 11px;
+	line-height: 13px;
+	font-weight: 500;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--text-dim);
+	font-variant-numeric: tabular-nums;
+}
+
+.status {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+
+	font-size: 12px;
+	line-height: 14px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	white-space: nowrap;
+
+	padding: 7px 14px;
+	min-width: 112px;
+	justify-content: center;
+	border-radius: 999px;
+	border: 1px solid var(--border-strong);
+	background-color: var(--surface);
+	color: var(--text-muted);
+}
+
+.status::before {
+	content: "";
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background-color: currentColor;
+}
+
+.status.live {
+	color: var(--good);
+	border-color: color-mix(in srgb, var(--good) 40%, transparent);
+}
+
+.status.live::before {
+	animation: status-pulse 2s ease-in-out infinite;
+}
+
+.status.stale {
+	color: var(--warn);
+	border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+}
+
+.status.down {
+	color: var(--bad);
+	border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+}
+
+.status.unknown {
+	color: var(--unknown);
+}
+
+@keyframes status-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.35; }
+}
+
+@media (max-width: 760px) {
+	.admin {
+		padding: 16px;
+		gap: 12px;
+	}
+
+	.topbar {
+		grid-template-columns: 1fr auto;
+		gap: 10px;
+	}
+
+	.topbar .navbar {
+		grid-column: 1 / -1;
+		grid-row: 2;
+	}
+}
+
+.account form {
+	display: contents;
+}
+
+.screen > .notice {
+	max-width: 1100px;
+	margin: 0 auto 12px;
+}

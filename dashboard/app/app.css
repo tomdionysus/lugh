@@ -1,0 +1,481 @@
+/* The T.O.M.S palette and idioms (docs/architecture.md, "Frontend"), as blackraven-admin has them,
+   so Lugh's dashboard reads as one system with the others: plain CSS on custom properties, Roboto,
+   dark only. What an admin tool needs beyond them (dialogs, notices, the QR symbol) is at the end,
+   in the same tokens. */
+
+:root {
+  /* Surfaces, darkest to lightest */
+  --bg: #0c0e10;
+  --surface: #15181c;
+  --surface-raised: #1c2026;
+  --track: #262b31;
+
+  --border: #272c33;
+  --border-strong: #3a424b;
+
+  /* Text, brightest to dimmest */
+  --text: #e8ebee;
+  --text-muted: #939da7;
+  --text-dim: #626c76;
+
+  --good: #00cc44;
+  --warn: #ffb020;
+  --bad: #ff4d4d;
+
+  /* Known to exist, nothing known about it. Distinct from the three verdicts rather
+     than a dimmer version of one: "we have not asked" is not a shade of "we asked and
+     did not like the answer". */
+  --unknown: #3a72b0;
+
+  --bar-row: 32px;
+  --bar-pad: 10px;
+
+  /* One height for every input, select and button, so any of them side by side line
+     up; a smaller one inside tables, whose rows are all one height. */
+  --control: 34px;
+  --control-sm: 30px;
+  --row: 48px;
+
+  --radius: 14px;
+  --radius-sm: 8px;
+  --gap: 16px;
+
+  --font: 'Roboto Variable', Roboto, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-family: var(--font);
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+h2 {
+  font-family: var(--font);
+  font-size: 26px;
+  line-height: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+p {
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.main {
+  background-color: var(--bg);
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+}
+
+.error-page {
+  width: 100%;
+  max-width: 900px;
+  padding: 64px 20px 20px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.error-page pre {
+  width: 100%;
+  padding: 16px;
+  overflow-x: auto;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* ------------------------------------------------------------- pages and forms
+   Shared by every screen: a page of panels, tables of records, and forms in the panels. */
+
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 8px 0 32px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.page-header h2 {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 500;
+}
+
+.page-header .actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.panel {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.panel > p,
+.muted {
+  color: var(--text-muted);
+  line-height: 19px;
+}
+
+.data-table {
+  width: 100%;
+  font-size: 13px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* A minimum, as a cell's height is: a row of text, a row of buttons and a row with a
+   second line under the name all come out the same. */
+.data-table td {
+  height: var(--row);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.data-table td .muted {
+  line-height: 16px;
+}
+
+.data-table input:not([type="checkbox"]),
+.data-table select,
+.data-table .btn {
+  height: var(--control-sm);
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tr.link {
+  cursor: pointer;
+}
+
+.data-table tr.link:hover td {
+  background-color: var(--surface-raised);
+}
+
+.data-table input[type="number"] {
+  width: 70px;
+}
+
+.data-table input.record {
+  width: 140px;
+}
+
+code,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field.wide {
+  grid-column: 1 / -1;
+}
+
+/* A button in a field's place keeps its own width, level with the inputs beside it. */
+.field > .btn {
+  align-self: flex-start;
+}
+
+.field > span {
+  font-size: 12px;
+  line-height: 15px;
+  color: var(--text-muted);
+}
+
+.field small {
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--text-dim);
+}
+
+input,
+select {
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text);
+  height: var(--control);
+  padding: 0 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  outline: none;
+  min-width: 0;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--text-muted);
+}
+
+input:disabled {
+  color: var(--text-dim);
+}
+
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin: 0;
+  vertical-align: middle;
+  accent-color: var(--good);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--control);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  padding: 0 14px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.btn:hover {
+  border-color: var(--text-muted);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn.primary {
+  color: var(--bg);
+  background: var(--text);
+  border-color: var(--text);
+}
+
+.btn.danger {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+}
+
+.form-error {
+  color: var(--bad);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.form-saved {
+  color: var(--good);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.hydrate-fallback {
+  flex: 1;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------- Lugh's own */
+
+.notice {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background-color: var(--surface-raised);
+  font-size: 13px;
+  line-height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.notice.warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  background-color: color-mix(in srgb, var(--warn) 8%, var(--surface));
+}
+
+.pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.pill.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+.pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-color: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 460px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background-color: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.dialog p {
+  color: var(--text-muted);
+  line-height: 19px;
+}
+
+.secret-once {
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 20px;
+  word-break: break-all;
+  background-color: var(--surface-raised);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  user-select: all;
+}
+
+.qr {
+  width: 200px;
+  height: 200px;
+  background: #ffffff;
+  border-radius: var(--radius-sm);
+}
+
+.codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

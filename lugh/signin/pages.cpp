@@ -54,6 +54,9 @@ std::string notice(const std::string& text, bool warning = false) {
   return std::string("<p class=\"notice") + (warning ? " warn" : "") + "\" role=\"alert\">" + escape(text) + "</p>\n";
 }
 
+// What the dashboard sends as `continue` to come back to itself after a sign-in or a step-up.
+constexpr const char* kDashboard = "dashboard";
+
 // An authorisation request's id, as the sign-in carries it: base64url, as Lugh makes them.
 std::string resume_of(const std::string& text) {
   if (text.empty() || text.size() > 64) return {};
@@ -66,6 +69,8 @@ std::string resume_of(const std::string& text) {
 // signed-in page.
 std::string done_target(const std::string& resume) {
   if (resume.empty()) return "/signin/done";
+  // The dashboard (P7), served at the root; a fixed word, so the sign-in names no other place.
+  if (resume == kDashboard) return "/";
   // A device's user signing in on the way to approving it (RFC 8628).
   if (resume.rfind("device-", 0) == 0) return "/signin/device?user_code=" + resume.substr(7);
   return "/oauth2/authorize/resume?id=" + resume;
