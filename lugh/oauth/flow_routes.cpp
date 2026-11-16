@@ -118,9 +118,12 @@ void decide(const std::shared_ptr<Shared>& shared, const RouteContext& context, 
     const auto session = session_of(*shared, context);
     const auto now = shared->now();
     const bool login_asked = request.prompt.find("login") != std::string::npos;
-    const auto max_age = request.max_age ? request.max_age : (app.max_age ? std::optional<std::uint64_t>(app.max_age) : std::nullopt);
+    // The request's max_age, else the application's (0 there: none). Two plain values rather than an
+    // optional, which GCC's release build takes for maybe uninitialized.
+    const bool aged = request.max_age.has_value() || app.max_age != 0;
+    const std::uint64_t max_age = request.max_age.value_or(app.max_age);
     const bool needs_sign_in =
-        !session || session->acr < required || (login_asked && session->auth_time < pending.asked_at) || (max_age && now > session->auth_time + *max_age);
+        !session || session->acr < required || (login_asked && session->auth_time < pending.asked_at) || (aged && now > session->auth_time + max_age);
     if (needs_sign_in) {
       if (request.prompt == "none") return error_back(*shared, context, request, "login_required", "signing in is needed");
       const auto id = shared->pending.put(pending);
