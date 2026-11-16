@@ -55,6 +55,7 @@ add_executable(lugh_tests
     http_health_routes_test.cpp
     http_rate_limiter_test.cpp
     http_router_test.cpp
+    http_static_site_test.cpp
     http_outbound_test.cpp
     http_server_test.cpp
     ldap_codec_test.cpp
@@ -83,6 +84,7 @@ add_executable(lugh_tests
     node_process_init_test.cpp
     node_process_ldap_test.cpp
     node_process_oauth_test.cpp
+    node_process_dashboard_test.cpp
     node_process_factors_test.cpp
     node_process_signin_test.cpp
     node_process_tls_test.cpp

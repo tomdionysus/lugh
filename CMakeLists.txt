@@ -174,8 +174,8 @@ endif()
 # ----------------------------------------------------------------- install
 #
 # `sudo cmake --install build-release` is the whole deployment: binary, config, docs, the
-# systemd unit, host preparation, and a restart. Run ctest first, and stop if it fails. The
-# dashboard joins in P7.
+# dashboard, the systemd unit, host preparation, and a restart. Run ctest first, and stop if it
+# fails.
 #
 # Absolute destinations are deliberate: the unit belongs in /etc and the config in
 # /usr/local/etc whatever CMAKE_INSTALL_PREFIX says, so this is not a relocatable package.
@@ -192,6 +192,24 @@ install(TARGETS lugh-node RUNTIME DESTINATION bin)
 
 install(FILES config/config.yaml DESTINATION "${LUGH_CONFDIR}")
 install(DIRECTORY docs/ DESTINATION "${LUGH_SHAREDIR}/docs")
+
+# The dashboard (P7), built first with `npm ci && npm run build` in dashboard/. Vite fingerprints
+# its assets, so the installed copy is removed before the new one goes in; root's, read-only to
+# the service. Turn LUGH_INSTALL_DASHBOARD off to install without one (and without
+# --static-directory in the unit).
+option(LUGH_INSTALL_DASHBOARD "Install the dashboard's build" ON)
+set(LUGH_DASHBOARD_BUILD "${CMAKE_CURRENT_SOURCE_DIR}/dashboard/build/client")
+if (LUGH_INSTALL_DASHBOARD)
+    install(CODE "
+        if (NOT EXISTS \"${LUGH_DASHBOARD_BUILD}/index.html\")
+            message(FATAL_ERROR \"The dashboard is not built: run 'npm ci && npm run build' in dashboard/ first, or configure with -DLUGH_INSTALL_DASHBOARD=OFF\")
+        endif()
+        file(REMOVE_RECURSE \"\$ENV{DESTDIR}${LUGH_SHAREDIR}/dashboard\")
+    ")
+    install(DIRECTORY "${LUGH_DASHBOARD_BUILD}/" DESTINATION "${LUGH_SHAREDIR}/dashboard"
+            DIRECTORY_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+            FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
+endif()
 
 if (LUGH_INSTALL_SYSTEM)
     install(FILES deploy/lugh.service DESTINATION "${LUGH_UNITDIR}")
