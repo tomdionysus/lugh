@@ -126,6 +126,11 @@ class Factors : public directory::Dependent, public std::enable_shared_from_this
   void webauthn_check(std::string user_id, webauthn::Expected expected, std::string credential_id, Bytes client_data_json, Bytes authenticator_data,
                       Bytes signature, Deadline deadline, Executor executor, Done<Outcome<webauthn::Asserted>> done);
 
+  // A new name for one of the user's WebAuthn credentials: 1 to 64 printable bytes. not_found for
+  // anything else, conflict when it changed between the read and the write.
+  void webauthn_rename(audit::Actor actor, std::string user_id, std::string factor_id, std::string name, Deadline deadline, Executor executor,
+                       Done<Outcome<FactorInfo>> done);
+
   void remove(audit::Actor actor, std::string user_id, std::string factor_id, Deadline deadline, Executor executor, Done<Outcome<>> done);
 
   // Every factor the user has, for an administrator's reset and for removal.

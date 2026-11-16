@@ -13,6 +13,7 @@
 
 #include "dannan/encoding/percent.h"
 #include "lugh/api/app_password_routes.h"
+#include "lugh/api/factor_routes.h"
 #include "lugh/api/me_routes.h"
 #include "lugh/api/session_routes.h"
 #include "lugh/api/user_routes.h"
@@ -27,6 +28,7 @@
 #include "lugh/oauth/logout_routes.h"
 #include "lugh/oauth/refresh_tokens.h"
 #include "lugh/session/pre_sessions.h"
+#include "lugh/session/reauthentications.h"
 #include "lugh/session/session_callers.h"
 #include "lugh/session/sessions.h"
 #include "lugh/signin/pages.h"
@@ -118,6 +120,10 @@ class SigninRig : public AuthnRig {
     session_routes->register_routes(*router);
     own_app_passwords = std::make_unique<lugh::api::AppPasswordRoutes>(app_passwords);
     own_app_passwords->register_routes(*router);
+    windows = std::make_shared<lugh::session::Reauthentications>(time);
+    own_factors = std::make_unique<lugh::api::FactorRoutes>(sessions, windows, directory, factors, authenticator, "Lugh");
+    own_factors->webauthn({kRpId, {kIssuer}, "Lugh", challenges});
+    own_factors->register_routes(*router);
     clients = std::make_shared<lugh::oauth::ClientAuthenticator>(apps, test_pool(), wall, time, kIssuer);
     refresh = std::make_shared<lugh::oauth::RefreshTokens>(store, wall, sessions, audit);
     flow = std::make_unique<lugh::oauth::FlowRoutes>(
@@ -201,6 +207,8 @@ class SigninRig : public AuthnRig {
   std::unique_ptr<lugh::api::UserRoutes> users;
   std::unique_ptr<lugh::api::SessionRoutes> session_routes;
   std::unique_ptr<lugh::api::AppPasswordRoutes> own_app_passwords;
+  std::shared_ptr<lugh::session::Reauthentications> windows;
+  std::unique_ptr<lugh::api::FactorRoutes> own_factors;
   std::shared_ptr<lugh::tokens::SigningKeys> keys;
   std::shared_ptr<lugh::oauth::TokenIssuer> issuer;
   std::shared_ptr<lugh::oauth::Consents> consents;

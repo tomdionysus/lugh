@@ -8,6 +8,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include "lugh/authn/authenticator.h"
 #include "lugh/authn/passwords.h"
@@ -26,6 +27,10 @@ namespace lugh::api {
 //   GET    /api/v1/users/{id}/sessions   an administrator's view (directory.read)
 //   DELETE /api/v1/users/{id}/sessions   every one of them ended (sessions.write)
 //
+// The session the request came through, if it came through one: never a request carrying a token,
+// which is an application acting for the person.
+std::optional<session::Session> own_session(session::Sessions& sessions, const http::RouteContext& context);
+
 // A session is shown by its sid, never its handle.
 class SessionRoutes {
  public:

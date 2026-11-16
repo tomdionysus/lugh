@@ -565,6 +565,28 @@ void Factors::webauthn_check(std::string user_id, webauthn::Expected expected, s
   });
 }
 
+void Factors::webauthn_rename(audit::Actor actor, std::string user_id, std::string factor_id, std::string name, Deadline deadline, Executor executor,
+                              Done<Outcome<FactorInfo>> done) {
+  using Answer = Outcome<FactorInfo>;
+  auto answer = answering<FactorInfo>(deadline, executor, std::move(done), kChangeLate);
+  if (name.empty() || !directory::printable(name, kMostCredentialNameBytes))
+    return answer->finish(Answer::failure(Fault::invalid, "a credential's name is 1 to 64 printable bytes"));
+  const auto prefix = user_id + "/webauthn/";
+  if (factor_id.compare(0, prefix.size(), prefix) != 0) return answer->finish(Answer::failure(Fault::not_found, "no such factor"));
+  auto self = shared_from_this();
+  _calls.get_settled(kTable, factor_id, executor, [=](Outcome<std::optional<store::Record>> stored) {
+    if (!stored.ok()) return answer->finish(Answer::from(stored));
+    auto record = stored.value ? decode_webauthn(stored.value->value) : std::nullopt;
+    if (!record) return answer->finish(Answer::failure(Fault::not_found, "no such factor"));
+    record->name = name;
+    auto kept = std::make_shared<WebAuthnRecord>(std::move(*record));
+    self->_calls.put_settled(kTable, factor_id, encode(*kept), stored.value->version, executor, [=](store::Write written) {
+      if (!written.ok()) return answer->finish(Answer::failure(directory::fault_of(written.error), written.message));
+      self->_record(actor, "factor.webauthn.rename", user_id, factor_id, executor, [=] { answer->finish(Answer::success(info_of(factor_id, *kept))); });
+    });
+  });
+}
+
 void Factors::remove(audit::Actor actor, std::string user_id, std::string factor_id, Deadline deadline, Executor executor, Done<Outcome<>> done) {
   using Answer = Outcome<>;
   auto answer = answering<Nothing>(deadline, executor, std::move(done), kChangeLate);

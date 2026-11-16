@@ -162,6 +162,17 @@ class Authenticator : public std::enable_shared_from_this<Authenticator> {
   void enrol_webauthn(SignIn sign_in, std::string name, webauthn::Expected expected, Bytes client_data_json, Bytes attestation_object, std::string source,
                       Deadline deadline, Executor executor, Done<Step> done);
 
+  // Re-authentication (TODO/2026-11-15-self-factors.md): a person already signed in proves an
+  // existing factor again before changing their factors. `next` when it is proved; `refused` for a
+  // wrong or replayed code or an assertion that fails, which backs off as a wrong code at sign-in
+  // does; `wait` while backing off. Never the password alone, never a recovery code. Audited.
+  //
+  // A TOTP code, refused where the user's policy is phr: only a WebAuthn credential will do there.
+  void reauthenticate_totp(std::string user_id, std::string code, std::string source, Deadline deadline, Executor executor, Done<Step> done);
+  // An assertion by one of the user's credentials, under `expected` as at sign-in.
+  void reauthenticate_webauthn(std::string user_id, std::string credential_id, webauthn::Expected expected, Bytes client_data_json, Bytes authenticator_data,
+                               Bytes signature, std::string source, Deadline deadline, Executor executor, Done<Step> done);
+
   // Removes a factor, refusing the user's last while their policy requires one.
   void remove_factor(audit::Actor actor, std::string user_id, std::string factor_id, Deadline deadline, Executor executor, Done<Outcome<>> done);
 

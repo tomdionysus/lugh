@@ -32,15 +32,14 @@ void answer_sessions(const http::RouteContext& context, const std::vector<sessio
   answer_json(context, http::status::ok, boost::json::object{{"sessions", std::move(list)}});
 }
 
-// The session the request came through, if it came through one.
-std::optional<session::Session> current_session(session::Sessions& sessions, const http::RouteContext& context) {
+}  // namespace
+
+std::optional<session::Session> own_session(session::Sessions& sessions, const http::RouteContext& context) {
   if (context.request->find(http::field::authorization) != context.request->end()) return std::nullopt;
   const auto handle = http::cookie(*context.request, session::Sessions::kCookie);
   if (!handle) return std::nullopt;
   return sessions.find(*handle);
 }
-
-}  // namespace
 
 SessionRoutes::SessionRoutes(std::shared_ptr<session::Sessions> sessions, std::shared_ptr<directory::Directory> directory,
                              std::shared_ptr<authn::Passwords> passwords, std::shared_ptr<authn::Authenticator> authenticator)
@@ -54,7 +53,7 @@ void SessionRoutes::register_routes(http::Router& router) {
   const auto authenticator = _authenticator;
 
   router.add_authenticated(verb::get, "/api/v1/me/sessions", [sessions](http::RouteContext context) {
-    const auto current = current_session(*sessions, context);
+    const auto current = own_session(*sessions, context);
     answer_sessions(context, sessions->of_user(context.caller.id), current ? std::optional<std::string>(current->sid) : std::nullopt);
   });
 
@@ -68,7 +67,7 @@ void SessionRoutes::register_routes(http::Router& router) {
 
   router.add_authenticated(verb::post, "/api/v1/me/password", [sessions, directory, passwords, authenticator](http::RouteContext context) {
     // Only the person, through their own session: never an application holding a token.
-    const auto session = current_session(*sessions, context);
+    const auto session = own_session(*sessions, context);
     if (!session) {
       http::write_error(context.response, http::status::forbidden, "forbidden", "a password is changed through your own signed-in session");
       return context.done();

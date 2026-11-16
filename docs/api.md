@@ -72,11 +72,25 @@ the client reads again. Policies are settings written whole with `PUT`, and memb
 
 ## Routes
 
+"A session, window" is the person's own signed-in session (never a token) with its
+re-authentication window open: a factor proved through `POST /api/v1/me/reauthenticate` in the
+last ten minutes. Without it a change is `403 reauthentication_required`. The window is held in
+the node's memory, so a restart closes it.
+
 | Method and path | Scope | Does |
 |---|---|---|
 | `GET /api/v1/me` | any caller | `{user, scopes, session}`: who the caller is, what it holds, and for a session its `acr`, `auth_time` and `csrf_token` |
 | `GET /api/v1/me/sessions`, `DELETE /api/v1/me/sessions/{sid}` | any caller | The caller's own sessions, the one in use marked `current`; ends one, `404` if it is not theirs |
 | `POST /api/v1/me/password` | a session | `{current, new}`: through the person's own session only, never a token, and with the sign-in's back-off (`429` while waiting). Every other session of theirs ends |
+| `GET /api/v1/me/factors` | a session | The person's own factors, as `/api/v1/users/{id}/factors` shows them |
+| `POST /api/v1/me/reauthenticate` | a session | `{code}` (a TOTP code) or `{webauthn: {challenge, id, client_data, authenticator_data, signature}}`, each part base64url: proves an existing factor and opens the session's re-authentication window, `200 {expires_in}` (600 seconds). Never the password, never a recovery code; a code is refused where the person's policy is `phr`. `403 refused` for a proof that fails, with the sign-in's back-off (`429` while waiting) |
+| `POST /api/v1/me/webauthn/options` | a session | `{purpose}`: `reauthenticate` (the person's credentials allowed) or `register` (a passkey's creation options; needs the window). The challenge is good for this session only, for five minutes, once |
+| `POST /api/v1/me/factors/totp` | a session, window | A new TOTP secret, unconfirmed: `201 {id, secret, uri}`, shown this once |
+| `POST /api/v1/me/factors/totp/{factor}/confirm` | a session, window | `{code}` from it: `204`; `409 refused` for a wrong code |
+| `POST /api/v1/me/factors/webauthn` | a session, window | `{name?, challenge, client_data, attestation_object}`: a passkey registered, `201` with the factor; `409 duplicate` for a credential registered already |
+| `PATCH /api/v1/me/factors/{factor}` | a session, window | `{name}`: a WebAuthn credential renamed (1 to 64 printable bytes) |
+| `DELETE /api/v1/me/factors/{factor}` | a session, window | One factor; `409 refused` for the last while policy needs one |
+| `POST /api/v1/me/factors/recovery` | a session, window | Ten new recovery codes replacing the old: `201 {codes}`, shown this once |
 | `GET /api/v1/users/{id}/sessions` | directory.read | A user's live sessions |
 | `DELETE /api/v1/users/{id}/sessions` | sessions.write | Ends them all: `{ended}` |
 | `GET /api/v1/users` | directory.read | Every user; `?name=` or `?email=` for one |
@@ -89,7 +103,7 @@ the client reads again. Policies are settings written whole with `PUT`, and memb
 | `POST /api/v1/users/{id}/app-passwords` | credentials.write | `{name, scopes?, networks?}`: a new app password, `201` with `password` shown this once. `scopes` defaults to `lugh:directory.read`; at most 32 per user |
 | `DELETE /api/v1/users/{id}/app-passwords/{app_password}` | credentials.write | Revokes it alone |
 | `GET`, `POST /api/v1/me/app-passwords`, `DELETE /api/v1/me/app-passwords/{app_password}` | any caller | The same for the caller's own, never with a scope the caller does not hold |
-| `GET /api/v1/users/{id}/factors` | directory.read | Their factors: `id`, `kind`, `confirmed`, `created_at`, and `remaining` for recovery codes |
+| `GET /api/v1/users/{id}/factors` | directory.read | Their factors: `id`, `kind`, `confirmed`, `created_at`, `remaining` for recovery codes, and for a WebAuthn credential its `name`, `aaguid`, `backed_up` and `last_used_at` |
 | `DELETE /api/v1/users/{id}/factors/{factor}` | credentials.write | One factor; `409 refused` for the last while policy needs one |
 | `POST /api/v1/users/{id}/factors/reset` | credentials.write | Every factor gone and the user not enrolled, for one who lost them all. A person calling must be at `phr` (a passkey or security key), since a reset lets someone else enrol in the user's name: `403 forbidden` otherwise. A service acts with its key |
 | `POST /api/v1/users/{id}/enrolment` | credentials.write | A one-time enrolment link: `201 {token, expires_at}`, shown once, valid 72 hours, ending any before it |
