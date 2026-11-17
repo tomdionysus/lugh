@@ -2,15 +2,17 @@
 
 What is being worked on now and what comes next. When an item ships, move it to `COMPLETED.md` with the date and the outcome.
 
-## Resume here (2026-11-16)
+## Resume here (2026-11-17)
 
 **P12, hardening, is done** (`COMPLETED.md`, "2026-11-16: P12"; plan `2026-11-16-p12-hardening.md`), merged into `develop` and
-pushed. P7 before it is done too. Lugh runs as a test service on all four build nodes, each its own genesis; root's password for each is in
-`/root/lugh-root-password` there.
+pushed; since then the CBOR count bound (fuzz find) and the Dannan 0.9.0 pin, both merged. Lugh runs as a test service on all four
+build nodes, each its own genesis; root's password for each is in `/root/lugh-root-password` there.
 
-Left from P12: hour-long fuzz campaigns, and binary seeds for the record and protocol targets.
+Left from P12 (its plan, "Open"): the fuzz build instrumented only each target's own file, so the campaigns ran without coverage
+or ASan inside the parsers (fixed in the build, 2026-11-17; the campaigns are to be run again, the maintainer's call). `fuzz_webauthn`'s RSS
+was ASan's (closed), and the LDAP and WebAuthn targets have binary seeds; the plan's "As done" has both.
 
-Next is the maintainer's choice: P13 (the SSO rollout) or P8 (the cluster on Dagda, which waits on Dagda).
+Next is the maintainer's choice: P13 (the SSO rollout) or P8 (the cluster on Dagda, which waits on Dagda's 0.2.0 release).
 
 ## Open, not scheduled
 
@@ -18,11 +20,6 @@ Next is the maintainer's choice: P13 (the SSO rollout) or P8 (the cluster on Dag
   (`2026-11-15-dannan-0.8.md`).
 - **Principal events over Lir**, and the narrow status read `lugh:principals.status` (the maintainer, 2026-11-15, asked by Mimir and Louhi):
   `2026-11-15-principal-events.md`. Recommended after P8.1. The MQTT client is Lir's `lir::client`.
-- **(done) `authn::Backoff` into Dannan** as `dannan::listen::Backoff` in 0.9 (asked by Kvasir, agreed by Dannan and Lugh, 2026-11-16,
-  stack rule 3; its time point becomes Dannan's `contract::TimePoint`): when 0.9 is tagged, move the pin, switch the
-  authenticator, and delete `lugh/authn/backoff.h` with `authn_backoff_test.cpp` (its 5 tests go to Dannan; record the drop).
-  Summing failures across the cluster stays Lugh's (P8). The maintainer chose a patch: it comes in Dannan 0.8.5
-  (in its gate, 2026-11-16; 0.8.4 is out, ABI kept, nothing Lugh needs). When 0.8.5 is tagged, move the pin to it and switch.
 - **Hashing on `sched::WorkerPool`**, at P8.1. Until then the hashing queue is unbounded, a known gap.
 
 ## Waiting on others
@@ -42,7 +39,7 @@ Next is the maintainer's choice: P13 (the SSO rollout) or P8 (the cluster on Dag
 
 ## Dependencies pinned
 
-- Dannan **0.9.0** (`LUGH_DANNAN_REF`, a tag in `../dannan`, pinned 2026-11-17), giving agreement (the review's fixes and
+- Dannan **0.9.1** (`LUGH_DANNAN_REF`, a tag in `../dannan`, pinned 2026-11-17; 0.9.1 is a gossip fix to 0.9.0), giving agreement (the review's fixes and
   `Outcome::unknown` in it) for P8's registers besides:
   - the listener and the connector;
   - `verify_rs256`;
@@ -59,9 +56,13 @@ in `/srv/build/lugh/dannan` (rsync `../dannan/.git/` there when a new tag is pin
 
 | Machine | Lugh's use |
 |---|---|
-| node-a `.11` | TSan: clang 19, `~/lugh/build-tsan`. Often busy with Dagda; queue for it |
-| node-b `.12` | `~/lugh/build` (debug), `~/lugh/build-asan`, `~/lugh/build-fuzz` (clang), Node 20.19 and Playwright's Chromium (the dashboard) |
+| node-a `.11` | `~/lugh/build-tsan` (clang 19) |
+| node-b `.12` | `~/lugh/build` (debug), `~/lugh/build-asan-clang`, `~/lugh/build-tsan-clang`, `~/lugh/build-fuzz-plain` (libFuzzer, no sanitizers), Node 20.19 and Playwright's Chromium (the dashboard) |
+| node-c `.13` | `~/lugh/build-asan` (g++), `~/lugh/build-fuzz` (clang 19, the campaigns), `~/lugh/build-release` |
 | node-d `.14` | `~/lugh/build` (debug), 4 GB, Node 20.19. No sanitizer builds: it runs out of memory |
+
+Sanitizers only at a phase's end, for a release, or to hunt a named bug; never for a pin move or another step's gate (the maintainer's rule,
+restated by the cluster 2026-11-17; Lugh's phase-end exception is CLAUDE.md's).
 
 Since 2026-11-16 every build node runs a 4K-page, 48-bit-VA kernel (6.18.62-v8-va48+): ASan, UBSan and TSan all work under g++ and
 clang 19 on any of them (node-d has no clang, and is too small for sanitizer builds). Delete a build tree's `*.gch` after a kernel

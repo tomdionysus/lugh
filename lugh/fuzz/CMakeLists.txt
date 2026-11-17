@@ -23,11 +23,13 @@ if (NOT LUGH_HAS_FUZZER)
     message(FATAL_ERROR "LUGH_BUILD_FUZZING is on but ${CMAKE_CXX_COMPILER} has no libFuzzer (-fsanitize=fuzzer)")
 endif()
 
+# The top level instruments every object for a fuzz build (LUGH_FUZZ_SANITIZERS); a target links
+# libFuzzer's main besides.
 function(lugh_fuzz_target name source)
     add_executable(${name} ${source})
     target_link_libraries(${name} PRIVATE lugh)
-    target_compile_options(${name} PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer)
-    target_link_options(${name} PRIVATE -fsanitize=fuzzer,address,undefined)
+    target_compile_options(${name} PRIVATE ${LUGH_FUZZ_FLAGS} -fno-omit-frame-pointer)
+    target_link_options(${name} PRIVATE ${LUGH_FUZZ_FLAGS})
     lugh_flags(${name})
 
     # A short run under ctest, so a target that no longer builds or crashes at once is
