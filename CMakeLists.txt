@@ -28,6 +28,9 @@ cmake_dependent_option(LUGH_BUILD_TESTING "Build the test binary and register th
 option(LUGH_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
 option(LUGH_HARDEN "Compiler and linker hardening on every target" ON)
 cmake_dependent_option(LUGH_BUILD_FUZZING "Build the libFuzzer targets in lugh/fuzz; needs a clang that ships libFuzzer" OFF "LUGH_BUILD_NODE" OFF)
+# Campaigns hunt with ASan and UBSan. Off, a target is libFuzzer alone: for measuring a target's
+# own memory and speed, which ASan's allocator and shadow hide.
+cmake_dependent_option(LUGH_FUZZ_SANITIZERS "Build the fuzz build with ASan and UBSan" ON "LUGH_BUILD_FUZZING" OFF)
 set(LUGH_SANITIZE "none" CACHE STRING "none, address (with undefined) or thread")
 set_property(CACHE LUGH_SANITIZE PROPERTY STRINGS none address thread)
 
@@ -63,6 +66,20 @@ elseif (LUGH_SANITIZE STREQUAL "thread")
     add_compile_options(-fsanitize=thread)
     add_link_options(-fsanitize=thread)
 endif()
+# A fuzz build instruments every object, Dannan's too, for coverage and, as a rule, ASan and UBSan:
+# with only the target's own file instrumented, libFuzzer sees no edge inside a parser and ASan
+# no read past a buffer there (P12's first campaigns ran so). The targets add libFuzzer's main.
+if (LUGH_BUILD_FUZZING)
+    if (LUGH_FUZZ_SANITIZERS)
+        set(LUGH_FUZZ_INSTRUMENT "-fsanitize=fuzzer-no-link,address,undefined")
+        set(LUGH_FUZZ_FLAGS "-fsanitize=fuzzer,address,undefined")
+    else()
+        set(LUGH_FUZZ_INSTRUMENT "-fsanitize=fuzzer-no-link")
+        set(LUGH_FUZZ_FLAGS "-fsanitize=fuzzer")
+    endif()
+    add_compile_options(${LUGH_FUZZ_INSTRUMENT} -fno-omit-frame-pointer)
+    add_link_options(${LUGH_FUZZ_INSTRUMENT})
+endif()
 # Fetched into another build (lugh_client in a relying party), Lugh takes the Dannan that build
 # already has: one process, one Dannan. The consumer's pin must be one Lugh's commit is tested on.
 if (NOT TARGET dannan::dannan)
@@ -89,8 +106,9 @@ set(LUGH_HARDEN_LINK "")
 if (LUGH_HARDEN)
     # _FORTIFY_SOURCE needs optimisation, and glibc says so with a warning that -Werror
     # turns into an error, so it is off in Debug and on everywhere else. The sanitizers
-    # define it to 0 themselves, because their own checks replace it, so it is off there too.
-    if (LUGH_SANITIZE STREQUAL "none")
+    # define it to 0 themselves, because their own checks replace it, so it is off there too,
+    # and in a fuzz build, which is a sanitizer build.
+    if (LUGH_SANITIZE STREQUAL "none" AND NOT LUGH_BUILD_FUZZING)
         list(APPEND LUGH_HARDEN_COMPILE "$<$<NOT:$<CONFIG:Debug>>:-D_FORTIFY_SOURCE=3>")
     endif()
     list(APPEND LUGH_HARDEN_COMPILE
