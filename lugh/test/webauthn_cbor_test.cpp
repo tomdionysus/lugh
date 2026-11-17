@@ -166,6 +166,23 @@ TEST(Cbor, ItemsAreBounded) {
   EXPECT_TRUE(decoded(enough));
 }
 
+// A count is held to the items still allowed before anything is made for it: nested arrays each
+// claiming as many items as the bytes left would otherwise make a Value for every claimed one at
+// every level (fuzz_webauthn, 2026-11-17).
+TEST(Cbor, ACountIsHeldToTheItemsStillAllowed) {
+  // The inner array claims 4095 items when, the two arrays counted, 4094 are left.
+  std::string claims = "990ffe990fff";
+  for (std::size_t i = 0; i < 2 * lugh::webauthn::cbor::kMostItems; ++i) claims += "00";
+  EXPECT_FALSE(decoded(claims));
+  // A map's count is held to half of it, each entry being two items.
+  // 2049 entries, with bytes enough for them: refused for the budget, not the input.
+  std::string map = "b90801";
+  for (std::size_t i = 0; i < 2 * lugh::webauthn::cbor::kMostItems; ++i) map += "00";
+  EXPECT_FALSE(decoded(map));
+  // Within the budget, as before.
+  EXPECT_TRUE(decoded("8201820203"));
+}
+
 // Attested credential data is followed by its COSE key and then extensions: with `used`, an
 // item is read from the front and its end reported.
 TEST(Cbor, AnItemFromTheFront) {

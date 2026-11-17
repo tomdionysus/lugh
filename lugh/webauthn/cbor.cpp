@@ -79,8 +79,10 @@ class Decoder {
         return major == kBytes || encoding::valid_utf8(out.string);
       }
       case kArray: {
-        // Each item takes at least a byte, so a count past what is left is a lie.
-        if (argument > _in.size() - _at) return false;
+        // Each item takes at least a byte, so a count past what is left is a lie; and a count past
+        // the items still allowed is refused before anything is made for them, or a few kilobytes
+        // of nested headers would make megabytes of Values (fuzz_webauthn, 2026-11-17).
+        if (argument > _in.size() - _at || argument > kMostItems - _items) return false;
         out.kind = Value::Kind::array;
         out.items.resize(static_cast<std::size_t>(argument));
         for (auto& each : out.items)
@@ -88,7 +90,7 @@ class Decoder {
         return true;
       }
       case kMap: {
-        if (argument > (_in.size() - _at) / 2) return false;
+        if (argument > (_in.size() - _at) / 2 || argument > (kMostItems - _items) / 2) return false;
         out.kind = Value::Kind::map;
         const auto count = static_cast<std::size_t>(argument);
         out.entries.reserve(count);
