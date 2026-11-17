@@ -26,7 +26,8 @@
 // - false, true and null.
 // Anything else is refused: tags, floats, undefined and other simple values, and
 // indefinite lengths. So are a nesting deeper than kMostDepth and more than kMostItems
-// items in all. Lengths are checked against what is left before anything is reserved.
+// items in all. Lengths are checked against what is left, and counts against the items still
+// allowed, before anything is reserved, so what is made is bounded by kMostItems, not the input.
 namespace lugh::webauthn::cbor {
 
 inline constexpr std::size_t kMostDepth = 16;

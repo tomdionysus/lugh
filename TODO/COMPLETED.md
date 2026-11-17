@@ -2,6 +2,15 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-17: the CBOR decoder's counts bounded
+
+The hour-long fuzz campaign (twelve targets an hour each, about 3.4 billion inputs, nothing found) ended with `fuzz_webauthn` out
+of memory, and that led to a real bound: an array or map header was checked only against the bytes left, so the decoder made a
+Value for every claimed item before reading one, at every level of nesting, and a few kilobytes of attestation object could make
+tens of megabytes. A count is now held to the items `kMostItems` still allows. Tests: 809 (one new). Debug on node-c, ASan on
+node-c, TSan on node-a: green, no sanitizer report. Still open: `fuzz_webauthn`'s RSS climbs under ASan with the bound in place
+while its live heap stays small (`2026-11-16-p12-hardening.md`, "Open").
+
 ## 2026-11-16: P12, hardening
 
 Plan: `2026-11-16-p12-hardening.md`. The maintainer's rulings: an app password with any scope beyond `lugh:directory.read` needs a phr
