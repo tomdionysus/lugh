@@ -9,10 +9,12 @@ pushed; since then the CBOR count bound (fuzz find) and the Dannan 0.9.0 pin, bo
 build nodes, each its own genesis; root's password for each is in `/root/lugh-root-password` there.
 
 Left from P12 (its plan, "Open"): the fuzz build instrumented only each target's own file, so the campaigns ran without coverage
-or ASan inside the parsers (fixed in the build, 2026-11-17; the campaigns are to be run again, the maintainer's call). `fuzz_webauthn`'s RSS
+or ASan inside the parsers (fixed in the build, 2026-11-17). The campaigns are run again on it before Lugh's first release, not
+before (the maintainer, 2026-11-17: "We don't need these until a release"). `fuzz_webauthn`'s RSS
 was ASan's (closed), and the LDAP and WebAuthn targets have binary seeds; the plan's "As done" has both.
 
-Next is the maintainer's choice: P13 (the SSO rollout) or P8 (the cluster on Dagda, which waits on Dagda's 0.2.0 release).
+Next is P8 (the cluster on Dagda), when the maintainer releases Dagda 0.2.0; Lugh waits until then, with no P8 prep and not P13 (the maintainer,
+2026-11-17).
 
 ## Open, not scheduled
 
