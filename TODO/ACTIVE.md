@@ -34,19 +34,21 @@ Next is the maintainer's choice: P13 (the SSO rollout) or P8 (the cluster on Dag
   a tree node's size and splitting, worth a test at P8.0. Dagda is paused for Macha's port (the maintainer, 2026-11-14). Its slice 1 is tagged 0.2.0 locally and not pushed; P8.0 to P8.4 start on
   it (`2026-11-13-p8-plan.md`). P8.5 also waits on the follower-lag fix (slice 2): a disable must be seen on another build node within about
   a second (the maintainer, 2026-11-14).
-- **Dannan 0.9.0's agreement primitive.** TOTP, recovery codes and key rotation become registers on it, with no interim lease or
-  workaround (the maintainer, 2026-11-15). Lugh is a reviewed consumer in Dannan's agreement design.
+- **Dannan 0.9.0's agreement primitive**: tagged 2026-11-17 and pinned. TOTP, recovery codes and key rotation become registers on
+  it, with no interim lease or workaround (the maintainer, 2026-11-15). Lugh is a reviewed consumer in Dannan's agreement design.
 - **The maintainer, at P13**: `docs/architecture.md` question 10 (TLS for T.O.M.S sites, or sign-in only at the hub).
 - **Not merged, by the maintainer's choice**: GitHub's `main` carries aaac977 (Alpine and OpenRC for Raven). Raven is dropped for now (the maintainer,
   2026-11-13); when it returns, merge `origin/main` into `develop` (about ten conflicts), test, fast-forward `main`, push.
 
 ## Dependencies pinned
 
-- Dannan **0.8.5** (`LUGH_DANNAN_REF`, a tag in `../dannan`), giving the sign-in back-off besides:
+- Dannan **0.9.0** (`LUGH_DANNAN_REF`, a tag in `../dannan`, pinned 2026-11-17), giving agreement (the review's fixes and
+  `Outcome::unknown` in it) for P8's registers besides:
   - the listener and the connector;
   - `verify_rs256`;
-  - the worker pool.
-  Its ABI is 0.8.0's. Move the pin when a tag Lugh wants is cut.
+  - the worker pool;
+  - the sign-in back-off.
+  Its ABI is new (`libdannan.so.0.9`). Move the pin when a tag Lugh wants is cut.
 - Lir's Lugh plugin pins a `develop` commit of Lugh, and repins at Lugh's first release.
 
 ## The build node cluster
