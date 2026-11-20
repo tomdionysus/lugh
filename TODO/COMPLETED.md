@@ -2,6 +2,17 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-20: Release 0.3.0
+
+The Dannan 0.10.0 move, released for source dependants (the coordinating session's option (a); the four config-name
+renames follow in 0.4.0). Its Debian package waits for Dagda's release on Dannan 0.10.0 in the apt repository, because
+the package build runs the tests against Dagda's packages. Gate:
+- debug, ASan and TSan on node-a at the branch's tree d763b78: 893 of 893 each, dependencies instrumented. The tagged
+  tree differs from it only in the version line, the changelog, README, TODO, the man page's version and the workflows,
+  checked by diff, so the gate stands.
+- fuzzing on node-b at dcd99d0: all 13 targets, 300 s each, between 1.7 and 7.6 million runs each, nothing found.
+CodeQL green again on develop (a manual run after the Lir checkout fix).
+
 ## 2026-11-20: Onto Dannan 0.10.0
 
 Lugh, lugh_client and the tests are pinned to Dannan 0.10.0, as the first tier-1 job after its tag: Louhi, Kvasir, Mimir
