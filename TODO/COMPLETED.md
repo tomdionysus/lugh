@@ -2,6 +2,19 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-20: lugh_client for relying parties, and the topic-scope grammar moved into it
+
+The stack's placement plan (the maintainer: the lower of two projects that depend on each other keeps what both need): what Louhi and Lir
+had each written for themselves is lugh_client's (`2026-11-20-client-relying-party.md`, `2026-11-20-dependants.md`).
+`discover()`; `bearer_token()` (16 KiB, Louhi's bound); `RelyingParty` (the verifier, the key source and the audience);
+`TokenSource` (a service's client-credentials token, refreshed at two thirds of its life, failing over across issuers with a
+back-off that never parks); `testing::FakeHttps`, thread-safe, holding a request until the test answers. The topic-scope
+grammar moved from the node into lugh_client (`lugh/client/scopes.h`), with `TopicGrants::parse` for brokers; lugh-node grants
+by the same code, and `printable` moved into `lugh/core/encoding.h`. The PUBLISH and SUBSCRIBE checks follow on `lir::mqtt`.
+Found on the way: TokenSource fetched on any timer wake, but a stepped time source wakes early by design; and an OAuth test
+read begin() and end() of two copies. Tests: 829, from 814 (fifteen new, none removed). Debug, ASan and TSan on node-a with
+the real-LDAP-client branch, once each: green, no sanitizer report.
+
 ## 2026-11-20: P8.0, Dagda beside Dannan, and the cluster rig
 
 The maintainer's word to start P8, on Dagda 0.3.2 and Dannan 0.9.2. Dannan moves to 0.9.2, the patch Dagda 0.3.x builds on, declared with

@@ -175,6 +175,21 @@ inline bool valid_utf8(std::string_view text) {
   return true;
 }
 
+// Printable text: valid UTF-8 within `most` bytes, with no control character, C0, DEL or C1
+// (U+0080 to U+009F). What a name, a topic level or a label may hold.
+inline bool printable(std::string_view text, std::size_t most) {
+  if (text.size() > most) return false;
+  for (std::size_t i = 0; i < text.size();) {
+    const auto byte = static_cast<unsigned char>(text[i]);
+    if (byte < 0x20 || byte == 0x7f) return false;
+    const auto length = utf8_length(text, i);
+    if (length == 0) return false;
+    if (length == 2 && byte == 0xc2 && static_cast<unsigned char>(text[i + 1]) <= 0x9f) return false;
+    i += length;
+  }
+  return true;
+}
+
 // RFC 4648 base64 with padding, the standard alphabet, as HTTP Basic credentials are written
 // (RFC 7617).
 inline std::string base64(std::span<const unsigned char> data) {

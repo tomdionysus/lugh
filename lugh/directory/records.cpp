@@ -37,14 +37,6 @@ char lower(char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' +
 
 bool letter_or_digit(char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'); }
 
-// A UTF-8 sequence's length as encoding::utf8_length gives it, but 0 for a C1 control
-// (U+0080 to U+009F, encoded C2 80 to C2 9F), which a printable name never holds.
-std::size_t utf8_length(std::string_view text, std::size_t at) {
-  const auto length = encoding::utf8_length(text, at);
-  if (length == 2 && static_cast<unsigned char>(text[at]) == 0xc2 && static_cast<unsigned char>(text[at + 1]) <= 0x9f) return 0;
-  return length;
-}
-
 template <typename Write>
 SecureBuffer encoded(Write write) {
   SecureWriter writer;
@@ -85,18 +77,6 @@ std::optional<std::string> normal_email(std::string_view text) {
     out.push_back(lower(c));
   }
   return out;
-}
-
-bool printable(std::string_view text, std::size_t most) {
-  if (text.size() > most) return false;
-  for (std::size_t i = 0; i < text.size();) {
-    const auto byte = static_cast<unsigned char>(text[i]);
-    if (byte < 0x20 || byte == 0x7f) return false;
-    const auto length = utf8_length(text, i);
-    if (length == 0) return false;
-    i += length;
-  }
-  return true;
 }
 
 SecureBuffer encode(const User& user) {

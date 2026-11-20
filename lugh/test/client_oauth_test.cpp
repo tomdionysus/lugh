@@ -225,10 +225,10 @@ TEST_F(OAuthTest, TheCodeIsRedeemedAndTheIdTokenVerifiedWithItsNonce) {
   ASSERT_TRUE(tokens.value.id_token);
   EXPECT_EQ(tokens.value.id_token->subject, "u1");
 
-  ASSERT_EQ(https.sent.size(), 1u);
-  EXPECT_EQ(https.sent[0].method, "POST");
-  EXPECT_EQ(https.sent[0].content_type, "application/x-www-form-urlencoded");
-  const auto fields = fields_of(https.sent[0].body);
+  ASSERT_EQ(https.sent().size(), 1u);
+  EXPECT_EQ(https.sent()[0].method, "POST");
+  EXPECT_EQ(https.sent()[0].content_type, "application/x-www-form-urlencoded");
+  const auto fields = fields_of(https.sent()[0].body);
   EXPECT_EQ(fields.at("grant_type"), "authorization_code");
   EXPECT_EQ(fields.at("code"), "c1");
   EXPECT_EQ(fields.at("redirect_uri"), kRedirect);
@@ -250,7 +250,7 @@ TEST_F(OAuthTest, TheTokenEndpointsErrorIsARefusal) {
   EXPECT_EQ(refused.fault, lugh::Fault::refused);
   EXPECT_EQ(refused.message, "invalid_grant: the code is not good");
 
-  https.answers.clear();
+  https.forget_answers();
   EXPECT_EQ(redeem(oauth, request).fault, lugh::Fault::failed);
   https.answer(token_url(), 200, {{"token_type", "Bearer"}});
   EXPECT_EQ(redeem(oauth, request).message, "the token endpoint's answer has no access_token");
@@ -268,7 +268,7 @@ TEST_F(OAuthTest, PrivateKeyJwtSignsAFreshAssertionForTheTokenEndpoint) {
     ASSERT_TRUE(wait<TokenSet>([&](auto done) { oauth.client_credentials({"lir:pub:a"}, std::chrono::seconds(5), io.get_executor(), done); }).ok());
 
   std::vector<std::string> jtis;
-  for (const auto& sent : https.sent) {
+  for (const auto& sent : https.sent()) {
     const auto fields = fields_of(sent.body);
     EXPECT_EQ(fields.at("grant_type"), "client_credentials");
     EXPECT_EQ(fields.at("scope"), "lir:pub:a");
@@ -297,7 +297,7 @@ TEST_F(OAuthTest, ClientSecretBasicGoesInTheHeaderFormEncoded) {
   ASSERT_TRUE(wait<TokenSet>([&](auto done) { oauth.client_credentials({}, std::chrono::seconds(5), io.get_executor(), done); }).ok());
   // RFC 6749 2.3.1: each part form-encoded before the pair is base64'd.
   EXPECT_EQ(https.header(0, "Authorization"), "Basic " + lugh::encoding::base64(lugh::byte_span("app%3A1:s%2Bcret+word")));
-  const auto fields = fields_of(https.sent[0].body);
+  const auto fields = fields_of(https.sent()[0].body);
   EXPECT_FALSE(fields.count("client_id"));
   EXPECT_FALSE(fields.count("client_secret"));
   EXPECT_FALSE(fields.count("scope"));
@@ -310,7 +310,7 @@ TEST_F(OAuthTest, ARefreshSendsItsTokenAndTheNarrowedScopes) {
   const auto tokens = wait<TokenSet>([&](auto done) { oauth.refresh(old, {"openid"}, std::chrono::seconds(5), io.get_executor(), done); });
   ASSERT_TRUE(tokens.ok()) << tokens.message;
   EXPECT_EQ(text_of(*tokens.value.refresh_token), "rt-2");
-  const auto fields = fields_of(https.sent[0].body);
+  const auto fields = fields_of(https.sent()[0].body);
   EXPECT_EQ(fields.at("grant_type"), "refresh_token");
   EXPECT_EQ(fields.at("refresh_token"), "rt-1");
   EXPECT_EQ(fields.at("scope"), "openid");
@@ -329,13 +329,14 @@ TEST_F(OAuthTest, APushedRequestLeavesOnlyItsUriInTheUrl) {
   EXPECT_EQ(fields.at("request_uri"), "urn:ietf:params:oauth:request_uri:abc");
 
   // What was pushed: the whole request, the client named once.
-  const auto sent = fields_of(https.sent[0].body);
-  EXPECT_EQ(https.sent[0].url, par);
+  const auto pushed_request = https.sent().at(0);
+  const auto sent = fields_of(pushed_request.body);
+  EXPECT_EQ(pushed_request.url, par);
   EXPECT_EQ(sent.at("client_id"), "app1");
   EXPECT_EQ(sent.at("state"), pushed.value.state);
   EXPECT_EQ(sent.at("nonce"), pushed.value.nonce);
   EXPECT_EQ(sent.at("code_challenge_method"), "S256");
-  EXPECT_EQ(std::count(https.sent[0].body.begin(), https.sent[0].body.end(), '&') + 1, static_cast<long>(sent.size()));
+  EXPECT_EQ(std::count(pushed_request.body.begin(), pushed_request.body.end(), '&') + 1, static_cast<long>(sent.size()));
 
   https.answer(par, 400, {{"error", "invalid_scope"}, {"error_description", "not this client's"}});
   const auto refused =
@@ -360,7 +361,7 @@ TEST_F(OAuthTest, ADeviceAuthorizationIsBegun) {
   EXPECT_EQ(begun.value.expires_in, 600u);
   // RFC 8628 3.2: five seconds when the issuer names no interval.
   EXPECT_EQ(begun.value.interval, 5u);
-  const auto fields = fields_of(https.sent[0].body);
+  const auto fields = fields_of(https.sent()[0].body);
   EXPECT_EQ(fields.at("scope"), "openid");
   EXPECT_EQ(fields.at("client_id"), "app1");
 }
@@ -393,7 +394,7 @@ TEST_F(OAuthTest, TheTokenEndpointIsPolledAtTheIntervalUntilTokensCome) {
   ASSERT_TRUE(pump([&] { return out.has_value(); }));
   ASSERT_TRUE(out->ok()) << out->message;
   EXPECT_EQ(text_of(*out->value.access_token), "at-1");
-  const auto fields = fields_of(https.sent.back().body);
+  const auto fields = fields_of(https.sent().back().body);
   EXPECT_EQ(fields.at("grant_type"), "urn:ietf:params:oauth:grant-type:device_code");
   EXPECT_EQ(fields.at("device_code"), "dc-1");
 }
@@ -468,8 +469,8 @@ TEST_F(OAuthTest, AClientPresentingItsCertificateCallsTheMtlsAliases) {
   auto oauth = client(tls);
   https.answer("https://lugh.example:8443/oauth2/token", 200, {{"access_token", "at-1"}, {"token_type", "Bearer"}});
   ASSERT_TRUE(wait<TokenSet>([&](auto done) { oauth.client_credentials({}, std::chrono::seconds(5), io.get_executor(), done); }).ok());
-  EXPECT_EQ(https.sent[0].url, "https://lugh.example:8443/oauth2/token");
-  const auto fields = fields_of(https.sent[0].body);
+  EXPECT_EQ(https.sent()[0].url, "https://lugh.example:8443/oauth2/token");
+  const auto fields = fields_of(https.sent()[0].body);
   EXPECT_EQ(fields.at("client_id"), "app1");
   EXPECT_FALSE(fields.count("client_assertion"));
   EXPECT_TRUE(https.header(0, "Authorization").empty());
@@ -481,9 +482,9 @@ TEST_F(OAuthTest, AClientPresentingItsCertificateCallsTheMtlsAliases) {
   bound.certificate_bound = true;
   auto bound_client = client(bound);
   ASSERT_TRUE(wait<TokenSet>([&](auto done) { bound_client.client_credentials({}, std::chrono::seconds(5), io.get_executor(), done); }).ok());
-  EXPECT_EQ(https.sent[1].url, "https://lugh.example:8443/oauth2/token");
+  EXPECT_EQ(https.sent()[1].url, "https://lugh.example:8443/oauth2/token");
   // The assertion is still for the token endpoint the issuer names.
-  const auto assertion = jws_parse(fields_of(https.sent[1].body).at("client_assertion"));
+  const auto assertion = jws_parse(fields_of(https.sent()[1].body).at("client_assertion"));
   ASSERT_TRUE(assertion);
   EXPECT_EQ(std::string(assertion->claims.at("aud").as_string()), token_url());
 
@@ -493,7 +494,7 @@ TEST_F(OAuthTest, AClientPresentingItsCertificateCallsTheMtlsAliases) {
   OAuthClient without(std::get<Endpoints>(Endpoints::from_discovery(plain, kIssuer)), tls, https, verifier, wall);
   https.answer(token_url(), 200, {{"access_token", "at-2"}, {"token_type", "Bearer"}});
   ASSERT_TRUE(wait<TokenSet>([&](auto done) { without.client_credentials({}, std::chrono::seconds(5), io.get_executor(), done); }).ok());
-  EXPECT_EQ(https.sent[2].url, token_url());
+  EXPECT_EQ(https.sent()[2].url, token_url());
 }
 
 // RFC 7662: the token sent, authenticated as the client is; the answer's claims read.
@@ -512,7 +513,7 @@ TEST_F(OAuthTest, IntrospectionSaysWhetherATokenIsActive) {
   EXPECT_EQ(active.value.client_id, "app2");
   EXPECT_EQ(active.value.scopes, (std::vector<std::string>{"lir:sub:a", "openid"}));
   EXPECT_EQ(active.value.expires, kNow + 60);
-  EXPECT_EQ(fields_of(https.sent[0].body).at("token"), "lo_handle");
+  EXPECT_EQ(fields_of(https.sent()[0].body).at("token"), "lo_handle");
   EXPECT_FALSE(https.header(0, "Authorization").empty());
 
   https.answer(url, 200, {{"active", false}});
@@ -536,7 +537,7 @@ TEST_F(OAuthTest, ATokenIsRevoked) {
   https.answer(url, 200, {});
   const Secret token(lugh::byte_span("lr_family.secret"));
   ASSERT_TRUE(wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); }).ok());
-  const auto fields = fields_of(https.sent[0].body);
+  const auto fields = fields_of(https.sent()[0].body);
   EXPECT_EQ(fields.at("token"), "lr_family.secret");
   EXPECT_EQ(fields.at("client_id"), "app1");
 
@@ -544,6 +545,6 @@ TEST_F(OAuthTest, ATokenIsRevoked) {
   const auto refused = wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); });
   EXPECT_EQ(refused.fault, lugh::Fault::refused);
   EXPECT_EQ(refused.message, "invalid_client: no such client");
-  https.answers.clear();
+  https.forget_answers();
   EXPECT_EQ(wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); }).fault, lugh::Fault::failed);
 }

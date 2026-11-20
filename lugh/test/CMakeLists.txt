@@ -38,6 +38,8 @@ add_executable(lugh_tests
     client_jose_test.cpp
     client_key_source_test.cpp
     client_oauth_test.cpp
+    client_relying_party_test.cpp
+    client_scopes_test.cpp
     client_testing_test.cpp
     client_verifier_test.cpp
     cluster_rig_test.cpp
@@ -75,7 +77,6 @@ add_executable(lugh_tests
     oauth_request_test.cpp
     scopes_grants_test.cpp
     scopes_scope_test.cpp
-    scopes_topic_scope_test.cpp
     node_cli_test.cpp
     node_config_test.cpp
     node_ioc_check_test.cpp

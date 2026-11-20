@@ -9,8 +9,6 @@
 
 #include <algorithm>
 
-#include "lugh/scopes/topic_scope.h"
-
 namespace lugh::scopes {
 
 std::vector<std::string> lugh_scopes() {
@@ -18,15 +16,6 @@ std::vector<std::string> lugh_scopes() {
 }
 
 std::vector<std::string> oidc_scopes() { return {"openid", "profile", "email", "groups", "offline_access"}; }
-
-bool well_formed(std::string_view scope) {
-  if (scope.empty() || scope.size() > kMostScopeBytes) return false;
-  // RFC 6749 section 3.3: %x21 / %x23-5B / %x5D-7E.
-  return std::all_of(scope.begin(), scope.end(), [](char c) {
-    const auto byte = static_cast<unsigned char>(c);
-    return byte >= 0x21 && byte <= 0x7e && byte != '"' && byte != '\\';
-  });
-}
 
 std::optional<std::string_view> prefix_of(std::string_view scope) {
   const auto colon = scope.find(':');

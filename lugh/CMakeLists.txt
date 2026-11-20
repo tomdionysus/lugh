@@ -19,6 +19,8 @@ add_library(lugh_client STATIC
     client/jose.cpp
     client/key_source.cpp
     client/oauth_client.cpp
+    client/relying_party.cpp
+    client/scopes.cpp
     client/testing.cpp
     client/verifier.cpp
 )
@@ -103,7 +105,6 @@ add_library(lugh STATIC
     network/cidr.cpp
     scopes/grants.cpp
     scopes/scope.cpp
-    scopes/topic_scope.cpp
     node/config.cpp
     oauth/client_auth.cpp
     oauth/consents.cpp

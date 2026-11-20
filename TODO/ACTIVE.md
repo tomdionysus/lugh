@@ -12,8 +12,7 @@ beside Dannan 0.9.2, and `ClusterRig` (`lugh/test/fixtures/cluster_rig.h`) runs 
   Lugh writes no wiring of its own that they would replace. Dannan 0.10.0 is under way; its tag needs the maintainer's word.
 - P8.2 to P8.4 wait on Dagda's register map (D6, being built test-first), which replaces Lugh's own merge and codec.
 - P8.5 waits on Dagda's slice 2; P8.6 on the durable AcceptorStore and Dannan's register layer; P8.7 on D9.
-Meanwhile, not waiting: `feature/client-relying-party` (lugh_client's topic-scope parse, RelyingParty, bearer_token,
-discover, TokenSource, a thread-safe FakeHttps; `2026-11-20-client-relying-party.md`), in its cluster run; then
+Meanwhile, not waiting: lugh_client's topic checks as `lugh::client_topics` on `lir::mqtt` (Lir's develop 62b2004); then
 `@lugh/admin-ui`, the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`).
 When Dannan 0.10.0 is tagged: Lugh's encodings, `Prefix`, `RecordingSink`, TOTP's SHA-1 and the callback vocabulary move onto
 it. What each dependant needs of Lugh, and what Lugh needs of Dannan and Dagda, is in `2026-11-20-dependants.md`.
