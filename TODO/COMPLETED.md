@@ -2,6 +2,18 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-20: A record encoded after it was moved from (GCC on x86-64), and CI green
+
+GitHub's GCC x86-64 job failed from its first run while every other build passed. `Directory::_put_user`, `_put_group` and
+`Apps::_put` passed `encode(record)` and a callback capturing the record by move as arguments of one call; C++ leaves
+their order unspecified, and GCC on x86-64 evaluates right to left, so the record was encoded after the move and stored
+with every string empty (found by a diagnostic test printing the stored bytes; valgrind saw nothing, as nothing was invalid).
+The record is now encoded before the call. A CI job runs clang-tidy's `bugprone-use-after-move` over Lugh's files and
+fails on a finding; its first run found nothing else in Lugh, and five sites in Dannan 0.9.2 and Dagda 0.3.2, passed to
+their sessions. It also found two tests using `std::search` without `<algorithm>`, compiling only through the precompiled
+header. Coverage is captured and uploaded after a failed test too, and lcov passes GoogleTest's inconsistent end lines:
+Lugh's own code at 96.8% of lines, 92.6% of functions, 48.8% of branches. Tests: 844, unchanged; every CI job green.
+
 ## 2026-11-20: lugh::client_topics, the broker's checks on Lir's codec
 
 `may_publish` (a `pub` grant for a plain PUBLISH, a `retain` grant for a retained one) and `may_subscribe` (a `sub` grant

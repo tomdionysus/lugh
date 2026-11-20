@@ -76,6 +76,56 @@ jobs:
         working-directory: lugh
         run: build/lugh_tests --gtest_brief=1
 
+  # A value used after it was moved, including an argument read in the same call that moves it:
+  # C++ leaves the order unspecified, and GCC on x86-64 reverses it (2026-11-20, three records
+  # stored empty). Lugh's own files; the deps' findings go to their owners.
+  use-after-move:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: debian:trixie
+    steps:
+      - name: Install packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            clang clang-tidy cmake ninja-build git ca-certificates openssl \
+            libboost-dev libssl-dev libyaml-cpp-dev libgtest-dev libgmock-dev libldap-dev
+
+      - uses: actions/checkout@v4
+        with:
+          path: lugh
+
+      - uses: actions/checkout@v4
+        with:
+          repository: tomdionysus/dannan
+          path: dannan
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: tomdionysus/dagda
+          path: dagda
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: tomdionysus/lir
+          path: lir
+          fetch-depth: 0
+
+      - name: Trust the checkouts
+        run: |
+          for repo in lugh dannan dagda lir; do git config --global --add safe.directory "$GITHUB_WORKSPACE/$repo"; done
+
+      - name: clang-tidy
+        working-directory: lugh
+        run: |
+          cmake -S . -B tidy -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DLUGH_INSTALL_SYSTEM=OFF \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
+          run-clang-tidy -quiet -p tidy -j "$(nproc)" -checks='-*,bugprone-use-after-move' \
+            -warnings-as-errors='bugprone-use-after-move' "$PWD/(lugh|tools)/"
+
   # Line and branch coverage of Lugh's own code (not its tests, Dannan or Dagda), kept near 100%
   # (the maintainer, 2026-11-20), to Codecov.
   coverage:
@@ -133,10 +183,10 @@ jobs:
         if: ${{ !cancelled() }}
         working-directory: lugh
         run: |
-          lcov --capture --directory build --output-file build/coverage.info --branch-coverage --ignore-errors mismatch,negative,unused
-          lcov --extract build/coverage.info "$PWD/lugh/*" "$PWD/tools/*" --output-file build/coverage.info --branch-coverage --ignore-errors unused
-          lcov --remove build/coverage.info "$PWD/lugh/test/*" "$PWD/lugh/fuzz/*" --output-file build/coverage.info --branch-coverage --ignore-errors unused
-          lcov --summary build/coverage.info --branch-coverage
+          lcov --capture --directory build --output-file build/coverage.info --branch-coverage --ignore-errors mismatch,negative,unused,inconsistent
+          lcov --extract build/coverage.info "$PWD/lugh/*" "$PWD/tools/*" --output-file build/coverage.info --branch-coverage --ignore-errors unused,inconsistent
+          lcov --remove build/coverage.info "$PWD/lugh/test/*" "$PWD/lugh/fuzz/*" --output-file build/coverage.info --branch-coverage --ignore-errors unused,inconsistent
+          lcov --summary build/coverage.info --branch-coverage --ignore-errors inconsistent
 
       - name: Upload coverage
         if: ${{ !cancelled() }}
