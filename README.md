@@ -61,12 +61,12 @@ those that follow), but nothing in it is specific to them.
 - **Dashboard.** A React admin interface (`dashboard/`) on the same API, same-origin, with no
   token in the browser, served by the node from `static.directory`. Everyone manages their own
   factors, sessions and app passwords there; administering needs a passkey sign-in.
-- **LDAP** (planned). A second front end on the same directory for mail servers, NAS boxes,
-  VPNs and PAM: bind, search and compare, and writes mapped onto Lugh's own fields, never
-  a general LDAP server ([TODO/2026-11-04-ldap.md](TODO/2026-11-04-ldap.md)).
-- **A C++ library** (planned). `lugh::client::RelyingParty`: the code flow, token
+- **LDAP.** A second front end on the same directory for mail servers, NAS boxes, VPNs and
+  PAM: bind, search and compare, and writes mapped onto Lugh's own fields, never a general
+  LDAP server ([docs/ldap.md](docs/ldap.md)).
+- **A C++ library.** `lugh_client`, with `lugh::client::RelyingParty`: the code flow, token
   verification against cached JWKS, back-channel logout, and the client credentials and
-  device flows, for a project that links Lugh as a subproject.
+  device flows, for a project that links Lugh as a subproject ([docs/client.md](docs/client.md)).
 - **Audit.** The hash-chained log, verifiable end to end, exportable to a SIEM.
 
 Everything in flight is TLS 1.3; there is no plaintext listener. Secrets live in locked
@@ -111,16 +111,17 @@ state through Dagda, and learn who someone is from Lugh.
 
 ### Build
 
-A C++20 compiler, CMake 3.23 or later, Boost 1.87 or newer (Asio, Beast and JSON), OpenSSL
+A C++20 compiler, CMake 3.23 or later, Boost 1.83 or newer (Asio, Beast and JSON), OpenSSL
 3, yaml-cpp and GoogleTest. Dannan is fetched from `../dannan` at the pinned release.
 
 ```bash
 cmake --preset debug && cmake --build build -j8
 ```
 
-Warnings are errors and hardening is on by default. `--preset asan`, `--preset tsan` and
-`--preset fuzz` (a clang with libFuzzer) are run at the end of every phase, not kept for
-releases, because Lugh holds every credential.
+Warnings are errors and hardening is on by default. `--preset asan` and `--preset tsan` are
+run at the end of every phase, not kept for releases, because Lugh holds every credential.
+`--preset fuzz` (a clang with libFuzzer) builds every object instrumented, with ASan and
+UBSan; its campaigns are run before a release.
 
 ### Run
 
@@ -146,17 +147,17 @@ curl -sk https://localhost:8443/health
 {"status":"ok"}
 ```
 
-The management API is `/api/v1` ([docs/api.md](docs/api.md)). Nothing opens it yet:
-callers are resolved from sessions and OAuth tokens, which arrive with OAuth, so until then
-it answers 401 to everyone.
+The management API is `/api/v1` ([docs/api.md](docs/api.md)); a caller is resolved from
+its session or OAuth token.
 
 ### Make a project a relying party
 
-Once the library ships, a C++ project adds Lugh as a subproject and uses
+A C++ project adds Lugh as a subproject, links `lugh_client` and uses
 `lugh::client::RelyingParty` for the code flow, the callback, token verification and
-back-channel logout; an application is registered with Lugh by an administrator, with
-exact redirect URIs, the groups that may use it and the roles it maps them to. The design
-is in [docs/architecture.md](docs/architecture.md), "Single sign-on".
+back-channel logout ([docs/client.md](docs/client.md)); an application is registered with
+Lugh by an administrator, with exact redirect URIs, the groups that may use it and the roles
+it maps them to. The design is in [docs/architecture.md](docs/architecture.md), "Single
+sign-on".
 
 ### Test
 
@@ -170,8 +171,8 @@ Tests are GoogleTest only, in one binary. Time is injected and stepped, never sl
 
 ### Deploy
 
-Not yet: the first install on a node follows hosting on Dannan and Dagda. The shape: get
-the tree onto the node, build there, `ctest`, put the certificate pair in
+Each node is its own single-node install until hosting on Dannan and Dagda makes them one
+cluster (P8). Get the tree onto the node, build there, `ctest`, put the certificate pair in
 `/usr/local/etc/lugh/tls/`, then `sudo cmake --install build-release`, which installs the
 binary, config and docs, runs `deploy/host-setup.sh`, and enables and restarts
 `lugh.service`. The unit runs as its own user, `lugh`, on 443 with `CAP_NET_BIND_SERVICE`
@@ -224,12 +225,14 @@ Design: [docs/architecture.md](docs/architecture.md). Conventions, shared with t
 ## Status
 
 Version 0.1.0 is tagged; `develop` is ahead of it. Built and tested: the directory,
-sign-in with the second factor and WebAuthn, the audit chain, the management API, genesis,
-OAuth 2 and OpenID Connect, writable LDAP, `lugh_client`, the listeners on Dannan's, and
-the interim sealed store and keyring (Lugh is in Dannan's callback shape above the frozen
-store, links Dannan for every shared primitive, and has no copy of one). Next: hosting on
-Dannan's `Context` and Dagda, the dashboard, hardening, and the rollout to each project. Every phase ends green under ASan with UBSan and
-under TSan.
+sign-in with the second factor and WebAuthn, the audit chain, the management API and the
+dashboard, genesis, OAuth 2 and OpenID Connect, writable LDAP, `lugh_client`, the listeners
+on Dannan's, the interim sealed store and keyring (Lugh is in Dannan's callback shape above
+the frozen store, links Dannan for every shared primitive, and has no copy of one), and
+hardening: fuzzing, the sandbox on real hosts, key rotation drills and a threat model
+([docs/threat-model.md](docs/threat-model.md)). Next: hosting on Dannan's `Context` and
+Dagda (P8), then the rollout to each project. Every phase ends green under ASan with UBSan
+and under TSan.
 
 ## Licence
 
