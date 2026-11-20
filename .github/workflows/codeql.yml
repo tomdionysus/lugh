@@ -14,6 +14,8 @@ on:
     paths-ignore: ['TODO/**', 'docs/**', '**/*.md']
   schedule:
     - cron: "41 4 * * 1"
+  # By hand, to check a change to this workflow before it reaches main.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
