@@ -31,6 +31,10 @@ them.
   `main`.
 - The tag, the CMake `project(... VERSION ...)` and `--version` are the same
   number.
+- `CHANGELOG.md` gets the release's entry before it is tagged: what was added,
+  changed and fixed, and what a dependant can now take from Lugh in place of its
+  own code. Moving a dependency's pin gets a line too, saying what its release
+  notes changed in Lugh, or why nothing did.
 
 ## Commits
 

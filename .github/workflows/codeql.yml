@@ -10,10 +10,16 @@ name: CodeQL
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
+    branches: [main]
+    paths-ignore: ['TODO/**', 'docs/**', '**/*.md']
   schedule:
     - cron: "41 4 * * 1"
+  # By hand, to check a change to this workflow before it reaches main.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -50,9 +56,15 @@ jobs:
           path: dagda
           fetch-depth: 0
 
+      - uses: actions/checkout@v4
+        with:
+          repository: tomdionysus/lir
+          path: lir
+          fetch-depth: 0
+
       - name: Trust the checkouts
         run: |
-          for repo in lugh dannan dagda; do git config --global --add safe.directory "$GITHUB_WORKSPACE/$repo"; done
+          for repo in lugh dannan dagda lir; do git config --global --add safe.directory "$GITHUB_WORKSPACE/$repo"; done
 
       - uses: github/codeql-action/init@v4
         with:

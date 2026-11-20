@@ -2,6 +2,33 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-20: Release 0.3.0
+
+The Dannan 0.10.0 move, released for source dependants (the coordinating session's option (a); the four config-name
+renames follow in 0.4.0). Its Debian package waits for Dagda's release on Dannan 0.10.0 in the apt repository, because
+the package build runs the tests against Dagda's packages. Gate:
+- debug, ASan and TSan on node-a at the branch's tree d763b78: 893 of 893 each, dependencies instrumented. The tagged
+  tree differs from it only in the version line, the changelog, README, TODO, the man page's version and the workflows,
+  checked by diff, so the gate stands.
+- fuzzing on node-b at dcd99d0: all 13 targets, 300 s each, between 1.7 and 7.6 million runs each, nothing found.
+CodeQL green again on develop (a manual run after the Lir checkout fix).
+
+## 2026-11-20: Onto Dannan 0.10.0
+
+Lugh, lugh_client and the tests are pinned to Dannan 0.10.0, as the first tier-1 job after its tag: Louhi, Kvasir, Mimir
+and Lir's plugin wait on lugh_client building there.
+- Dagda 0.3.2 still serves the tests: in Lugh's fetch mode, its find_package(dannan 0.9.2) goes to FetchContent's
+  redirect, which accepts 0.10.0. Its code compiles unchanged, as Dagda had read. Dagda 0.4.0 is still needed for the
+  package's installed build.
+- A sanitizer build passes its sanitizer to Dannan as `DANNAN_SANITIZE`.
+- From Dannan's release notes:
+  - `TokenSource` takes `RetryPolicy::unbounded`;
+  - eight further moves are planned in order (`ACTIVE.md`);
+  - so are the four flag renames the stack's config names ask for, in 0.3.0.
+- CHANGELOG.md was added, with entries for 0.1.0 and 0.2.0.
+Gate on node-a at -j2, once each: debug 893 of 893; ASan 893 of 893 and TSan 893 of 893, no sanitizer report, with
+Dannan, Dagda and lir::mqtt carrying the sanitizer (ASan symbols 38, 39 and 33; TSan symbols 44, 40 and 17).
+
 ## 2026-11-20: Release 0.2.0
 
 The maintainer: "complete current work and cut stable releases". 0.2.0, a minor bump (a stale 0.1.0 tag predates main's

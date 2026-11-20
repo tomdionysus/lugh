@@ -18,9 +18,44 @@ beside Dannan 0.9.2, and `ClusterRig` (`lugh/test/fixtures/cluster_rig.h`) runs 
 - P8.5 waits on Dagda's slice 2; P8.6 on the durable AcceptorStore and Dannan's register layer; P8.7 on D9.
 Meanwhile, not waiting (`lugh::client_topics` is done):
 `@lugh/admin-ui`, the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`).
-When Dannan 0.10.0 is tagged (after Lugh 0.2.0, which stays on 0.9.2): pass LUGH_SANITIZE through as `DANNAN_SANITIZE`
-(address or thread, set before Dannan is fetched; Dannan's docs/building.md), beside Lugh's global flags; and Lugh's encodings, `Prefix`, `RecordingSink`, TOTP's SHA-1 and the callback vocabulary move onto
-it. What each dependant needs of Lugh, and what Lugh needs of Dannan and Dagda, is in `2026-11-20-dependants.md`.
+**Dannan 0.10.0, reviewed against its CHANGELOG** (`feature/dannan-0.10`; gated once its tag, and Dagda 0.4.0's, are out).
+With the pin:
+- `LUGH_SANITIZE` is passed through as `DANNAN_SANITIZE`, beside Lugh's global flags.
+- `TokenSource`'s retry policy is Dannan's `RetryPolicy::unbounded(5s, 5min)`, the same policy Lugh wrote by hand.
+- The rest of the diff is source-compatible: `identity::hex` and `unhex` forward to `encoding/base.h`, and the durable-file
+  calls gain a defaulted mode.
+
+Each next item is its own step, because each changes behaviour or public API, in this order:
+1. **The callback vocabulary.** lugh_client's and the node's `Outcome`, `Fault` and `Completion` become Dannan's
+   `contract/completion.h` (one Fault kind for the stack, with `unavailable` and `timed_out` mapped to 503). This changes
+   lugh_client's public types, so it is told to Louhi, Kvasir, Mimir and Lir first.
+2. **The encodings.** `lugh/core/encoding.h` (base64url, base32, `printable`, UTF-8) becomes `encoding/base.h`; Dannan's
+   exact decoders write a secret straight into a `SecureBuffer`.
+3. **TOTP's HMAC-SHA-1** becomes `identity::hmac_sha1`.
+4. **Lugh's random IDs** become `identity::RandomId<Tag>`, one type per kind.
+5. **`network::Cidr`** becomes `listen::Prefix`, which now refuses host bits set past the length. A configured
+   `proxy.trusted_networks: 10.0.0.1/8`, read today as 10.0.0.0/8, would stop the start; the release notes say so.
+6. **The tests' `RecordingSink`** becomes `test::RecordingSink`, and lugh_node's late logger swap becomes
+   `status::SwappableSink`.
+7. Any directory Lugh makes and syncs by hand (the keyring's and state files') uses `identity::durable_create_directories`
+   and `durable_sync_directory`.
+8. Lugh's fuzz targets also run as smoke tests inside `lugh_tests`, through `dannan::testing` (`fuzz::smoke`), so every
+   CI run exercises each parser's corpus; `lugh/fuzz/campaign.sh` keeps the long campaigns.
+Not taken: `agree::MemoryStore` and the agreement teardown fixes, which are P8's (Lugh hosts no agreement yet); the ack
+levels, which Lugh does not name.
+
+**The stack's config names** (Dannan's `docs/config.md`). The layer order and the log keys already conform. Four flags
+and variables do not: each is to be made from its full dotted key.
+- `server.address`: `--address` and `LUGH_ADDRESS` become `--server-address` and `LUGH_SERVER_ADDRESS`.
+- `server.port`: `--port` and `LUGH_PORT` become `--server-port` and `LUGH_SERVER_PORT`.
+- `oauth.issuer`: `--issuer` and `LUGH_ISSUER` become `--oauth-issuer` and `LUGH_OAUTH_ISSUER`.
+- `oauth.mtls_port`: `--mtls-port` and `LUGH_MTLS_PORT` become `--oauth-mtls-port` and `LUGH_OAUTH_MTLS_PORT`.
+
+A flag is part of the interface, so the renames go in the next minor, 0.3.0, with the unit file, the README, the tests
+and the changelog, never mid-release. The prefix stays `LUGH`: it is the project's name in upper case, not
+the binary's (the coordinating session, 2026-11-20; Kvasir uses `KVASIR` for kvasir-node the same way).
+
+What each dependant needs of Lugh, and what Lugh needs of Dannan and Dagda, is in `2026-11-20-dependants.md`.
 
 Until Dagda has a switch for its tools (agreed, in its next release), the node build compiles `dagda-migrate` and
 `dagda-bench`, and an install carries `dagda-migrate`, its man page and Dagda's library and headers.
@@ -35,8 +70,9 @@ Before Lugh's first release: the fuzz campaigns again, on the instrumented build
 Its packaging follows the stack's deb convention (coordinator, 2026-11-20; read Dannan's and Dagda's `debian/` and
 `../manannan/docs/packaging.md` first). It uses debhelper (compat 13) from `debian/` driving CMake's install rules, with
 `dh_installsystemd` and `dh_installsysusers`, and `tools/build-deb.sh` (Dannan's is the reference layout), built natively on a claimed build node and in CI, lintian clean.
-Shared libraries are never bundled: it depends on `libdannan0.9` and `libdagda0.3.2` through `${shlibs:Depends}` (`-dev`
-ranges `>= x.y.z, << next minor~`), and on Lir's `liblir-mqtt0.1` (`liblir-dev` for building). The layout:
+Shared libraries are never bundled: the node links Dannan alone, so the package depends on Dannan's runtime library through
+`${shlibs:Depends}`; Dagda (`libdagda-dev`) and Lir (`liblir-dev`, or Lir cloned from the sibling checkout) are build
+dependencies of the tests only. A `-dev` range is `>= x.y.z, << next minor~`, its lower bound a full version. The layout:
 - `/usr/bin/lugh-node`;
 - `/etc/lugh/config.yaml` as a conffile; the secrets in `/etc/lugh/secrets.yaml`, mode 0600, made by postinst and never shipped;
 - `/var/lib/lugh` for state;

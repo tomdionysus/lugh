@@ -21,9 +21,9 @@ namespace {
 using namespace std::chrono_literals;
 using Method = ClientIdentity::Method;
 
-// From 5 s to 5 min, never parked: no budget, a window that remembers nothing, no run bound.
-// A service never gives up on its token, as nothing else signs it in.
-constexpr dannan::sched::RetryPolicy kRetry{std::numeric_limits<std::size_t>::max(), 1ms, 5s, 5min, 0ms};
+// From 5 s to 5 min, never parked: a service never gives up on its token, as nothing else signs
+// it in. Dannan's own never-parking policy (0.10.0), which this was written by hand before.
+const dannan::sched::RetryPolicy kRetry = dannan::sched::RetryPolicy::unbounded(5s, 5min);
 
 bool b64token_char(char c) {
   return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' || c == '~' || c == '+' || c == '/';

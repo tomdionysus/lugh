@@ -13,7 +13,14 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    paths-ignore: ['TODO/**', 'docs/**', '**/*.md']
   pull_request:
+    paths-ignore: ['TODO/**', 'docs/**', '**/*.md']
+
+# A newer push to the same branch cancels the run it makes stale.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

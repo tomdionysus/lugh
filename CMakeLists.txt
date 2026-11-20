@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.24)
 # The tag, `lugh-node --version`, the package and the README's Status carry this version. Bump
 # them together.
 project(lugh
-    VERSION 0.2.0
+    VERSION 0.3.0
     DESCRIPTION "Lugh"
     LANGUAGES CXX
 )
@@ -64,13 +64,12 @@ find_package(OpenSSL 3.0 REQUIRED)
 # Dannan, the network layer Lugh hosts on, at a release tag, or at a commit while Lugh needs
 # something not yet tagged: from the sibling checkout, cloned into the build tree, so
 # building Lugh never touches ../dannan. Linked as dannan::dannan, the name an installed
-# Dannan exports too (find_package(dannan 0.9 CONFIG)). Now: 0.9.2, the public listener and its outbound
-# connector, the worker pool, RS256 verification for WebAuthn, the sign-in back-off (Backoff,
-# Lugh's until 0.8.5, shared with Kvasir), and agreement, which P8's registers are built on
-# (libdannan.so.0.9); 0.9.2 is the patch Dagda 0.3.x is built on.
+# Dannan exports too (find_package(dannan 0.10.0 CONFIG)). Now: 0.10.0, which adds the contract
+# vocabulary (completion, ack levels), the encodings, the random ID and SHA-1 that Lugh moves onto
+# next, and DANNAN_SANITIZE (libdannan.so.0.10).
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_REF "0.9.2")
+set(LUGH_DANNAN_REF "0.10.0")
 # Dagda, the store P8 moves Lugh onto, the same way: a release tag of the sibling checkout,
 # cloned into the build tree. Only the node needs it; lugh_client never does. Now: 0.3.2, slice 1
 # (the change notice) and Space::covers.
@@ -110,7 +109,7 @@ if (LUGH_SYSTEM_DEPENDENCIES AND NOT LUGH_SANITIZE STREQUAL "none")
 endif()
 if (LUGH_SYSTEM_DEPENDENCIES)
     if (NOT TARGET dannan::dannan)
-        find_package(dannan 0.9 CONFIG REQUIRED)
+        find_package(dannan ${LUGH_DANNAN_REF} CONFIG REQUIRED)
     endif()
     # The node itself links neither Dagda nor Lir yet: the tests' cluster rig and topic checks do.
     # Dagda's package matches its release exactly (no release promises another's ABI yet): the pin.
@@ -118,7 +117,7 @@ if (LUGH_SYSTEM_DEPENDENCIES)
         find_package(dagda ${LUGH_DAGDA_REF} EXACT CONFIG REQUIRED)
     endif()
     if (LUGH_BUILD_TESTING AND NOT TARGET lir::mqtt)
-        find_package(lir 0.1 CONFIG QUIET)
+        find_package(lir 0.1.0 CONFIG QUIET)
         if (NOT lir_FOUND)
             FetchContent_Declare(lir GIT_REPOSITORY "${LUGH_LIR_REPOSITORY}" GIT_TAG "${LUGH_LIR_REF}" EXCLUDE_FROM_ALL)
             set(LIR_BUILD_SERVER OFF CACHE BOOL "" FORCE)
@@ -133,6 +132,10 @@ else()
         # OVERRIDE_FIND_PACKAGE: Dagda's find_package(dannan) takes this one, not an installed one.
         FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_REF}" OVERRIDE_FIND_PACKAGE)
         set(DANNAN_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+        # Dannan's own switch for its targets (docs/building.md), beside the global flags above.
+        if (NOT LUGH_SANITIZE STREQUAL "none")
+            set(DANNAN_SANITIZE "${LUGH_SANITIZE}" CACHE STRING "" FORCE)
+        endif()
         # Lugh links the library; Dannan's tools (dannan-node, dannan-ca, ...) are neither built nor installed.
         set(DANNAN_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
         FetchContent_MakeAvailable(dannan)

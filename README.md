@@ -61,6 +61,9 @@ sudo apt build-dep ./ && tools/build-deb.sh
 sudo apt install ./build-deb/lugh_0.2.0_*.deb
 ```
 
+The package is built from 0.2.0: 0.3.0's follows once Dagda's release on Dannan 0.10.0 is in the
+apt repository ([CHANGELOG.md](CHANGELOG.md)).
+
 The package installs `lugh-node`, the configuration in `/etc/lugh`, the dashboard and the
 systemd unit, and makes the `lugh` system user. The service is installed **disabled**: it needs
 a certificate and a keyring first.
@@ -161,11 +164,14 @@ Lugh signs people in for [Louhi](https://github.com/tomdionysus/louhi),
 
 ## Status
 
-Version 0.2.0. Built and tested: the directory, sign-in with a second factor and WebAuthn, the
+Version 0.3.0, on Dannan 0.10.0; the package is 0.2.0's until Dagda's next release. Built and
+tested: the directory, sign-in with a second factor and WebAuthn, the
 audit chain, the management API and the dashboard, genesis, OAuth 2 and OpenID Connect, writable
 LDAP, `lugh_client`, and hardening: fuzzing, the sandbox, key rotation drills and a threat model
 ([docs/threat-model.md](docs/threat-model.md)). Each node is its own directory today; next, Lugh's
 state moves onto Dagda so a cluster's nodes share one directory.
+
+What each release changed: [CHANGELOG.md](CHANGELOG.md).
 
 ## Contributing
 
