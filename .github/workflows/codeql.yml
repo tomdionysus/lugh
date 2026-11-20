@@ -10,10 +10,14 @@ name: CodeQL
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
+    branches: [main]
+    paths-ignore: ['TODO/**', 'docs/**', '**/*.md']
   schedule:
     - cron: "41 4 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
