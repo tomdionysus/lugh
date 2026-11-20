@@ -1,0 +1,126 @@
+#
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+# The build and lugh_tests on Debian 13, as the nodes have it: GCC on x86-64 and on arm64 (as a
+# build node builds it), and clang with its thread-safety analysis. Lugh fetches Dannan and Dagda from
+# sibling checkouts at their pinned tags, so each is checked out beside Lugh with its tags. The
+# sanitizer runs and the fuzz campaigns stay on the cluster.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: ${{ matrix.compiler }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { compiler: gcc, arch: x86-64, runner: ubuntu-24.04, cxx: g++ }
+          - { compiler: gcc, arch: arm64, runner: ubuntu-24.04-arm, cxx: g++ }
+          - { compiler: clang, arch: x86-64, runner: ubuntu-24.04, cxx: clang++ }
+    container:
+      image: debian:trixie
+    steps:
+      - name: Install packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            g++ clang cmake ninja-build git ca-certificates openssl \
+            libboost-dev libssl-dev libyaml-cpp-dev libgtest-dev libgmock-dev
+
+      - uses: actions/checkout@v4
+        with:
+          path: lugh
+
+      - uses: actions/checkout@v4
+        with:
+          repository: tomdionysus/dannan
+          path: dannan
+          fetch-depth: 0  # the pinned tag
+
+      - uses: actions/checkout@v4
+        with:
+          repository: tomdionysus/dagda
+          path: dagda
+          fetch-depth: 0  # the pinned tag
+
+      - name: Trust the checkouts
+        run: |
+          for repo in lugh dannan dagda; do git config --global --add safe.directory "$GITHUB_WORKSPACE/$repo"; done
+
+      - name: Build
+        working-directory: lugh
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DLUGH_INSTALL_SYSTEM=OFF
+          cmake --build build -j "$(nproc)"
+
+      - name: Test
+        working-directory: lugh
+        run: build/lugh_tests --gtest_brief=1
+
+  # Line and branch coverage of Lugh's own code (not its tests, Dannan or Dagda), kept near 100%
+  # (the maintainer, 2026-11-20), to Codecov.
+  coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    container:
+      image: debian:trixie
+    steps:
+      - name: Install packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            g++ cmake ninja-build git ca-certificates openssl lcov \
+            libboost-dev libssl-dev libyaml-cpp-dev libgtest-dev libgmock-dev \
+            curl gnupg  # Codecov's uploader verifies its own signature
+
+      - uses: actions/checkout@v4
+        with:
+          path: lugh
+
+      - uses: actions/checkout@v4
+        with:
+          repository: tomdionysus/dannan
+          path: dannan
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: tomdionysus/dagda
+          path: dagda
+          fetch-depth: 0
+
+      - name: Trust the checkouts
+        run: |
+          for repo in lugh dannan dagda; do git config --global --add safe.directory "$GITHUB_WORKSPACE/$repo"; done
+
+      - name: Build and test
+        working-directory: lugh
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLUGH_COVERAGE=ON -DLUGH_INSTALL_SYSTEM=OFF
+          cmake --build build -j "$(nproc)"
+          build/lugh_tests --gtest_brief=1
+          lcov --capture --directory build --output-file build/coverage.info --branch-coverage --ignore-errors mismatch,negative,unused
+          lcov --extract build/coverage.info "$PWD/lugh/*" "$PWD/tools/*" --output-file build/coverage.info --branch-coverage --ignore-errors unused
+          lcov --remove build/coverage.info "$PWD/lugh/test/*" "$PWD/lugh/fuzz/*" --output-file build/coverage.info --branch-coverage --ignore-errors unused
+          lcov --summary build/coverage.info --branch-coverage
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: lugh/build/coverage.info
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

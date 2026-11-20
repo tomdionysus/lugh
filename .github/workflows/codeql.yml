@@ -1,0 +1,73 @@
+#
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+# CodeQL security analysis of the node, its library and lugh_client, built as in CI. Dannan and
+# Dagda are checked out beside Lugh, as CI does.
+name: CodeQL
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  schedule:
+    - cron: "41 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      security-events: write
+    container:
+      image: debian:trixie
+    steps:
+      - name: Install packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            g++ cmake ninja-build git ca-certificates libboost-dev libssl-dev libyaml-cpp-dev
+
+      - uses: actions/checkout@v4
+        with:
+          path: lugh
+
+      - uses: actions/checkout@v4
+        with:
+          repository: tomdionysus/dannan
+          path: dannan
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: tomdionysus/dagda
+          path: dagda
+          fetch-depth: 0
+
+      - name: Trust the checkouts
+        run: |
+          for repo in lugh dannan dagda; do git config --global --add safe.directory "$GITHUB_WORKSPACE/$repo"; done
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: c-cpp
+          build-mode: manual
+          queries: security-and-quality
+          source-root: lugh
+
+      - name: Build
+        working-directory: lugh
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DLUGH_BUILD_TESTING=OFF -DLUGH_INSTALL_SYSTEM=OFF
+          cmake --build build -j "$(nproc)"
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:c-cpp"
+          checkout_path: lugh

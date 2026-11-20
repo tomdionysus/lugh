@@ -1,5 +1,10 @@
 # Lugh - The Directory
 
+[![CI](https://github.com/tomdionysus/lugh/actions/workflows/ci.yml/badge.svg)](https://github.com/tomdionysus/lugh/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/tomdionysus/lugh/graph/badge.svg)](https://codecov.io/gh/tomdionysus/lugh)
+[![CodeQL](https://github.com/tomdionysus/lugh/actions/workflows/codeql.yml/badge.svg)](https://github.com/tomdionysus/lugh/actions/workflows/codeql.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 Lugh is the directory and single sign-on for a cluster of trusted machines. It is a C++20
 service that holds the identities of people and services, signs them in with two factors,
 and tells every other system who someone is and what they may do: through OAuth 2 and

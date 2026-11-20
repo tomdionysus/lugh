@@ -31,6 +31,9 @@ cmake_dependent_option(LUGH_BUILD_FUZZING "Build the libFuzzer targets in lugh/f
 # Campaigns hunt with ASan and UBSan. Off, a target is libFuzzer alone: for measuring a target's
 # own memory and speed, which ASan's allocator and shadow hide.
 cmake_dependent_option(LUGH_FUZZ_SANITIZERS "Build the fuzz build with ASan and UBSan" ON "LUGH_BUILD_FUZZING" OFF)
+# Line and branch coverage of Lugh's own targets (gcov), for the CI's report: the stack keeps it
+# near 100% (the maintainer, 2026-11-20).
+option(LUGH_COVERAGE "Instrument Lugh's targets for coverage" OFF)
 set(LUGH_SANITIZE "none" CACHE STRING "none, address (with undefined) or thread")
 set_property(CACHE LUGH_SANITIZE PROPERTY STRINGS none address thread)
 
@@ -167,6 +170,11 @@ function(lugh_flags target)
 
     target_compile_options(${target} PRIVATE ${LUGH_HARDEN_COMPILE})
     target_link_options(${target} PRIVATE ${LUGH_HARDEN_LINK})
+
+    if (LUGH_COVERAGE)
+        target_compile_options(${target} PRIVATE --coverage -O0)
+        target_link_options(${target} PRIVATE --coverage)
+    endif()
 
     if (LUGH_SANITIZE STREQUAL "address")
         target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
