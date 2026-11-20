@@ -37,6 +37,7 @@ namespace {
 constexpr std::uint64_t kNow = 1'800'000'000;
 constexpr const char* kIssuer = "https://lugh.example";
 constexpr const char* kRedirect = "https://app.example/back";
+constexpr const char* kTokenUrl = "https://lugh.example/oauth2/token";
 
 boost::json::object discovery() {
   return {{"issuer", kIssuer},
@@ -71,7 +72,8 @@ class OAuthTest : public ::testing::Test {
     return identity;
   }
 
-  std::string token_url() const { return std::string(kIssuer) + "/oauth2/token"; }
+  // One literal: GCC 14 at -O2 misreads the concatenation of two as writing past the string.
+  std::string token_url() const { return kTokenUrl; }
 
   std::string id_token(const std::string& nonce) const {
     return jws_sign(site_key, "k1", "JWT",
