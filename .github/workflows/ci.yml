@@ -38,7 +38,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             g++ clang cmake ninja-build git ca-certificates openssl \
-            libboost-dev libssl-dev libyaml-cpp-dev libgtest-dev libgmock-dev
+            libboost-dev libssl-dev libyaml-cpp-dev libgtest-dev libgmock-dev libldap-dev
 
       - uses: actions/checkout@v4
         with:
@@ -83,7 +83,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             g++ cmake ninja-build git ca-certificates openssl lcov \
-            libboost-dev libssl-dev libyaml-cpp-dev libgtest-dev libgmock-dev \
+            libboost-dev libssl-dev libyaml-cpp-dev libgtest-dev libgmock-dev libldap-dev \
             curl gnupg  # Codecov's uploader verifies its own signature
 
       - uses: actions/checkout@v4

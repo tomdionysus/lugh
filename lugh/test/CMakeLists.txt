@@ -110,6 +110,13 @@ add_executable(lugh_tests
 
 # Dagda's in-process cluster and neutral owner (P8): the rigs Lugh's components move onto.
 target_link_libraries(lugh_tests PRIVATE lugh dagda::test_fixtures GTest::gtest_main)
+# A real LDAP client for the process tests: OpenLDAP's libldap, as SSSD, PAM and most LDAP software
+# use (the maintainer, 2026-11-20). Debian's libldap-dev.
+find_path(LUGH_LDAP_INCLUDE_DIR ldap.h REQUIRED)
+find_library(LUGH_LDAP_LIBRARY ldap REQUIRED)
+find_library(LUGH_LBER_LIBRARY lber REQUIRED)
+target_include_directories(lugh_tests SYSTEM PRIVATE ${LUGH_LDAP_INCLUDE_DIR})
+target_link_libraries(lugh_tests PRIVATE ${LUGH_LDAP_LIBRARY} ${LUGH_LBER_LIBRARY})
 if (LUGH_SANITIZE STREQUAL "address")
     target_sources(lugh_tests PRIVATE sanitizer_options.cpp)
 elseif (LUGH_SANITIZE STREQUAL "thread")

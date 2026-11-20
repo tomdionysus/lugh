@@ -2,6 +2,17 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-20: LDAP tested with a real client
+
+The maintainer: "You will test with a real LDAP client." Beside Lugh's own small client, which can send what a real one never would,
+OpenLDAP's libldap (what SSSD, PAM and most LDAP software use) drives the real lugh-node: LDAPS with the server's certificate
+and name checked, StartTLS after the rootDSE and a refused bind before it, a wrong password and an unverifiable server
+refused, a paged search (RFC 2696) walking the same entries as a whole one, and add, modify and delete under an app password
+that may. Found: the test certificate named its host only in the CN, which RFC 6125 has clients not trust; it now carries
+subjectAltName (and libldap checks "localhost" against the machine's hostname, so the tests connect by address).
+libldap-dev is a test dependency, in CI too. Tests: 835, from 829 (six new). Debug, ASan and TSan with the lugh_client work:
+green, no sanitizer report.
+
 ## 2026-11-20: lugh_client for relying parties, and the topic-scope grammar moved into it
 
 The stack's placement plan (the maintainer: the lower of two projects that depend on each other keeps what both need): what Louhi and Lir
