@@ -145,8 +145,10 @@ else()
         set(DAGDA_BUILD_TESTING OFF CACHE BOOL "" FORCE)
         FetchContent_MakeAvailable(dagda)
     endif()
-    # Lir fetched into Lugh, or Lugh fetched into Lir: either way one lir::mqtt.
-    if (NOT TARGET lir::mqtt)
+    # Lir fetched into Lugh, or Lugh fetched into Lir: either way one lir::mqtt. Only the node's
+    # build (its tests) fetches it; a relying party that fetches lugh_client alone needs no Lir, and
+    # a broker that does already has lir::mqtt, which builds lugh::client_topics.
+    if (LUGH_BUILD_NODE AND NOT TARGET lir::mqtt)
         FetchContent_Declare(lir GIT_REPOSITORY "${LUGH_LIR_REPOSITORY}" GIT_TAG "${LUGH_LIR_REF}")
         set(LIR_BUILD_SERVER OFF CACHE BOOL "" FORCE)
         set(LIR_BUILD_TESTING OFF CACHE BOOL "" FORCE)
