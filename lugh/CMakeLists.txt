@@ -177,3 +177,8 @@ target_precompile_headers(lugh
 )
 
 lugh_flags(lugh)
+
+# GCC 14 at -O2 reports Boost.Asio's own awaitable frame as freed by a mismatched delete, in the
+# one file whose coroutines it inlines so: a false report (Asio allocates and frees the frame
+# with its own pair). The frozen store goes at P8.8, and the exception with it.
+set_source_files_properties(store/sealed_store.cpp PROPERTIES COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU>:-Wno-mismatched-new-delete>")
