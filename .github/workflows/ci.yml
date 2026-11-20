@@ -106,18 +106,28 @@ jobs:
         run: |
           for repo in lugh dannan dagda; do git config --global --add safe.directory "$GITHUB_WORKSPACE/$repo"; done
 
-      - name: Build and test
+      - name: Build
         working-directory: lugh
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLUGH_COVERAGE=ON -DLUGH_INSTALL_SYSTEM=OFF
           cmake --build build -j "$(nproc)"
-          build/lugh_tests --gtest_brief=1
+
+      - name: Test
+        working-directory: lugh
+        run: build/lugh_tests --gtest_brief=1
+
+      # Captured and uploaded after a failed test too, so Codecov tracks what ran; the job still fails.
+      - name: Capture coverage
+        if: ${{ !cancelled() }}
+        working-directory: lugh
+        run: |
           lcov --capture --directory build --output-file build/coverage.info --branch-coverage --ignore-errors mismatch,negative,unused
           lcov --extract build/coverage.info "$PWD/lugh/*" "$PWD/tools/*" --output-file build/coverage.info --branch-coverage --ignore-errors unused
           lcov --remove build/coverage.info "$PWD/lugh/test/*" "$PWD/lugh/fuzz/*" --output-file build/coverage.info --branch-coverage --ignore-errors unused
           lcov --summary build/coverage.info --branch-coverage
 
       - name: Upload coverage
+        if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v5
         with:
           files: lugh/build/coverage.info
