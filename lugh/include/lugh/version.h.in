@@ -10,3 +10,7 @@
 // Written by CMake from src/build_version.h.in, so the binary reports the version in
 // project() and nothing else.
 #define LUGH_VERSION "@PROJECT_VERSION@"
+
+// The config an installed node reads when neither --config nor $LUGH_CONFIG names one: the
+// install layout's (CMakeLists.txt, LUGH_INSTALL_LAYOUT).
+#define LUGH_INSTALLED_CONFIG "@LUGH_CONFDIR@/config.yaml"

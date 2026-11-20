@@ -16,6 +16,7 @@ namespace lugh::api {
 namespace {
 
 constexpr const char* kLevels = "acr is urn:lugh:acr:pwd, urn:lugh:acr:mfa or urn:lugh:acr:phr";
+constexpr const char* kLevelsOrNull = "acr is urn:lugh:acr:pwd, urn:lugh:acr:mfa or urn:lugh:acr:phr, or null";
 
 // The body's acr: a level, or null where `nullable`. Answers false, having written the 400.
 bool acr_member(const http::RouteContext& context, bool nullable, std::optional<authn::Assurance>& out) {
@@ -24,7 +25,7 @@ bool acr_member(const http::RouteContext& context, bool nullable, std::optional<
   const auto it = body->find("acr");
   if (it != body->end() && it->value().is_null() && nullable) return true;
   if (it == body->end() || !it->value().is_string() || !authn::assurance_from_acr(it->value().as_string())) {
-    http::write_error(context.response, http::status::bad_request, "invalid", nullable ? std::string(kLevels) + ", or null" : kLevels);
+    http::write_error(context.response, http::status::bad_request, "invalid", nullable ? kLevelsOrNull : kLevels);
     return false;
   }
   out = authn::assurance_from_acr(it->value().as_string());

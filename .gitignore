@@ -27,3 +27,16 @@ secrets.yaml
 
 # Personal, per-machine agent rules (basemind block lives here)
 CLAUDE.local.md
+
+# What tools/build-deb.sh and debhelper leave behind.
+debian/build/
+debian/changelog
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/lugh/
+debian/lugh-dbgsym/
+debian/tmp/
+debian/*.substvars
+debian/*.debhelper.log
+debian/*.debhelper

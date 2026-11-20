@@ -2,6 +2,33 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-20: The Debian package
+
+`lugh` for Debian trixie, by the stack's convention (Dannan's `debian/` the model; `docs/packaging.md`):
+- debhelper (compat 13) driving CMake's install rules in a new layout, `LUGH_INSTALL_LAYOUT=debian`:
+  - `/usr/bin/lugh-node` and `lugh-node(8)`;
+  - `/etc/lugh/config.yaml` as a conffile;
+  - the dashboard in `/usr/share/lugh/dashboard`, built in the package build;
+  - the unit in `/usr/lib/systemd/system`, templated from `deploy/lugh.service.in`;
+  - the `lugh` user by sysusers.
+- Built against the installed Dannan (`LUGH_SYSTEM_DEPENDENCIES`), so the package depends on `libdannan0.9` and bundles
+  nothing. The tests also use the installed Dagda (at its exact pin) and Lir's, or Lir cloned from the sibling checkout.
+- The binary's default configuration is the layout's (`LUGH_INSTALL_CONFIG`). The local layout keeps `cmake --install`
+  and `deploy/host-setup.sh`.
+- `tools/build-deb.sh` takes the version from `git describe` and refuses a tag the tree disagrees with.
+- The service is installed disabled. The postinst sets who may read what, `apt remove` keeps `/etc/lugh`, and
+  `apt purge` deletes it but never the keyring and store.
+
+The postinst, init, health, dashboard, remove and purge were checked in a fresh trixie container, and lintian is clean.
+
+Found on the way:
+- dpkg's hardening sets `_FORTIFY_SOURCE` too: Lugh now undefines it before setting 3.
+- GCC 14 at `-O2` misreads a string concatenation (rewritten as two literals) and Boost.Asio's coroutine frames, so the
+  package build does not make warnings errors; CI and the presets still do.
+- A sanitizer build refuses the installed libraries, since every library in the process must be instrumented.
+- The README is now about installing and using Lugh, with every project of the stack linked by its GitHub URL (18 links,
+  each answering 200).
+
 ## 2026-11-20: Coverage closer to whole, and the test store's faults
 
 The maintainer's rule is about 100% coverage of all code. Lugh's own code, compiler-made branches filtered out (lcov's

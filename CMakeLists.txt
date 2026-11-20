@@ -7,9 +7,10 @@
 
 cmake_minimum_required(VERSION 3.24)
 
-# The root README carries this version in italics under its title. Bump both.
+# The tag, `lugh-node --version`, the package and the README's Status carry this version. Bump
+# them together.
 project(lugh
-    VERSION 0.1.0
+    VERSION 0.2.0
     DESCRIPTION "Lugh"
     LANGUAGES CXX
 )
@@ -34,6 +35,15 @@ cmake_dependent_option(LUGH_FUZZ_SANITIZERS "Build the fuzz build with ASan and 
 # Line and branch coverage of Lugh's own targets (gcov), for the CI's report: the stack keeps it
 # near 100% (the maintainer, 2026-11-20).
 option(LUGH_COVERAGE "Instrument Lugh's targets for coverage" OFF)
+# On: build against the installed Dannan (libdannan-dev), and for the tests the installed Dagda
+# (libdagda-dev) and Lir (liblir-dev, or Lir fetched for the tests alone when it is not
+# installed). The Debian package builds so, depending on those packages rather than carrying
+# copies (the stack's packaging convention). Off: each is fetched at its pin.
+option(LUGH_SYSTEM_DEPENDENCIES "Build against the installed Dannan, Dagda and Lir" OFF)
+# local: /usr/local, and `cmake --install` prepares the host and restarts the service. debian:
+# the package's paths (/usr, /etc/lugh, /usr/share/lugh), the host left to the package's scripts.
+set(LUGH_INSTALL_LAYOUT "local" CACHE STRING "local or debian")
+set_property(CACHE LUGH_INSTALL_LAYOUT PROPERTY STRINGS local debian)
 set(LUGH_SANITIZE "none" CACHE STRING "none, address (with undefined) or thread")
 set_property(CACHE LUGH_SANITIZE PROPERTY STRINGS none address thread)
 
@@ -92,31 +102,56 @@ if (LUGH_BUILD_FUZZING)
     add_compile_options(${LUGH_FUZZ_INSTRUMENT} -fno-omit-frame-pointer)
     add_link_options(${LUGH_FUZZ_INSTRUMENT})
 endif()
-# Fetched into another build (lugh_client in a relying party), Lugh takes the Dannan that build
-# already has: one process, one Dannan. The consumer's pin must be one Lugh's commit is tested on.
 include(FetchContent)
-if (NOT TARGET dannan::dannan)
-    # OVERRIDE_FIND_PACKAGE: Dagda's find_package(dannan) takes this one, not an installed one.
-    FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_REF}" OVERRIDE_FIND_PACKAGE)
-    set(DANNAN_BUILD_TESTING OFF CACHE BOOL "" FORCE)
-    # Lugh links the library; Dannan's tools (dannan-node, dannan-ca, ...) are neither built nor installed.
-    set(DANNAN_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(dannan)
+# A sanitizer build instruments every library in the process, so it builds Dannan, Dagda and Lir
+# from source with its flags (above); an installed library is built without them.
+if (LUGH_SYSTEM_DEPENDENCIES AND NOT LUGH_SANITIZE STREQUAL "none")
+    message(FATAL_ERROR "LUGH_SANITIZE=${LUGH_SANITIZE} needs Dannan, Dagda and Lir built from source: turn LUGH_SYSTEM_DEPENDENCIES off")
 endif()
-# Until Dagda has a switch for its tools (asked of Dagda, 2026-11-20), they are built, and an
-# install carries dagda-migrate with the library. EXCLUDE_FROM_ALL would leave dagda-migrate unbuilt
-# and fail the install.
-if (LUGH_BUILD_NODE AND NOT TARGET dagda::dagda)
-    FetchContent_Declare(dagda GIT_REPOSITORY "${LUGH_DAGDA_REPOSITORY}" GIT_TAG "${LUGH_DAGDA_REF}")
-    set(DAGDA_BUILD_TESTING OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(dagda)
-endif()
-# Lir fetched into Lugh, or Lugh fetched into Lir: either way one lir::mqtt.
-if (NOT TARGET lir::mqtt)
-    FetchContent_Declare(lir GIT_REPOSITORY "${LUGH_LIR_REPOSITORY}" GIT_TAG "${LUGH_LIR_REF}")
-    set(LIR_BUILD_SERVER OFF CACHE BOOL "" FORCE)
-    set(LIR_BUILD_TESTING OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(lir)
+if (LUGH_SYSTEM_DEPENDENCIES)
+    if (NOT TARGET dannan::dannan)
+        find_package(dannan 0.9 CONFIG REQUIRED)
+    endif()
+    # The node itself links neither Dagda nor Lir yet: the tests' cluster rig and topic checks do.
+    # Dagda's package matches its release exactly (no release promises another's ABI yet): the pin.
+    if (LUGH_BUILD_TESTING AND NOT TARGET dagda::dagda)
+        find_package(dagda ${LUGH_DAGDA_REF} EXACT CONFIG REQUIRED)
+    endif()
+    if (LUGH_BUILD_TESTING AND NOT TARGET lir::mqtt)
+        find_package(lir 0.1 CONFIG QUIET)
+        if (NOT lir_FOUND)
+            FetchContent_Declare(lir GIT_REPOSITORY "${LUGH_LIR_REPOSITORY}" GIT_TAG "${LUGH_LIR_REF}" EXCLUDE_FROM_ALL)
+            set(LIR_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+            set(LIR_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+            FetchContent_MakeAvailable(lir)
+        endif()
+    endif()
+else()
+    # Fetched into another build (lugh_client in a relying party), Lugh takes the Dannan that build
+    # already has: one process, one Dannan. The consumer's pin must be one Lugh's commit is tested on.
+    if (NOT TARGET dannan::dannan)
+        # OVERRIDE_FIND_PACKAGE: Dagda's find_package(dannan) takes this one, not an installed one.
+        FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_REF}" OVERRIDE_FIND_PACKAGE)
+        set(DANNAN_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+        # Lugh links the library; Dannan's tools (dannan-node, dannan-ca, ...) are neither built nor installed.
+        set(DANNAN_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(dannan)
+    endif()
+    # Until Dagda has a switch for its tools (asked of Dagda, 2026-11-20), they are built, and an
+    # install carries dagda-migrate with the library. EXCLUDE_FROM_ALL would leave dagda-migrate unbuilt
+    # and fail the install.
+    if (LUGH_BUILD_NODE AND NOT TARGET dagda::dagda)
+        FetchContent_Declare(dagda GIT_REPOSITORY "${LUGH_DAGDA_REPOSITORY}" GIT_TAG "${LUGH_DAGDA_REF}")
+        set(DAGDA_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(dagda)
+    endif()
+    # Lir fetched into Lugh, or Lugh fetched into Lir: either way one lir::mqtt.
+    if (NOT TARGET lir::mqtt)
+        FetchContent_Declare(lir GIT_REPOSITORY "${LUGH_LIR_REPOSITORY}" GIT_TAG "${LUGH_LIR_REF}")
+        set(LIR_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+        set(LIR_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(lir)
+    endif()
 endif()
 
 # ---------------------------------------------------------------- hardening
@@ -137,7 +172,8 @@ if (LUGH_HARDEN)
     # define it to 0 themselves, because their own checks replace it, so it is off there too,
     # and in a fuzz build, which is a sanitizer build.
     if (LUGH_SANITIZE STREQUAL "none" AND NOT LUGH_BUILD_FUZZING)
-        list(APPEND LUGH_HARDEN_COMPILE "$<$<NOT:$<CONFIG:Debug>>:-D_FORTIFY_SOURCE=3>")
+        # Undefined first: a distribution's own flags (dpkg's hardening) may already set it lower.
+        list(APPEND LUGH_HARDEN_COMPILE "$<$<NOT:$<CONFIG:Debug>>:-U_FORTIFY_SOURCE>" "$<$<NOT:$<CONFIG:Debug>>:-D_FORTIFY_SOURCE=3>")
     endif()
     list(APPEND LUGH_HARDEN_COMPILE
         -D_GLIBCXX_ASSERTIONS
@@ -196,6 +232,23 @@ function(lugh_flags target)
     endif()
 endfunction()
 
+# Where an installed node's files are, by layout: the binary's default --config is the installed
+# config, so `lugh-node` finds it with no flags.
+if (LUGH_INSTALL_LAYOUT STREQUAL "debian")
+    set(LUGH_CONFDIR  "/etc/lugh")
+    set(LUGH_SHAREDIR "/usr/share/lugh")
+    set(LUGH_DOCDIR   "/usr/share/doc/lugh")
+    set(LUGH_UNITDIR  "lib/systemd/system")
+elseif (LUGH_INSTALL_LAYOUT STREQUAL "local")
+    set(LUGH_CONFDIR  "/usr/local/etc/lugh")
+    set(LUGH_SHAREDIR "/usr/local/share/lugh")
+    set(LUGH_DOCDIR   "/usr/local/share/lugh/docs")
+    set(LUGH_UNITDIR  "/etc/systemd/system")
+else()
+    message(FATAL_ERROR "LUGH_INSTALL_LAYOUT is local or debian, not ${LUGH_INSTALL_LAYOUT}")
+endif()
+set(LUGH_BINARY "${CMAKE_INSTALL_PREFIX}/bin/lugh-node")
+
 configure_file(lugh/include/lugh/version.h.in "${PROJECT_BINARY_DIR}/generated/lugh/version.h")
 
 add_subdirectory(lugh)
@@ -225,30 +278,26 @@ endif()
 
 # ----------------------------------------------------------------- install
 #
-# `sudo cmake --install build-release` is the whole deployment: binary, config, docs, the
-# dashboard, the systemd unit, host preparation, and a restart. Run ctest first, and stop if it
-# fails.
+# Two layouts (LUGH_INSTALL_LAYOUT). local: `sudo cmake --install build-release` is the whole
+# deployment of a node built in place: binary, config, docs, the dashboard, the systemd unit, host
+# preparation and a restart; run ctest first, and stop if it fails. debian: the files alone, at
+# the package's paths, for debian/rules; the package's scripts make the user and set what may
+# read what, and the service is installed disabled.
 #
-# Absolute destinations are deliberate: the unit belongs in /etc and the config in
-# /usr/local/etc whatever CMAKE_INSTALL_PREFIX says, so this is not a relocatable package.
-#
-# Turn LUGH_INSTALL_SYSTEM off to install the files without touching systemd or the host.
-
-option(LUGH_INSTALL_SYSTEM "Install the systemd unit and prepare the host" ON)
-
-set(LUGH_CONFDIR  "/usr/local/etc/lugh")
-set(LUGH_SHAREDIR "/usr/local/share/lugh")
-set(LUGH_UNITDIR  "/etc/systemd/system")
+# The config and the unit go where the layout says whatever CMAKE_INSTALL_PREFIX is, so neither
+# layout is a relocatable package.
 
 install(TARGETS lugh-node RUNTIME DESTINATION bin)
 
 install(FILES config/config.yaml DESTINATION "${LUGH_CONFDIR}")
-install(DIRECTORY docs/ DESTINATION "${LUGH_SHAREDIR}/docs")
+install(DIRECTORY docs/ DESTINATION "${LUGH_DOCDIR}")
+
+# The unit, its paths the layout's.
+configure_file(deploy/lugh.service.in "${PROJECT_BINARY_DIR}/lugh.service" @ONLY)
 
 # The dashboard (P7), built first with `npm ci && npm run build` in dashboard/. Vite fingerprints
 # its assets, so the installed copy is removed before the new one goes in; root's, read-only to
-# the service. Turn LUGH_INSTALL_DASHBOARD off to install without one (and without
-# --static-directory in the unit).
+# the service. Turn LUGH_INSTALL_DASHBOARD off to install without one.
 option(LUGH_INSTALL_DASHBOARD "Install the dashboard's build" ON)
 set(LUGH_DASHBOARD_BUILD "${CMAKE_CURRENT_SOURCE_DIR}/dashboard/build/client")
 if (LUGH_INSTALL_DASHBOARD)
@@ -263,8 +312,17 @@ if (LUGH_INSTALL_DASHBOARD)
             FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 endif()
 
+install(FILES man/lugh-node.8 DESTINATION share/man/man8)
+
+if (LUGH_INSTALL_LAYOUT STREQUAL "debian")
+    install(FILES "${PROJECT_BINARY_DIR}/lugh.service" DESTINATION "${LUGH_UNITDIR}")
+    return()
+endif()
+
+option(LUGH_INSTALL_SYSTEM "Install the systemd unit and prepare the host" ON)
+
 if (LUGH_INSTALL_SYSTEM)
-    install(FILES deploy/lugh.service DESTINATION "${LUGH_UNITDIR}")
+    install(FILES "${PROJECT_BINARY_DIR}/lugh.service" DESTINATION "${LUGH_UNITDIR}")
 
     install(CODE "
         if (NOT \"\$ENV{LUGH_SKIP_SYSTEM}\")

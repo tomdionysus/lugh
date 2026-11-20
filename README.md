@@ -1,5 +1,6 @@
 # Lugh - The Directory
 
+[![Release](https://img.shields.io/github/v/tag/tomdionysus/lugh?sort=semver&label=release)](https://github.com/tomdionysus/lugh/tags)
 [![CI](https://github.com/tomdionysus/lugh/actions/workflows/ci.yml/badge.svg)](https://github.com/tomdionysus/lugh/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/tomdionysus/lugh/graph/badge.svg)](https://codecov.io/gh/tomdionysus/lugh)
 [![CodeQL](https://github.com/tomdionysus/lugh/actions/workflows/codeql.yml/badge.svg)](https://github.com/tomdionysus/lugh/actions/workflows/codeql.yml)
@@ -10,38 +11,7 @@ service that holds the identities of people and services, signs them in with two
 and tells every other system who someone is and what they may do: through OAuth 2 and
 OpenID Connect for applications, a management API and dashboard for administrators, LDAP
 for software that knows nothing else, and a C++ library that makes a project a relying
-party in a few lines. It is the top of a stack: it runs on Dannan, the network, and keeps
-everything it persists in Dagda, the store.
-
-## Why it exists
-
-Every system a person runs across their own machines ends up with the same unsolved
-problem: who is this, and are they allowed? Each one answers it alone. Macha (a media
-filesystem) has its own users and passwords; AthenaSIP (a SIP server) has realms and
-digests; T.O.M.S and blackraven-admin each keep a session store and a login page. None of
-them knows the others' users, a password changed in one is not changed in the rest, a
-second factor is wherever someone got round to it, and removing a person means visiting
-every system and hoping none was missed.
-
-Lugh answers the question once:
-
-- **One identity.** A person or a service is a principal, with a stable identifier that
-  never changes and is never reused, in groups that say what they belong to. Every system
-  keys its records on that identifier, not on a name or an address.
-- **One sign-in.** A password and a second factor, checked in one place, with lockout and
-  back-off that an attacker cannot turn into a denial of service. A browser signs in once
-  and every allowed application follows, each asking only for what it has not yet seen.
-- **One answer to "may they?"** Groups grant scopes; applications map groups to their own
-  roles; Lugh is the source of every principal's scope, installed into Dannan's own check
-  of who may write what.
-- **One record.** Every sign-in, token, change and key operation is in an audit log whose
-  entries chain by hash, so an edit or a deletion is detectable.
-- **Nothing static.** A cluster is born with one credential, root's password, shown once
-  and stored only as its hash. There is no bootstrap token, no key in a file, no setting
-  that opens anything.
-
-It is written for the Blackraven projects (T.O.M.S, blackraven-admin, Macha, AthenaSIP and
-those that follow), but nothing in it is specific to them.
+party in a few lines. Why it exists, and how it works: [docs/architecture.md](docs/architecture.md).
 
 ## What it does
 
@@ -77,167 +47,125 @@ those that follow), but nothing in it is specific to them.
 Everything in flight is TLS 1.3; there is no plaintext listener. Secrets live in locked
 memory and are wiped when freed; a secret passed to a log call does not compile.
 
-## The stack
+## Install
 
-Lugh is one of four projects written to one set of conventions, each its own library and
-repository, with no code duplicated between them: a piece needed by more than one lives in
-exactly one, and the others link it.
+Lugh is packaged for Debian 13 (trixie), arm64 and x86-64. Dannan's shared library, which it
+links, comes from the tomcully.com apt repository; Lugh's own package is built from a release tag
+([docs/packaging.md](docs/packaging.md)):
 
+```bash
+sudo curl -fsSLo /etc/apt/sources.list.d/tomcully.sources https://tomcully.com/apt/tomcully.sources
+sudo apt update
+git clone --branch 0.2.0 https://github.com/tomdionysus/lugh.git && cd lugh
+sudo apt build-dep ./ && tools/build-deb.sh
+sudo apt install ./build-deb/lugh_0.2.0_*.deb
 ```
-   Lugh            Lir             Macha, AthenaSIP, ...      hosted systems
-     |               |                  |
-   Dagda: the store  (domains, sealing, objects, heads, leases)
-     |
-   Dannan: the network  (reachability, routes, channels, membership,
-                         identity, placement, work classes, status)
-```
 
-- **[Dannan](../dannan)** is the network: it makes a set of nodes, on any mix of home and
-  rented machines and behind any NAT, behave as one network, and knows who the nodes are.
-  Lugh takes from it the node, membership, the transport, node identity and key custody,
-  the scope seam it fills, time, logging, secure memory, the signing and Argon2id
-  primitives, durable files and the test fixtures. Lugh is pinned to a Dannan release in
-  `CMakeLists.txt` and builds it into its own tree.
-- **[Dagda](../dagda)** is the store: domains and their keys, sealing at rest, immutable
-  objects, heads whose merge the owner supplies, leases and node-local spaces. Lugh's
-  state will live there in two domains, `lugh/scope` on every node and `lugh/secrets` on
-  Lugh's, under Lugh's own merge rules: a revocation is never undone by a merge, a
-  credential change keeps the newest and revokes the losers' sessions, and a single-use
-  grant is redeemed only where it was issued. Until Dagda carries Lugh's spaces, Lugh
-  keeps an interim sealed store and keyring, frozen.
-- **[Lir](../lir)** is the event system, a distributed multimaster MQTT broker on Dannan
-  and Dagda. It never links Lugh; its authentication is pluggable, and a Lugh plugin is
-  one option.
+The package installs `lugh-node`, the configuration in `/etc/lugh`, the dashboard and the
+systemd unit, and makes the `lugh` system user. The service is installed **disabled**: it needs
+a certificate and a keyring first.
 
-Hosted systems never address one another. They exchange frames through Dannan, share
-state through Dagda, and learn who someone is from Lugh.
+## Set up a node
 
-## How to use it
+1. **The certificate.** Put the node's TLS pair in `/etc/lugh/tls/` as `cert.pem` and `key.pem`,
+   readable by the `lugh` group. Lugh speaks TLS 1.3 only; there is no plaintext listener.
 
-### Build
+2. **The keyring and the master key.** Once per node, make the keyring and seal the master key
+   with `systemd-creds`, to the TPM where there is one. The key passes through the pipe and is
+   never on disk in clear:
 
-A C++20 compiler, CMake 3.23 or later, Boost 1.83 or newer (Asio, Beast and JSON), OpenSSL
-3, yaml-cpp and GoogleTest. Dannan is fetched from `../dannan` at the pinned release.
+   ```bash
+   sudo -u lugh lugh-node init --state-directory /var/lib/lugh \
+     | sudo systemd-creds encrypt --name=lugh-master-key - /etc/credstore.encrypted/lugh-master-key
+   ```
+
+   If the encrypt step fails, remove `/var/lib/lugh/keyring` and run it again: init never
+   replaces a keyring. On the first node this is the cluster's **genesis**: it also makes the
+   user `root`, in the group `administrators`, with a random password that it shows once and
+   keeps nowhere but as its hash.
+
+3. **Start it.**
+
+   ```bash
+   sudo systemctl enable --now lugh
+   curl -s https://<host>/health        # {"status":"ok"}
+   ```
+
+The unit runs as `lugh` on port 443 with `CAP_NET_BIND_SERVICE` and nothing else, writing only to
+`/var/lib/lugh`. `systemctl reload lugh` reads renewed certificate files again.
+
+## Use
+
+- **Sign in.** Browse to `https://<host>/`. Root's first sign-in goes from the genesis password
+  straight to enrolling a second factor (an authenticator app, or a passkey or security key);
+  after that root signs in as anyone does and makes every other administrator. Everyone else
+  enrols from a one-time link an administrator issues, so no administrator ever sees or sets a
+  password.
+- **The dashboard** at `https://<host>/` manages users, groups, policies, applications, keys and
+  the audit log, and everyone's own factors, sessions and app passwords. Administering needs a
+  passkey sign-in.
+- **The management API** is `/api/v1`, for a session or an OAuth access token with the right
+  scopes ([docs/api.md](docs/api.md)).
+- **Applications** sign people in with OAuth 2 and OpenID Connect: register each one in the
+  dashboard with its exact redirect URIs, the groups that may use it and the roles it maps them
+  to. Discovery is at `/.well-known/openid-configuration` once `oauth.issuer` is set
+  ([docs/oauth.md](docs/oauth.md)).
+- **LDAP** for mail servers, NAS boxes, VPNs and PAM: set `ldap.port` (LDAPS) or
+  `ldap.starttls_port`, and `ldap.base_dn` ([docs/ldap.md](docs/ldap.md)).
+- **A C++ relying party** links `lugh_client` to verify Lugh's tokens offline and run the flows
+  ([docs/client.md](docs/client.md)).
+
+## Configure
+
+`/etc/lugh/config.yaml`, then `secrets.yaml` beside it, then `LUGH_*` environment variables,
+then the command line, each overriding the one before; the unit sets the port and the installed
+paths. `lugh-node --help` lists every setting. Unknown keys are warned about and bad values
+refused, naming their source. The master key is in none of them: it is the systemd credential
+`lugh-master-key`, or a passphrase typed at start (`lugh-node init --passphrase`).
+
+## Build from source
+
+A C++20 compiler, CMake 3.24 or later, Boost 1.83 or newer, OpenSSL 3, yaml-cpp, GoogleTest
+and libldap (for the tests). Dannan, Dagda and Lir are fetched from sibling checkouts at their
+pinned releases (`CMakeLists.txt`):
 
 ```bash
 cmake --preset debug && cmake --build build -j8
+./build/lugh_tests
 ```
 
-Warnings are errors and hardening is on by default. `--preset asan` and `--preset tsan` are
-run at the end of every phase, not kept for releases, because Lugh holds every credential.
-`--preset fuzz` (a clang with libFuzzer) builds every object instrumented, with ASan and
-UBSan; its campaigns are run before a release.
-
-### Run
-
-Lugh needs a certificate before it will listen and a master key before it will serve:
+For a development node on port 8443 with a self-signed certificate for `localhost`:
 
 ```bash
-tools/lugh_dev_cert.sh
-tools/lugh_dev_init.sh
+tools/lugh_dev_cert.sh && tools/lugh_dev_init.sh
 CREDENTIALS_DIRECTORY=config/dev/credentials ./build/lugh-node --config config/config.yaml
 ```
 
-`lugh_dev_init.sh` runs `lugh-node init`, which makes the keyring in `config/dev/state`,
-writes the master key where systemd would hand it over, and shows the root password once.
-To type a passphrase at each start instead, run
-`./build/lugh-node init --config config/config.yaml --passphrase` and leave
-`CREDENTIALS_DIRECTORY` unset.
+The dashboard is in `dashboard/` (`npm ci && npm run build`). [CONTRIBUTING.md](CONTRIBUTING.md)
+has the conventions, the presets (`asan`, `tsan`, `fuzz`) and the tests.
 
-That listens on 8443 with a self-signed certificate for `localhost`. `GET /health` and
-`GET /ready` are open and say nothing but that the service is up:
+## The stack
 
-```bash
-curl -sk https://localhost:8443/health
-{"status":"ok"}
-```
+Lugh is one of a stack of projects written to one set of conventions, with no code duplicated
+between them:
 
-The management API is `/api/v1` ([docs/api.md](docs/api.md)); a caller is resolved from
-its session or OAuth token.
+- [Dannan](https://github.com/tomdionysus/dannan), the network layer, which Lugh links.
+- [Dagda](https://github.com/tomdionysus/dagda), the store, which Lugh's state moves onto next.
+- [Lir](https://github.com/tomdionysus/lir), the MQTT broker, whose topic scopes Lugh grants.
 
-### Make a project a relying party
-
-A C++ project adds Lugh as a subproject, links `lugh_client` and uses
-`lugh::client::RelyingParty` for the code flow, the callback, token verification and
-back-channel logout ([docs/client.md](docs/client.md)); an application is registered with
-Lugh by an administrator, with exact redirect URIs, the groups that may use it and the roles
-it maps them to. The design is in [docs/architecture.md](docs/architecture.md), "Single
-sign-on".
-
-### Test
-
-```bash
-./build/lugh_tests                           # the units, the IoC check, and the init,
-                                             # shutdown and API tests on the real binary
-ctest --test-dir build --output-on-failure   # the same, as the install's gate
-```
-
-Tests are GoogleTest only, in one binary. Time is injected and stepped, never slept.
-
-### Deploy
-
-Each node is its own single-node install until hosting on Dannan and Dagda makes them one
-cluster (P8). Get the tree onto the node, build there, `ctest`, put the certificate pair in
-`/usr/local/etc/lugh/tls/`, then `sudo cmake --install build-release`, which installs the
-binary, config and docs, runs `deploy/host-setup.sh`, and enables and restarts
-`lugh.service`. The unit runs as its own user, `lugh`, on 443 with `CAP_NET_BIND_SERVICE`
-and nothing else, writing only to `/var/lib/lugh`.
-
-On a new node, once, make the keyring and seal the master key with `systemd-creds`, to the
-TPM where there is one. The key passes through the pipe and is never on disk in clear:
-
-```bash
-sudo -u lugh /usr/local/bin/lugh-node init --config /usr/local/etc/lugh/config.yaml \
-    --state-directory /var/lib/lugh \
-  | sudo systemd-creds encrypt --name=lugh-master-key - /etc/credstore.encrypted/lugh-master-key
-sudo systemctl restart lugh
-```
-
-The unit loads it with `LoadCredentialEncrypted=`. If the encrypt step fails, remove
-`/var/lib/lugh/keyring` and run it again: init never replaces a keyring.
-
-`lugh-node init` on the first node is the cluster's **genesis**: it also makes the user
-`root`, in the group `administrators`, with a random password that it shows once and keeps
-nowhere but as its hash. Root's first sign-in goes from that password straight to enrolling
-a second factor; after that root signs in as anyone does, and makes every other
-administrator.
-
-### Configure
-
-`config/config.yaml`, then `secrets.yaml` beside it, then `LUGH_*` environment variables,
-then the command line, each overriding the one before. `--help` lists them. Unknown keys
-are warned about and bad values refused, naming their source. The master key is in none of
-them: it is the systemd credential `lugh-master-key`, or a passphrase typed at start.
-
-## Repository layout
-
-```text
-lugh/<subsystem>/   the library: headers and sources side by side
-lugh/test/          GoogleTest, flat, one binary (lugh_tests); fixtures in lugh/test/fixtures/
-lugh/fuzz/          libFuzzer targets, one per parser of untrusted bytes
-tools/              lugh-node (the service), the development certificate and keyring
-config/             config.yaml, no secrets
-deploy/             the systemd unit and host setup
-docs/               how it works
-TODO/               now and next (ACTIVE.md), designs, and what shipped (COMPLETED.md)
-```
-
-Design: [docs/architecture.md](docs/architecture.md). Conventions, shared with the stack:
-[CONTRIBUTING.md](CONTRIBUTING.md). What was taken from the earlier projects:
-[docs/provenance.md](docs/provenance.md). What each project of the stack owns:
-`../dagda/TODO/2026-11-03-stack.md`.
+Lugh signs people in for [Louhi](https://github.com/tomdionysus/louhi),
+[Mimir](https://github.com/tomdionysus/mimir), [Kvasir](https://github.com/tomdionysus/kvasir),
+[Macha](https://github.com/tomdionysus/macha) and
+[AthenaSIP](https://github.com/blackravenltd/athenasip). What each project owns:
+[Dagda's stack document](https://github.com/tomdionysus/dagda/blob/develop/TODO/2026-11-03-stack.md).
 
 ## Status
 
-Version 0.1.0 is tagged; `develop` is ahead of it. Built and tested: the directory,
-sign-in with the second factor and WebAuthn, the audit chain, the management API and the
-dashboard, genesis, OAuth 2 and OpenID Connect, writable LDAP, `lugh_client`, the listeners
-on Dannan's, the interim sealed store and keyring (Lugh is in Dannan's callback shape above
-the frozen store, links Dannan for every shared primitive, and has no copy of one), and
-hardening: fuzzing, the sandbox on real hosts, key rotation drills and a threat model
-([docs/threat-model.md](docs/threat-model.md)). Next: hosting on Dannan's `Context` and
-Dagda (P8), then the rollout to each project. Every phase ends green under ASan with UBSan
-and under TSan.
+Version 0.2.0. Built and tested: the directory, sign-in with a second factor and WebAuthn, the
+audit chain, the management API and the dashboard, genesis, OAuth 2 and OpenID Connect, writable
+LDAP, `lugh_client`, and hardening: fuzzing, the sandbox, key rotation drills and a threat model
+([docs/threat-model.md](docs/threat-model.md)). Each node is its own directory today; next, Lugh's
+state moves onto Dagda so a cluster's nodes share one directory.
 
 ## Contributing
 

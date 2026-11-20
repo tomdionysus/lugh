@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+# lugh postrm: remove keeps the configuration; purge deletes it, as Debian expects of a purge.
+# The keyring and the store in /var/lib/lugh, and the sealed master key, are kept even by a purge:
+# they are the directory itself, and a purge by mistake must not destroy it.
+
+set -e
+
+case "$1" in
+    purge)
+        rm -rf /etc/lugh
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

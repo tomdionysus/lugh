@@ -14,7 +14,8 @@ beside Dannan 0.9.2, and `ClusterRig` (`lugh/test/fixtures/cluster_rig.h`) runs 
 - P8.5 waits on Dagda's slice 2; P8.6 on the durable AcceptorStore and Dannan's register layer; P8.7 on D9.
 Meanwhile, not waiting (`lugh::client_topics` is done):
 `@lugh/admin-ui`, the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`).
-When Dannan 0.10.0 is tagged: Lugh's encodings, `Prefix`, `RecordingSink`, TOTP's SHA-1 and the callback vocabulary move onto
+When Dannan 0.10.0 is tagged (after Lugh 0.2.0, which stays on 0.9.2): pass LUGH_SANITIZE through as `DANNAN_SANITIZE`
+(address or thread, set before Dannan is fetched; Dannan's docs/building.md), beside Lugh's global flags; and Lugh's encodings, `Prefix`, `RecordingSink`, TOTP's SHA-1 and the callback vocabulary move onto
 it. What each dependant needs of Lugh, and what Lugh needs of Dannan and Dagda, is in `2026-11-20-dependants.md`.
 
 Until Dagda has a switch for its tools (agreed, in its next release), the node build compiles `dagda-migrate` and
