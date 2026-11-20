@@ -40,6 +40,7 @@ add_executable(lugh_tests
     client_oauth_test.cpp
     client_relying_party_test.cpp
     client_scopes_test.cpp
+    client_topics_test.cpp
     client_testing_test.cpp
     client_verifier_test.cpp
     cluster_rig_test.cpp
@@ -109,7 +110,7 @@ add_executable(lugh_tests
 )
 
 # Dagda's in-process cluster and neutral owner (P8): the rigs Lugh's components move onto.
-target_link_libraries(lugh_tests PRIVATE lugh dagda::test_fixtures GTest::gtest_main)
+target_link_libraries(lugh_tests PRIVATE lugh lugh::client_topics dagda::test_fixtures GTest::gtest_main)
 # A real LDAP client for the process tests: OpenLDAP's libldap, as SSSD, PAM and most LDAP software
 # use (the maintainer, 2026-11-20). Debian's libldap-dev.
 find_path(LUGH_LDAP_INCLUDE_DIR ldap.h REQUIRED)

@@ -66,6 +66,10 @@ set(LUGH_DANNAN_REF "0.9.2")
 # (the change notice) and Space::covers.
 set(LUGH_DAGDA_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dagda" CACHE PATH "Dagda's repository")
 set(LUGH_DAGDA_REF "0.3.2")
+# Lir's MQTT codec, the stack's one, for lugh::client_topics: only lir::mqtt is built
+# (LIR_BUILD_SERVER off). A commit of Lir's develop until Lir tags it: the rewritten codec.
+set(LUGH_LIR_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../lir" CACHE STRING "Lir's repository, a path or a URL")
+set(LUGH_LIR_REF "62b20045f6912e8c989011fc12a82f27821ab944")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -106,6 +110,13 @@ if (LUGH_BUILD_NODE AND NOT TARGET dagda::dagda)
     FetchContent_Declare(dagda GIT_REPOSITORY "${LUGH_DAGDA_REPOSITORY}" GIT_TAG "${LUGH_DAGDA_REF}")
     set(DAGDA_BUILD_TESTING OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(dagda)
+endif()
+# Lir fetched into Lugh, or Lugh fetched into Lir: either way one lir::mqtt.
+if (NOT TARGET lir::mqtt)
+    FetchContent_Declare(lir GIT_REPOSITORY "${LUGH_LIR_REPOSITORY}" GIT_TAG "${LUGH_LIR_REF}")
+    set(LIR_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+    set(LIR_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(lir)
 endif()
 
 # ---------------------------------------------------------------- hardening

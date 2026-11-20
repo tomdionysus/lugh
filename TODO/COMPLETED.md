@@ -2,6 +2,15 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-20: lugh::client_topics, the broker's checks on Lir's codec
+
+`may_publish` (a `pub` grant for a plain PUBLISH, a `retain` grant for a retained one) and `may_subscribe` (a `sub` grant
+covering the filter, or the filter inside `$share/<group>/`) over `TopicGrants`, in their own library,
+`lugh::client_topics`, so a relying party that is no broker links no MQTT. MQTT's topic rules are `lir::mqtt`'s (valid
+names and filters, matching, coverage with the '$' rule, shared filters), fetched from Lir's develop at 62b2004 with
+`LIR_BUILD_SERVER` off; CI checks Lir out beside Dannan and Dagda. Tests: 844, from 835 (nine new, from the grammar's
+meaning and MQTT 5.0 section 4.7). Debug, ASan and TSan on node-b, once each: green, no sanitizer report.
+
 ## 2026-11-20: LDAP tested with a real client
 
 The maintainer: "You will test with a real LDAP client." Beside Lugh's own small client, which can send what a real one never would,

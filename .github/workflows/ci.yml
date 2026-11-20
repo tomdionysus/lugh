@@ -5,8 +5,8 @@
 # Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 #
 # The build and lugh_tests on Debian 13, as the nodes have it: GCC on x86-64 and on arm64 (as a
-# build node builds it), and clang with its thread-safety analysis. Lugh fetches Dannan and Dagda from
-# sibling checkouts at their pinned tags, so each is checked out beside Lugh with its tags. The
+# build node builds it), and clang with its thread-safety analysis. Lugh fetches Dannan, Dagda and Lir
+# from sibling checkouts at their pins, so each is checked out beside Lugh with its tags. The
 # sanitizer runs and the fuzz campaigns stay on the cluster.
 name: CI
 
@@ -56,9 +56,15 @@ jobs:
           path: dagda
           fetch-depth: 0  # the pinned tag
 
+      - uses: actions/checkout@v4
+        with:
+          repository: tomdionysus/lir
+          path: lir
+          fetch-depth: 0  # the pinned commit
+
       - name: Trust the checkouts
         run: |
-          for repo in lugh dannan dagda; do git config --global --add safe.directory "$GITHUB_WORKSPACE/$repo"; done
+          for repo in lugh dannan dagda lir; do git config --global --add safe.directory "$GITHUB_WORKSPACE/$repo"; done
 
       - name: Build
         working-directory: lugh
@@ -102,9 +108,15 @@ jobs:
           path: dagda
           fetch-depth: 0
 
+      - uses: actions/checkout@v4
+        with:
+          repository: tomdionysus/lir
+          path: lir
+          fetch-depth: 0
+
       - name: Trust the checkouts
         run: |
-          for repo in lugh dannan dagda; do git config --global --add safe.directory "$GITHUB_WORKSPACE/$repo"; done
+          for repo in lugh dannan dagda lir; do git config --global --add safe.directory "$GITHUB_WORKSPACE/$repo"; done
 
       - name: Build
         working-directory: lugh

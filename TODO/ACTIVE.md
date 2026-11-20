@@ -12,7 +12,7 @@ beside Dannan 0.9.2, and `ClusterRig` (`lugh/test/fixtures/cluster_rig.h`) runs 
   Lugh writes no wiring of its own that they would replace. Dannan 0.10.0 is under way; its tag needs the maintainer's word.
 - P8.2 to P8.4 wait on Dagda's register map (D6, being built test-first), which replaces Lugh's own merge and codec.
 - P8.5 waits on Dagda's slice 2; P8.6 on the durable AcceptorStore and Dannan's register layer; P8.7 on D9.
-Meanwhile, not waiting: lugh_client's topic checks as `lugh::client_topics` on `lir::mqtt` (Lir's develop 62b2004); then
+Meanwhile, not waiting (`lugh::client_topics` is done):
 `@lugh/admin-ui`, the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`).
 When Dannan 0.10.0 is tagged: Lugh's encodings, `Prefix`, `RecordingSink`, TOTP's SHA-1 and the callback vocabulary move onto
 it. What each dependant needs of Lugh, and what Lugh needs of Dannan and Dagda, is in `2026-11-20-dependants.md`.
@@ -24,6 +24,19 @@ Lugh runs as a single-node test service on all four build nodes, each its own ge
 `/root/lugh-root-password` there. The service survived the cluster's wipe (2026-11-18; health 200 on all four, checked).
 
 Before Lugh's first release: the fuzz campaigns again, on the instrumented build (P12 plan, "Left for the first release").
+Its packaging follows the stack's deb convention (coordinator, 2026-11-20; read Dannan's and Dagda's `debian/` and
+`../manannan/docs/packaging.md` first). It uses debhelper (compat 13) from `debian/` driving CMake's install rules, with
+`dh_installsystemd` and `dh_installsysusers`, and `tools/build-deb.sh` (Dannan's is the reference layout), built natively on a claimed build node and in CI, lintian clean.
+Shared libraries are never bundled: it depends on `libdannan0.9` and `libdagda0.3.2` through `${shlibs:Depends}` (`-dev`
+ranges `>= x.y.z, << next minor~`), and on Lir's `liblir-mqtt0.1` (`liblir-dev` for building). The layout:
+- `/usr/bin/lugh-node`;
+- `/etc/lugh/config.yaml` as a conffile; the secrets in `/etc/lugh/secrets.yaml`, mode 0600, made by postinst and never shipped;
+- `/var/lib/lugh` for state;
+- `lugh.service` running as the `lugh` user, installed disabled and not started;
+- the dashboard at `/usr/share/lugh/dashboard`.
+
+The version comes from `git describe` and must match `project(VERSION)`; an untagged build is `<tree version>+git.g<hash>`, as Dannan's script makes it. A CI job with sanitizers or libFuzzer installs `libclang-rt-19-dev` explicitly, because trixie's clang leaves it out. Packages are `lugh`, plus `lugh-dev` for lugh_client's
+headers. The packaging is described in `docs/packaging.md`, while the README covers installation and use.
 
 **The stack's placement plan** (2026-11-20, the maintainer's audits: no duplicated functionality, no special node; agreed by every
 session through the coordinator, the coordinator, `../lir-develop-cluster/TODO/2026-11-20-cluster-stack-placement.md`,
