@@ -44,6 +44,9 @@ Each next item is its own step, because each changes behaviour or public API, in
 Not taken: `agree::MemoryStore` and the agreement teardown fixes, which are P8's (Lugh hosts no agreement yet); the ack
 levels, which Lugh does not name.
 
+**Dannan 0.10.1** (a patch, 0.10.0's ABI): repin with 0.4.0's gate. Its notes change nothing in Lugh now. The stop
+that waits for a scheduled step and `MemoryStore::each_held` matter from P8, when lugh-node is a Dannan node.
+
 **The stack's config names** (Dannan's `docs/config.md`). The layer order and the log keys already conform. Four flags
 and variables do not: each is to be made from its full dotted key.
 - `server.address`: `--address` and `LUGH_ADDRESS` become `--server-address` and `LUGH_SERVER_ADDRESS`.

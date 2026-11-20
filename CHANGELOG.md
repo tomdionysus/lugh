@@ -3,6 +3,12 @@
 What each release added, changed and fixed, and what a project of the stack can now take from Lugh in place of its own
 code. Newest first. The tags are on `main`.
 
+## Unreleased (0.4.0)
+
+Repin, with this release's gate: Dannan 0.10.0 to 0.10.1, a patch with 0.10.0's ABI. From its release notes nothing in
+Lugh changes: its fixes are to a node with a schedule, which Lugh does not run yet (P8), and to `tools/ci.sh
+install-debs`, which Lugh does not use, and `MemoryStore::each_held` is P8's to take.
+
 ## 0.3.0: onto Dannan 0.10.0 (2026-11-20)
 
 A release for source dependants, who fetch Lugh with FetchContent. Its Debian package is built and published once
