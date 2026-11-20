@@ -239,9 +239,10 @@ void failed(const RouteContext& context) {
 }
 
 void waiting(const RouteContext& context, const Step& step) {
-  context.response->set(http::field::retry_after, std::to_string(step.retry_after.count()));
+  const auto seconds = step.retry_after.count();
+  context.response->set(http::field::retry_after, std::to_string(seconds));
   answer_page(context, http::status::too_many_requests,
-              message("Too many tries", "Wait " + std::to_string(step.retry_after.count()) + " seconds, then try again."));
+              message("Too many tries", "Wait " + std::to_string(seconds) + (seconds == 1 ? " second" : " seconds") + ", then try again."));
 }
 
 // The user is signed in: a session, its cookie, and the sign-in in progress gone.

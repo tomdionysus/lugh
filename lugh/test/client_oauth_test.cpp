@@ -548,3 +548,61 @@ TEST_F(OAuthTest, ATokenIsRevoked) {
   https.forget_answers();
   EXPECT_EQ(wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); }).fault, lugh::Fault::failed);
 }
+
+// An issuer that does not publish an endpoint is not sent the request that needs it: the caller
+// is told at once, and nothing goes out.
+TEST_F(OAuthTest, AnEndpointTheIssuerDoesNotPublishIsNotCalled) {
+  auto published = discovery();
+  for (const auto* name : {"pushed_authorization_request_endpoint", "device_authorization_endpoint", "introspection_endpoint", "revocation_endpoint"})
+    published.erase(name);
+  published.erase("mtls_endpoint_aliases");
+  auto identity = public_client();
+  identity.method = ClientIdentity::Method::client_secret_basic;
+  identity.secret = std::make_shared<Secret>(lugh::byte_span("s1"));
+  OAuthClient oauth(std::get<Endpoints>(Endpoints::from_discovery(published, kIssuer)), identity, https, verifier, wall);
+  const Secret token(lugh::byte_span("t"));
+  EXPECT_EQ(
+      wait<AuthorizationRequest>([&](auto done) { oauth.pushed_authorization(kRedirect, {"openid"}, std::chrono::seconds(5), io.get_executor(), done); }).fault,
+      lugh::Fault::invalid);
+  EXPECT_EQ(wait<DeviceAuthorization>([&](auto done) { oauth.device_authorization({"openid"}, std::chrono::seconds(5), io.get_executor(), done); }).fault,
+            lugh::Fault::invalid);
+  EXPECT_EQ(wait<Introspection>([&](auto done) { oauth.introspect(token, std::chrono::seconds(5), io.get_executor(), done); }).fault, lugh::Fault::invalid);
+  EXPECT_EQ(wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); }).fault, lugh::Fault::invalid);
+  EXPECT_TRUE(https.sent().empty());
+}
+
+// RFC 8628 section 3.2: the device endpoint's error is the issuer's refusal, said as it said it.
+TEST_F(OAuthTest, TheDeviceEndpointsErrorIsARefusal) {
+  auto oauth = client(public_client());
+  https.answer(device_url(), 400, {{"error", "invalid_scope"}, {"error_description", "not for this client"}});
+  const auto refused = wait<DeviceAuthorization>([&](auto done) { oauth.device_authorization({"openid"}, std::chrono::seconds(5), io.get_executor(), done); });
+  EXPECT_EQ(refused.fault, lugh::Fault::refused);
+  EXPECT_EQ(refused.message, "invalid_scope: not for this client");
+}
+
+// An answer that is no OAuth error (a proxy's page, say) is a failure, not a refusal.
+TEST_F(OAuthTest, ARevocationAnsweredWithSomethingElseFailed) {
+  auto oauth = client(public_client());
+  HttpsResponse busy;
+  busy.status = 503;
+  busy.content_type = "text/html";
+  busy.body = "<p>busy</p>";
+  https.answer(std::string(kIssuer) + "/oauth2/revoke", busy);
+  const Secret token(lugh::byte_span("t"));
+  const auto failed = wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); });
+  EXPECT_EQ(failed.fault, lugh::Fault::failed);
+  EXPECT_EQ(failed.message, "the revocation endpoint answered 503");
+}
+
+// RFC 6749 section 3.3: the granted scope is a space-separated list, read word by word.
+TEST_F(OAuthTest, TheGrantedScopesAreReadWordByWord) {
+  auto identity = public_client();
+  identity.method = ClientIdentity::Method::client_secret_basic;
+  identity.secret = std::make_shared<Secret>(lugh::byte_span("s1"));
+  auto oauth = client(identity);
+  https.answer(token_url(), 200, {{"access_token", "at"}, {"token_type", "Bearer"}, {"expires_in", 300}, {"scope", "lir:sub:a openid  profile"}});
+  const auto got =
+      wait<TokenSet>([&](auto done) { oauth.client_credentials({"lir:sub:a", "openid", "profile"}, std::chrono::seconds(5), io.get_executor(), done); });
+  ASSERT_TRUE(got.ok()) << got.message;
+  EXPECT_EQ(got.value.scopes, (std::vector<std::string>{"lir:sub:a", "openid", "profile"}));
+}

@@ -52,3 +52,21 @@ TEST(GroupRoutes, Members) {
   EXPECT_EQ(rig.request(verb::delete_, member).status, 404u);
   EXPECT_EQ(rig.get("/api/v1/groups/nothing/members").status, 404u);
 }
+
+// GET /api/v1/groups lists every group; GET /api/v1/groups/{id} reads one, with its version as
+// the ETag.
+TEST(GroupRoutes, ListAndRead) {
+  ApiRig rig;
+  const auto staff = std::string(rig.post("/api/v1/groups", R"({"name":"staff","description":"Everyone"})").body.at("id").as_string());
+  rig.post("/api/v1/groups", R"({"name":"ops"})");
+  const auto all = rig.get("/api/v1/groups");
+  ASSERT_EQ(all.status, 200u);
+  EXPECT_EQ(all.body.at("groups").as_array().size(), 2u);
+
+  const auto one = rig.get("/api/v1/groups/" + staff);
+  ASSERT_EQ(one.status, 200u);
+  EXPECT_EQ(one.body.at("name"), "staff");
+  EXPECT_EQ(one.body.at("description"), "Everyone");
+  EXPECT_EQ(one.header(field::etag), "\"1\"");
+  EXPECT_EQ(rig.get("/api/v1/groups/nobody").status, 404u);
+}

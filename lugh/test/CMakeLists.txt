@@ -82,6 +82,7 @@ add_executable(lugh_tests
     node_config_test.cpp
     node_ioc_check_test.cpp
     node_process_api_test.cpp
+    node_process_cli_test.cpp
     node_process_client_test.cpp
     node_process_init_test.cpp
     node_process_ldap_test.cpp
@@ -100,6 +101,7 @@ add_executable(lugh_tests
     signin_webauthn_test.cpp
     store_async_test.cpp
     store_contract_test.cpp
+    store_faults_test.cpp
     store_log_format_test.cpp
     store_sealed_store_test.cpp
     system_files_test.cpp

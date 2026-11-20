@@ -171,3 +171,15 @@ TEST(TopicGrants, ASharedSubscriptionFilterIsNeverGranted) {
   EXPECT_TRUE(parsed.empty());
   EXPECT_EQ(parsed.refused().size(), 1U);
 }
+
+// The subject goes into every {sub} level, so a short scope can name a filter longer than MQTT
+// allows (65535 bytes); that scope grants nothing.
+TEST(TopicGrants, AFilterLongerThanMqttAllowsIsRefused) {
+  std::string scope = "lir:sub:{sub}";
+  for (int i = 0; i < 79; ++i) scope += "/{sub}";
+  ASSERT_LE(scope.size(), kMostScopeBytes);
+  const auto parsed = grants({scope}, std::string(1000, 'a'));
+  EXPECT_TRUE(parsed.empty());
+  ASSERT_EQ(parsed.refused().size(), 1u);
+  EXPECT_EQ(parsed.refused()[0].why, "the filter is longer than MQTT allows");
+}

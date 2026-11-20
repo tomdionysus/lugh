@@ -211,3 +211,100 @@ TEST(SigninWebAuthn, AWantedLevelRidesWithTheSignIn) {
   EXPECT_EQ(coded.status, 401u);
   EXPECT_FALSE(rig.jar.count("__Host-lugh_session"));
 }
+
+// A result for a step the visitor is not at, or for no step at all, gives its challenge back
+// and signs nobody in: a factor before any password, an enrolment without a link, a purpose
+// the pages never offer.
+TEST(SigninWebAuthn, AResultForAStepNotReachedGoesNowhere) {
+  SigninRig rig;
+  rig.enrolled("alice");
+  auto authenticator = for_lugh();
+  const auto form = rig.get("/signin");
+
+  const auto post_for = [&](const std::string& purpose) {
+    const auto issued = options(rig, form.csrf(), "passkey");
+    const auto proof = authenticator.get(raw(text(issued, "challenge")));
+    return rig.post("/signin/webauthn", {{"csrf", form.csrf()},
+                                         {"purpose", purpose},
+                                         {"challenge", text(issued, "challenge")},
+                                         {"id", b64(authenticator.credential_id())},
+                                         {"client_data", b64(proof.client_data_json)},
+                                         {"authenticator_data", b64(proof.authenticator_data)},
+                                         {"signature", b64(proof.signature)}});
+  };
+  for (const auto* purpose : {"factor", "enrol"}) {
+    const auto answer = post_for(purpose);
+    EXPECT_EQ(answer.status, 303u) << purpose;
+    EXPECT_EQ(answer.location(), "/signin") << purpose;
+  }
+  const auto unknown = post_for("anything");
+  EXPECT_EQ(unknown.status, 400u);
+  EXPECT_TRUE(unknown.says("That form could not be read"));
+  EXPECT_FALSE(rig.jar.count("__Host-lugh_session"));
+}
+
+// A second factor whose proof does not verify: the factor page again, saying so, and the
+// sign-in still waiting at its second factor.
+TEST(SigninWebAuthn, AFactorThatDoesNotVerifyAsksAgain) {
+  SigninRig rig;
+  const auto alice = rig.enrolled("alice");
+  auto authenticator = for_lugh();
+  authenticator.user_verified = false;
+  const auto created = authenticator.create("registration challenge, 32 bytes");
+  lugh::webauthn::Expected expected{SigninRig::kRpId, {SigninRig::kIssuer}, "registration challenge, 32 bytes", false};
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) {
+                rig.factors->webauthn_register(
+                    rig.admin, alice.id, "key", expected, lugh::Bytes(created.client_data_json.begin(), created.client_data_json.end()),
+                    lugh::Bytes(created.attestation_object.begin(), created.attestation_object.end()), kTestDeadline, executor, done);
+              }).ok());
+
+  ASSERT_EQ(rig.sign_in("alice", kPassword).location(), "/signin/factor");
+  const auto factor = rig.get("/signin/factor");
+  const auto issued = options(rig, factor.csrf(), "factor");
+  // Signed over another challenge than the one issued.
+  const auto proof = authenticator.get("a challenge Lugh never issued...");
+  const auto refused = rig.post("/signin/webauthn", {{"csrf", factor.csrf()},
+                                                     {"purpose", "factor"},
+                                                     {"challenge", text(issued, "challenge")},
+                                                     {"id", b64(authenticator.credential_id())},
+                                                     {"client_data", b64(proof.client_data_json)},
+                                                     {"authenticator_data", b64(proof.authenticator_data)},
+                                                     {"signature", b64(proof.signature)}});
+  EXPECT_EQ(refused.status, 401u);
+  EXPECT_TRUE(refused.says("That key did not sign you in."));
+  EXPECT_TRUE(refused.says("data-webauthn=\"factor\""));
+  EXPECT_FALSE(rig.jar.count("__Host-lugh_session"));
+  // Still at the second factor: a code finishes it.
+  const auto again = rig.get("/signin/factor");
+  ASSERT_EQ(again.status, 200u);
+  EXPECT_EQ(rig.post("/signin/factor", {{"csrf", again.csrf()}, {"code", rig.code_for(rig.secret)}}).location(), "/signin/done");
+}
+
+// An enrolment whose new credential does not verify: the enrolment page again, saying so.
+TEST(SigninWebAuthn, AnEnrolmentThatDoesNotVerifyAsksAgain) {
+  SigninRig rig;
+  const auto alice = rig.person("alice");
+  const auto link = wait_for<lugh::Outcome<lugh::Secret>>([&](lugh::Executor executor, auto done) {
+                      rig.links->issue(rig.admin, alice.id, kTestDeadline, executor, done);
+                    }).value;
+  const std::string token(lugh::secret_text(link));
+  const auto set = rig.get("/signin/enrol/" + token);
+  ASSERT_EQ(rig.post("/signin/enrol/" + token, {{"csrf", set.csrf()}, {"password", kPassword}, {"password_again", kPassword}}).location(),
+            "/signin/enrol/totp");
+  const auto enrol = rig.get("/signin/enrol/totp");
+  const auto issued = options(rig, enrol.csrf(), "enrol");
+
+  auto authenticator = for_lugh();
+  const auto created = authenticator.create("a challenge Lugh never issued...");
+  const auto refused = rig.post("/signin/webauthn", {{"csrf", enrol.csrf()},
+                                                     {"purpose", "enrol"},
+                                                     {"challenge", text(issued, "challenge")},
+                                                     {"id", b64(authenticator.credential_id())},
+                                                     {"client_data", b64(created.client_data_json)},
+                                                     {"attestation_object", b64(created.attestation_object)}});
+  EXPECT_EQ(refused.status, 401u);
+  EXPECT_TRUE(refused.says("That key could not be added."));
+  EXPECT_TRUE(refused.says("data-webauthn=\"enrol\""));
+  EXPECT_FALSE(rig.jar.count("__Host-lugh_session"));
+  EXPECT_EQ(rig.get("/signin/enrol/totp").status, 200u) << "still enrolling";
+}

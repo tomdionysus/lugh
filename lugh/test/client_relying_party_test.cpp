@@ -15,6 +15,7 @@
 #include <boost/asio/io_context.hpp>
 
 #include "dannan/test/fixtures/stepped_time.h"
+#include "lugh/client/jose.h"
 #include "lugh/client/relying_party.h"
 #include "lugh/client/testing.h"
 #include "lugh/core/secret.h"
@@ -227,4 +228,41 @@ TEST_F(RelyingPartyTest, ATokenSourceRefusesAnIdentityThatCannotSignIn) {
   settings.identity.method = ClientIdentity::Method::none;
   EXPECT_THROW(TokenSource::make(https, io.get_executor(), settings, time, wall), std::invalid_argument);
   EXPECT_THROW(TokenSource::make(https, io.get_executor(), credentials({}), time, wall), std::invalid_argument);
+}
+
+TEST_F(RelyingPartyTest, PrivateKeyJwtNeedsItsKeyAndKid) {
+  auto settings = credentials({kSiteA});
+  settings.identity.method = ClientIdentity::Method::private_key_jwt;
+  settings.identity.secret.reset();
+  EXPECT_THROW(TokenSource::make(https, io.get_executor(), settings, time, wall), std::invalid_argument);
+  settings.identity.key = std::make_shared<const lugh::client::SigningKey>(lugh::client::SigningKey::generate(lugh::client::SigningAlgorithm::es256));
+  EXPECT_THROW(TokenSource::make(https, io.get_executor(), settings, time, wall), std::invalid_argument) << "a key without its kid";
+}
+
+// Given an io_context rather than an Https, a relying party makes and owns its own client, and
+// fetches nothing until it is started.
+TEST_F(RelyingPartyTest, ARelyingPartyMayOwnItsHttpsClient) {
+  RelyingParty::Settings settings;
+  settings.issuers = {kSiteA};
+  settings.audience = "louhi";
+  RelyingParty party(io, settings, time, wall);
+  const auto status = party.status();
+  ASSERT_EQ(status.size(), 1u);
+  EXPECT_EQ(status[0].issuer, kSiteA);
+  settle();
+  EXPECT_TRUE(https.sent().empty());
+}
+
+// A held URL answers once it is let go: what is sent to it from then on is answered at once.
+TEST_F(RelyingPartyTest, AHeldUrlLetGoAnswersAgain) {
+  https.answer(std::string(kSiteA) + "/x", 200, {{"ok", true}});
+  https.hold(std::string(kSiteA) + "/x");
+  https.let_go(std::string(kSiteA) + "/x");
+  lugh::client::HttpsRequest request;
+  request.url = std::string(kSiteA) + "/x";
+  std::optional<lugh::Outcome<lugh::client::HttpsResponse>> got;
+  https.send(request, std::chrono::seconds(5), io.get_executor(), [&](lugh::Outcome<lugh::client::HttpsResponse> answer) { got = std::move(answer); });
+  settle();
+  ASSERT_TRUE(got);
+  EXPECT_TRUE(got->ok());
 }

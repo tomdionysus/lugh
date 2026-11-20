@@ -22,6 +22,9 @@ Until Dagda has a switch for its tools (agreed, in its next release), the node b
 
 Lugh runs as a single-node test service on all four build nodes, each its own genesis; root's password for each is in
 `/root/lugh-root-password` there. The service survived the cluster's wipe (2026-11-18; health 200 on all four, checked).
+It also rode through node-a's and node-d's unclean power loss (2026-11-20, about 10:20Z): after the restart the service was
+active with health 200 on both, its sealed store opened with all its records (1 user, 1 group, 9 audit entries), and the
+binary and the dashboard's 32 files checksummed the same as node-b's.
 
 Before Lugh's first release: the fuzz campaigns again, on the instrumented build (P12 plan, "Left for the first release").
 Its packaging follows the stack's deb convention (coordinator, 2026-11-20; read Dannan's and Dagda's `debian/` and
