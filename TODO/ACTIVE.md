@@ -86,36 +86,15 @@ the readers of `lugh/secrets` from Dagda's catalogue (slice 5). For the maintain
   `Space::covers`. The build nodes need `../dagda/.git/` at `/srv/build/lugh/dagda` beside Dannan's.
 - Lir's Lugh plugin pins a `develop` commit of Lugh, and repins at Lugh's first release.
 
-## The build node cluster
+## Builds and tests
 
-**No builds or tests on the Mac**, only on the build nodes (the maintainer, 2026-11-14), and no clangd indexer either (kill this session's after a C++
-edit). The four (Debian 13 arm64, kernel 6.18.62-v8-va48+, 4K pages, 48-bit VA) are shared by every session:
-
-| Machine | Memory | Note |
-|---|---|---|
-| node-a `.11` | 16 GB | |
-| node-b `.12` | 16 GB | |
-| node-c `.13` | 16 GB | |
-| node-d `.14` | 4 GB | no sanitizer builds (out of memory), `-j2` |
-
-**Wiped to bare OS on 2026-11-18**: Lugh has nothing on them but the installed service. `/srv/build/lugh` (the source, Dannan's
-history, every build tree), Node and Playwright are gone. The toolchain is back on all four: GCC 14, clang 19, CMake 3.31, Ninja,
-Boost 1.83, OpenSSL 3.5, yaml-cpp 0.8, GoogleTest 1.16. To build again: rsync the source to `/srv/build/lugh/lugh` and
-`../dannan/.git/` to `/srv/build/lugh/dannan` and `../dagda/.git/` to `/srv/build/lugh/dagda` (each must carry its pinned tag),
-configure, build. node-a has all three again (2026-11-20). The dashboard's tests need Node 20 and
-Playwright's Chromium installed again.
-
-The claim board:
-- `claims_list`, then `claim_take` (its own tool call) with only the cores the job needs, and `-j` no more than those, `nice -n 19`.
-  `until` is honest.
-- When nothing is free, one background `claim-board wait <hosts> --cores N --job "..." --for 90m`. One wait per session.
-- Release the claim when the job ends or fails.
-- Sync with `rsync -rlpgoD --delete --exclude '/build*/' --exclude /.git/ --exclude /.cache/`, never `-a` (mtimes fool make).
-- `chown -R builder:builder`, then run as the build user.
-- Run the tests only if the build succeeded, or a failed build reports the old binary's results.
+No builds or tests on the development workstation, only on the shared arm64 build nodes (the maintainer, 2026-11-14), and no clangd
+indexer either (kill this session's after a C++ edit). How to reach the nodes and their claim board is in the gitignored
+`CLAUDE.local.md`; real host names and addresses never go in the repository. A job claims only the cores it uses, runs at
+`nice -n 19`, and releases its claim when it ends or fails; the tests run only if the build succeeded.
 
 Sanitizers only at a phase's end, for a release, or to hunt a named bug; never for a pin move or another step's gate (the maintainer's rule,
-restated by the cluster 2026-11-17; Lugh's phase-end exception is `CLAUDE.md`'s).
+restated 2026-11-17; Lugh's phase-end exception is `CLAUDE.md`'s).
 
 ## Documents
 
