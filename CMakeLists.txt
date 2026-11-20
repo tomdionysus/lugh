@@ -69,7 +69,7 @@ set(LUGH_DAGDA_REF "0.3.2")
 # Lir's MQTT codec, the stack's one, for lugh::client_topics: only lir::mqtt is built
 # (LIR_BUILD_SERVER off). A commit of Lir's develop until Lir tags it: the rewritten codec.
 set(LUGH_LIR_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../lir" CACHE STRING "Lir's repository, a path or a URL")
-set(LUGH_LIR_REF "62b20045f6912e8c989011fc12a82f27821ab944")
+set(LUGH_LIR_REF "d36356dd9ab19b2d15097147a55f3082182a8543")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
