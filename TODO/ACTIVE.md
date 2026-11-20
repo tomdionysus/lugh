@@ -34,6 +34,15 @@ Before Lugh's first release: the fuzz campaigns again, on the instrumented build
   checked: how a 256 KiB value affects a tree node's size and splitting, a test at P8.0. P8.5 also waits on the follower-lag fix
   (slice 2): a disable seen on another build node within about a second (the maintainer, 2026-11-14). Dagda will tell Lugh when `Space::covers()` is
   the way to compare a view with what Lugh wrote (its Next 3).
+- **Dagda's caught-up signal** (asked by Dagda 2026-11-20 for Louhi; design `../dagda/TODO/2026-11-20-louhi-reads.md`, section 2).
+  Lugh answered that it needs it for `lugh/scope`, `lugh/secrets` and the back-off space, per space, as a query and a notice:
+  - The notice drives `/ready`.
+  - The query goes before genesis and before POSIX number allocation or a unique-name write, which are refused until caught up.
+  - Sign-in, token and bind decisions answer 503 rather than read a lagging view.
+  - Asked of Dagda: compare only with peers that open the space (a Macha-only node never holds back `lugh/secrets`), keep "no
+    active peers" distinct from caught up, and recompute it when the active set changes.
+  - The 40-byte head-identity advert serves Lugh.
+  Belongs to P8.1 and P8.3.
 - **The maintainer, at P13**: `docs/architecture.md` question 10 (TLS for T.O.M.S sites, or sign-in only at the hub).
 - **Not merged, by the maintainer's choice**: GitHub's `main` carries aaac977 (Alpine and OpenRC for Raven). Raven is dropped for now (the maintainer,
   2026-11-13); when it returns, merge `origin/main` into `develop` (about ten conflicts), test, fast-forward `main`, push.
