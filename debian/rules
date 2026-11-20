@@ -1,0 +1,56 @@
+#!/usr/bin/make -f
+#
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+# The CMake install rules say where everything goes (the debian layout); this builds the
+# dashboard first, builds against the installed Dannan rather than a copy of it, and installs
+# the service disabled.
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+ifneq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+TESTS = OFF
+else
+TESTS = ON
+endif
+
+%:
+	dh $@ --buildsystem=cmake --builddirectory=debian/build
+
+# The dashboard's build, which the install takes from dashboard/build/client.
+override_dh_auto_build:
+	cd dashboard && npm ci --no-audit --no-fund && npm run build
+	dh_auto_build
+
+# Warnings are not errors here: dpkg's flags (-O2 with its hardening) are not the ones the code is
+# checked with, and GCC 14 at -O2 misreads libstdc++'s string copies and Boost.Asio's coroutine
+# frames. CI, the presets and the sanitizer builds keep -Werror.
+# FETCHCONTENT_FULLY_DISCONNECTED off: the tests' Lir, when liblir-dev is not installed, is cloned
+# from the sibling checkout at its pin, a local clone with no network.
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DLUGH_INSTALL_LAYOUT=debian \
+		-DLUGH_SYSTEM_DEPENDENCIES=ON \
+		-DLUGH_WARNINGS_AS_ERRORS=OFF \
+		-DFETCHCONTENT_FULLY_DISCONNECTED=OFF \
+		-DLUGH_BUILD_TESTING=$(TESTS)
+
+# The test binary rather than ctest. Every connection the tests make is on the loopback
+# interface, and every file they write is under the build tree.
+override_dh_auto_test:
+ifeq ($(TESTS),ON)
+	debian/build/lugh_tests --gtest_brief=1
+endif
+
+# The packaged configuration is an example and the service needs its keyring made first, so it
+# is installed disabled and not started. An upgrade restarts it if it is enabled or running.
+override_dh_installsystemd:
+	dh_installsystemd --no-enable
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf dashboard/build dashboard/node_modules dashboard/.react-router

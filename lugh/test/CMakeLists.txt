@@ -38,6 +38,9 @@ add_executable(lugh_tests
     client_jose_test.cpp
     client_key_source_test.cpp
     client_oauth_test.cpp
+    client_relying_party_test.cpp
+    client_scopes_test.cpp
+    client_topics_test.cpp
     client_testing_test.cpp
     client_verifier_test.cpp
     cluster_rig_test.cpp
@@ -75,11 +78,11 @@ add_executable(lugh_tests
     oauth_request_test.cpp
     scopes_grants_test.cpp
     scopes_scope_test.cpp
-    scopes_topic_scope_test.cpp
     node_cli_test.cpp
     node_config_test.cpp
     node_ioc_check_test.cpp
     node_process_api_test.cpp
+    node_process_cli_test.cpp
     node_process_client_test.cpp
     node_process_init_test.cpp
     node_process_ldap_test.cpp
@@ -98,6 +101,7 @@ add_executable(lugh_tests
     signin_webauthn_test.cpp
     store_async_test.cpp
     store_contract_test.cpp
+    store_faults_test.cpp
     store_log_format_test.cpp
     store_sealed_store_test.cpp
     system_files_test.cpp
@@ -108,7 +112,14 @@ add_executable(lugh_tests
 )
 
 # Dagda's in-process cluster and neutral owner (P8): the rigs Lugh's components move onto.
-target_link_libraries(lugh_tests PRIVATE lugh dagda::test_fixtures GTest::gtest_main)
+target_link_libraries(lugh_tests PRIVATE lugh lugh::client_topics dagda::test_fixtures GTest::gtest_main)
+# A real LDAP client for the process tests: OpenLDAP's libldap, as SSSD, PAM and most LDAP software
+# use (the maintainer, 2026-11-20). Debian's libldap-dev.
+find_path(LUGH_LDAP_INCLUDE_DIR ldap.h REQUIRED)
+find_library(LUGH_LDAP_LIBRARY ldap REQUIRED)
+find_library(LUGH_LBER_LIBRARY lber REQUIRED)
+target_include_directories(lugh_tests SYSTEM PRIVATE ${LUGH_LDAP_INCLUDE_DIR})
+target_link_libraries(lugh_tests PRIVATE ${LUGH_LDAP_LIBRARY} ${LUGH_LBER_LIBRARY})
 if (LUGH_SANITIZE STREQUAL "address")
     target_sources(lugh_tests PRIVATE sanitizer_options.cpp)
 elseif (LUGH_SANITIZE STREQUAL "thread")

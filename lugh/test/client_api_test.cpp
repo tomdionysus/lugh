@@ -68,10 +68,10 @@ TEST_F(ApiTest, ACallCarriesTheTokenAndReadsTheAnswer) {
   EXPECT_EQ(read.value.status, 200u);
   EXPECT_EQ(read.value.etag, "\"3\"");
   EXPECT_EQ(read.value.body.at("name").as_string(), "alice");
-  EXPECT_EQ(https.sent[0].method, "GET");
+  EXPECT_EQ(https.sent()[0].method, "GET");
   EXPECT_EQ(https.header(0, "Authorization"), "Bearer at-1");
   EXPECT_TRUE(https.header(0, "If-Match").empty());
-  EXPECT_TRUE(https.sent[0].body.empty());
+  EXPECT_TRUE(https.sent()[0].body.empty());
 
   // A refreshed token replaces the old.
   client.use_token(std::make_shared<Secret>(lugh::byte_span("at-2")));
@@ -85,10 +85,10 @@ TEST_F(ApiTest, AWriteCarriesItsBodyAndTheEtagItRead) {
   const auto written = call(client, {"PATCH", "/users/u1", boost::json::value{{"display_name", "Alice"}}, "\"3\""});
   ASSERT_TRUE(written.ok()) << written.message;
   EXPECT_EQ(written.value.etag, "\"4\"");
-  EXPECT_EQ(https.sent[0].method, "PATCH");
+  EXPECT_EQ(https.sent()[0].method, "PATCH");
   EXPECT_EQ(https.header(0, "If-Match"), "\"3\"");
-  EXPECT_EQ(https.sent[0].content_type, "application/json");
-  EXPECT_EQ(boost::json::parse(https.sent[0].body).at("display_name").as_string(), "Alice");
+  EXPECT_EQ(https.sent()[0].content_type, "application/json");
+  EXPECT_EQ(boost::json::parse(https.sent()[0].body).at("display_name").as_string(), "Alice");
 
   // A delete answers with no body.
   RecordingHttps::Response none;
@@ -119,7 +119,7 @@ TEST_F(ApiTest, TheApisErrorsAreLughsFaults) {
   const auto bare = fault_for(403, boost::json::value());
   EXPECT_EQ(bare.fault, lugh::Fault::refused);
   EXPECT_EQ(bare.message.rfind("status 403", 0), 0u);
-  https.answers.clear();
+  https.forget_answers();
   EXPECT_EQ(call(client, {"GET", "/users/u1", std::nullopt, ""}).fault, lugh::Fault::failed);
 }
 

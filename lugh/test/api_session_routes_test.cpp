@@ -152,3 +152,24 @@ TEST_F(SessionRoutesTest, DisablingEndsSessionsAtOnce) {
   EXPECT_TRUE(rig.sessions->of_user(alice.id).empty());
   EXPECT_FALSE(rig.sessions->find(other.at("__Host-lugh_session")));
 }
+
+// A password is changed by its owner through their own session, never by an application with a
+// token; and the request names both the current password and the new one.
+TEST_F(SessionRoutesTest, APasswordChangeIsTheOwnersAndComplete) {
+  EXPECT_EQ(rig.json(verb::post, "/api/v1/me/password", R"({"new":"a much better passphrase"})").status, 400u);
+  EXPECT_EQ(rig.json(verb::post, "/api/v1/me/password", R"({"current":"correct horse battery"})").status, 400u);
+
+  const auto issued = rig.issuer->for_client(
+      [&] {
+        lugh::apps::App app;
+        app.client_id = "app_hub";
+        app.client_scopes = {"lugh:directory.read"};
+        app.audiences = {"lugh"};
+        return app;
+      }(),
+      {"lugh:directory.read"}, std::nullopt);
+  ASSERT_TRUE(issued.ok()) << issued.message;
+  const auto by_token = rig.send(verb::post, "/api/v1/me/password", R"({"current":"correct horse battery","new":"a much better passphrase"})",
+                                 {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + issued.value.access_token}});
+  EXPECT_EQ(by_token.status, 403u) << by_token.body;
+}

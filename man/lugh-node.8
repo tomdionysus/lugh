@@ -1,0 +1,101 @@
+.\"
+.\" Lugh - The Directory
+.\"
+.\" Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+.\" Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+.\"
+.TH LUGH-NODE 8 "2026-11-20" "Lugh 0.2.0" "System Administration"
+.SH NAME
+lugh-node \- the directory and single sign-on service
+.SH SYNOPSIS
+.B lugh-node
+[\fIoptions\fR]
+.br
+.B lugh-node init
+[\fIoptions\fR] [\fB\-\-passphrase\fR]
+.SH DESCRIPTION
+.B lugh-node
+holds the identities of people and services, signs them in with a password and a second
+factor, and answers who someone is and what they may do: OAuth 2 and OpenID Connect for
+applications, a management API and dashboard for administrators, and LDAP. It listens with
+TLS 1.3 only.
+.PP
+With no command it serves. It is normally run by
+.BR systemd (1)
+as
+.BR lugh.service ,
+installed disabled.
+.PP
+.B lugh-node init
+makes this node's keyring in the state directory and writes a new master key, 32 raw bytes,
+to standard output, which must not be a terminal. Pipe it to
+.B systemd-creds encrypt \-\-name=lugh-master-key \- /etc/credstore.encrypted/lugh-master-key
+and the unit loads it as the credential lugh-master-key. On the first node, init is the
+genesis: it also makes the user root, in the group administrators, and shows root's password
+once. Init never replaces a keyring.
+.SH OPTIONS
+.TP
+.BR \-c ", " \-\-config " \fIpath\fR"
+The configuration to read.
+.TP
+.B \-\-passphrase
+With init: derive the master key from a typed passphrase, for a host without systemd
+credentials; every start then asks for it.
+.TP
+.BR \-v ", " \-\-version
+Print the version and exit.
+.TP
+.BR \-h ", " \-\-help
+Print the options and every setting, and exit.
+.SH SETTINGS
+Each setting comes from the configuration file, its environment variable or its flag; each
+overrides the one before, after the defaults and
+.I secrets.yaml
+beside the configuration.
+.TP
+.BR \-\-log\-level " \fIlevel\fR"
+log.level: all, debug, info, warn or error (LUGH_LOG_LEVEL).
+.TP
+.BR \-\-log\-format " \fIformat\fR"
+log.format: text or json (LUGH_LOG_FORMAT).
+.TP
+.BR \-\-address " \fIaddress\fR"
+server.address: the IP address to listen on (LUGH_ADDRESS).
+.TP
+.BR \-\-port " \fIport\fR"
+server.port (LUGH_PORT).
+.TP
+.BR \-\-tls\-certificate " \fIpath\fR", " \-\-tls\-key " \fIpath\fR"
+tls.certificate and tls.key (LUGH_TLS_CERTIFICATE, LUGH_TLS_KEY).
+.TP
+.BR \-\-state\-directory " \fIpath\fR"
+state.directory: the keyring and the store (LUGH_STATE_DIRECTORY).
+.TP
+.BR \-\-static\-directory " \fIpath\fR"
+static.directory: the dashboard's files (LUGH_STATIC_DIRECTORY).
+.TP
+.BR \-\-issuer " \fIurl\fR"
+oauth.issuer: the https URL clients reach Lugh at (LUGH_ISSUER).
+.TP
+.BR \-\-mtls\-port " \fIport\fR"
+oauth.mtls_port: a listener that asks for client certificates, or 0 for none
+(LUGH_MTLS_PORT).
+.SH FILES
+.TP
+.I /etc/lugh/config.yaml
+The configuration, read when neither \-\-config nor LUGH_CONFIG names one.
+.TP
+.I /etc/lugh/secrets.yaml
+Secrets, in the configuration's shape.
+.TP
+.I /etc/lugh/tls/cert.pem\fR, \fI/etc/lugh/tls/key.pem
+The node's certificate pair.
+.TP
+.I /var/lib/lugh
+The keyring and the store.
+.TP
+.I /etc/credstore.encrypted/lugh-master-key
+The sealed master key.
+.SH SEE ALSO
+.BR systemd-creds (1),
+.I /usr/share/doc/lugh/architecture.md.gz

@@ -661,7 +661,9 @@ void Directory::_put_user(audit::Actor actor, User user, std::uint64_t expected,
                           Done<Outcome<User>> done) {
   using Answer = Outcome<User>;
   const auto id = user.id;
-  _calls.put_settled(kUsers, id, encode(user), expected, executor,
+  // Encoded before the call: its arguments are evaluated in no set order, and one moves `user`.
+  auto value = encode(user);
+  _calls.put_settled(kUsers, id, std::move(value), expected, executor,
                      [self = shared_from_this(), actor, user = std::move(user), action = std::move(action), detail = std::move(detail), executor,
                       done = std::move(done)](store::Write written) mutable {
                        if (!written.ok()) return done(Answer::failure(fault_of(written.error), written.message));
@@ -675,8 +677,9 @@ void Directory::_put_user(audit::Actor actor, User user, std::uint64_t expected,
 void Directory::_put_group(audit::Actor actor, Group group, std::uint64_t expected, std::string action, Executor executor, Done<Outcome<Group>> done) {
   using Answer = Outcome<Group>;
   const auto id = group.id;
+  auto value = encode(group);
   _calls.put_settled(
-      kGroups, id, encode(group), expected, executor,
+      kGroups, id, std::move(value), expected, executor,
       [self = shared_from_this(), actor, group = std::move(group), action = std::move(action), executor, done = std::move(done)](store::Write written) mutable {
         if (!written.ok()) return done(Answer::failure(fault_of(written.error), written.message));
         group.version = written.version;

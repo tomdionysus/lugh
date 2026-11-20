@@ -4,6 +4,10 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here (2026-11-20)
 
+**0.2.0 is released** (tag on `main`; `COMPLETED.md`), against Dannan 0.9.2, Dagda 0.3.2 and lir::mqtt d36356d (Lir's 0.1.0
+was not yet on GitHub). Its .deb is built and tested but not in the apt repository: the maintainer said not yet. Next release:
+repin lir::mqtt to Lir's tag, then Dannan 0.10.0 and Dagda's next.
+
 **P8.0 is done and merged into `develop`** (2026-11-20, the maintainer's word "Start P8.0 now"; `COMPLETED.md`). Dagda 0.3.2 is fetched
 beside Dannan 0.9.2, and `ClusterRig` (`lugh/test/fixtures/cluster_rig.h`) runs Lugh's spaces on Dagda's in-process cluster.
 
@@ -12,10 +16,10 @@ beside Dannan 0.9.2, and `ClusterRig` (`lugh/test/fixtures/cluster_rig.h`) runs 
   Lugh writes no wiring of its own that they would replace. Dannan 0.10.0 is under way; its tag needs the maintainer's word.
 - P8.2 to P8.4 wait on Dagda's register map (D6, being built test-first), which replaces Lugh's own merge and codec.
 - P8.5 waits on Dagda's slice 2; P8.6 on the durable AcceptorStore and Dannan's register layer; P8.7 on D9.
-Meanwhile, not waiting: `feature/client-relying-party` (lugh_client's topic-scope parse, RelyingParty, bearer_token,
-discover, TokenSource, a thread-safe FakeHttps; `2026-11-20-client-relying-party.md`), in its cluster run; then
+Meanwhile, not waiting (`lugh::client_topics` is done):
 `@lugh/admin-ui`, the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`).
-When Dannan 0.10.0 is tagged: Lugh's encodings, `Prefix`, `RecordingSink`, TOTP's SHA-1 and the callback vocabulary move onto
+When Dannan 0.10.0 is tagged (after Lugh 0.2.0, which stays on 0.9.2): pass LUGH_SANITIZE through as `DANNAN_SANITIZE`
+(address or thread, set before Dannan is fetched; Dannan's docs/building.md), beside Lugh's global flags; and Lugh's encodings, `Prefix`, `RecordingSink`, TOTP's SHA-1 and the callback vocabulary move onto
 it. What each dependant needs of Lugh, and what Lugh needs of Dannan and Dagda, is in `2026-11-20-dependants.md`.
 
 Until Dagda has a switch for its tools (agreed, in its next release), the node build compiles `dagda-migrate` and
@@ -23,8 +27,24 @@ Until Dagda has a switch for its tools (agreed, in its next release), the node b
 
 Lugh runs as a single-node test service on all four build nodes, each its own genesis; root's password for each is in
 `/root/lugh-root-password` there. The service survived the cluster's wipe (2026-11-18; health 200 on all four, checked).
+It also rode through node-a's and node-d's unclean power loss (2026-11-20, about 10:20Z): after the restart the service was
+active with health 200 on both, its sealed store opened with all its records (1 user, 1 group, 9 audit entries), and the
+binary and the dashboard's 32 files checksummed the same as node-b's.
 
 Before Lugh's first release: the fuzz campaigns again, on the instrumented build (P12 plan, "Left for the first release").
+Its packaging follows the stack's deb convention (coordinator, 2026-11-20; read Dannan's and Dagda's `debian/` and
+`../manannan/docs/packaging.md` first). It uses debhelper (compat 13) from `debian/` driving CMake's install rules, with
+`dh_installsystemd` and `dh_installsysusers`, and `tools/build-deb.sh` (Dannan's is the reference layout), built natively on a claimed build node and in CI, lintian clean.
+Shared libraries are never bundled: it depends on `libdannan0.9` and `libdagda0.3.2` through `${shlibs:Depends}` (`-dev`
+ranges `>= x.y.z, << next minor~`), and on Lir's `liblir-mqtt0.1` (`liblir-dev` for building). The layout:
+- `/usr/bin/lugh-node`;
+- `/etc/lugh/config.yaml` as a conffile; the secrets in `/etc/lugh/secrets.yaml`, mode 0600, made by postinst and never shipped;
+- `/var/lib/lugh` for state;
+- `lugh.service` running as the `lugh` user, installed disabled and not started;
+- the dashboard at `/usr/share/lugh/dashboard`.
+
+The version comes from `git describe` and must match `project(VERSION)`; an untagged build is `<tree version>+git.g<hash>`, as Dannan's script makes it. A CI job with sanitizers or libFuzzer installs `libclang-rt-19-dev` explicitly, because trixie's clang leaves it out. Packages are `lugh`, plus `lugh-dev` for lugh_client's
+headers. The packaging is described in `docs/packaging.md`, while the README covers installation and use.
 
 **The stack's placement plan** (2026-11-20, the maintainer's audits: no duplicated functionality, no special node; agreed by every
 session through the coordinator, the coordinator, `../lir-develop-cluster/TODO/2026-11-20-cluster-stack-placement.md`,
@@ -64,8 +84,6 @@ the readers of `lugh/secrets` from Dagda's catalogue (slice 5). For the maintain
   - The 40-byte head-identity advert serves Lugh.
   Belongs to P8.1 and P8.3.
 - **The maintainer, at P13**: `docs/architecture.md` question 10 (TLS for T.O.M.S sites, or sign-in only at the hub).
-- **Not merged, by the maintainer's choice**: GitHub's `main` carries aaac977 (Alpine and OpenRC for Raven). Raven is dropped for now (the maintainer,
-  2026-11-13); when it returns, merge `origin/main` into `develop` (about ten conflicts), test, fast-forward `main`, push.
 
 ## Dependencies pinned
 
@@ -76,36 +94,15 @@ the readers of `lugh/secrets` from Dagda's catalogue (slice 5). For the maintain
   `Space::covers`. The build nodes need `../dagda/.git/` at `/srv/build/lugh/dagda` beside Dannan's.
 - Lir's Lugh plugin pins a `develop` commit of Lugh, and repins at Lugh's first release.
 
-## The build node cluster
+## Builds and tests
 
-**No builds or tests on the Mac**, only on the build nodes (the maintainer, 2026-11-14), and no clangd indexer either (kill this session's after a C++
-edit). The four (Debian 13 arm64, kernel 6.18.62-v8-va48+, 4K pages, 48-bit VA) are shared by every session:
-
-| Machine | Memory | Note |
-|---|---|---|
-| node-a `.11` | 16 GB | |
-| node-b `.12` | 16 GB | |
-| node-c `.13` | 16 GB | |
-| node-d `.14` | 4 GB | no sanitizer builds (out of memory), `-j2` |
-
-**Wiped to bare OS on 2026-11-18**: Lugh has nothing on them but the installed service. `/srv/build/lugh` (the source, Dannan's
-history, every build tree), Node and Playwright are gone. The toolchain is back on all four: GCC 14, clang 19, CMake 3.31, Ninja,
-Boost 1.83, OpenSSL 3.5, yaml-cpp 0.8, GoogleTest 1.16. To build again: rsync the source to `/srv/build/lugh/lugh` and
-`../dannan/.git/` to `/srv/build/lugh/dannan` and `../dagda/.git/` to `/srv/build/lugh/dagda` (each must carry its pinned tag),
-configure, build. node-a has all three again (2026-11-20). The dashboard's tests need Node 20 and
-Playwright's Chromium installed again.
-
-The claim board:
-- `claims_list`, then `claim_take` (its own tool call) with only the cores the job needs, and `-j` no more than those, `nice -n 19`.
-  `until` is honest.
-- When nothing is free, one background `claim-board wait <hosts> --cores N --job "..." --for 90m`. One wait per session.
-- Release the claim when the job ends or fails.
-- Sync with `rsync -rlpgoD --delete --exclude '/build*/' --exclude /.git/ --exclude /.cache/`, never `-a` (mtimes fool make).
-- `chown -R builder:builder`, then run as the build user.
-- Run the tests only if the build succeeded, or a failed build reports the old binary's results.
+No builds or tests on the development workstation, only on the shared arm64 build nodes (the maintainer, 2026-11-14), and no clangd
+indexer either (kill this session's after a C++ edit). How to reach the nodes and their claim board is in the gitignored
+`CLAUDE.local.md`; real host names and addresses never go in the repository. A job claims only the cores it uses, runs at
+`nice -n 19`, and releases its claim when it ends or fails; the tests run only if the build succeeded.
 
 Sanitizers only at a phase's end, for a release, or to hunt a named bug; never for a pin move or another step's gate (the maintainer's rule,
-restated by the cluster 2026-11-17; Lugh's phase-end exception is `CLAUDE.md`'s).
+restated 2026-11-17; Lugh's phase-end exception is `CLAUDE.md`'s).
 
 ## Documents
 

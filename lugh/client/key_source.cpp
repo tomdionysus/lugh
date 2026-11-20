@@ -12,21 +12,9 @@
 #include <boost/json.hpp>
 #include <variant>
 
+#include "lugh/client/discovery.h"
+
 namespace lugh::client {
-
-namespace {
-
-// The body of a 200 answer as a JSON object, or why not.
-std::variant<boost::json::object, std::string> json_answer(const Outcome<HttpsResponse>& answered, const std::string& what) {
-  if (!answered.ok()) return what + ": " + answered.message;
-  if (answered.value.status != 200) return what + " answered " + std::to_string(answered.value.status);
-  boost::system::error_code ec;
-  auto parsed = boost::json::parse(answered.value.body, ec);
-  if (ec || !parsed.is_object()) return what + " is not a JSON object";
-  return std::move(parsed.as_object());
-}
-
-}  // namespace
 
 std::shared_ptr<HttpsKeySource> HttpsKeySource::make(Verifier& verifier, Https& https, Executor executor, const dannan::contract::TimeSource& time,
                                                      Settings settings) {
@@ -127,10 +115,7 @@ void HttpsKeySource::_fetch(std::size_t index) {
     dannan::contract::Lock lock(_mutex);
     issuer = _issuers[index].status.issuer;
   }
-  HttpsRequest discovery;
-  discovery.url = issuer + "/.well-known/openid-configuration";
-  discovery.headers = {{"Accept", "application/json"}};
-  _https.send(std::move(discovery), _settings.fetch_deadline, _strand, [self = shared_from_this(), index, issuer](Outcome<HttpsResponse> answered) {
+  _https.send(discovery_request(issuer), _settings.fetch_deadline, _strand, [self = shared_from_this(), index, issuer](Outcome<HttpsResponse> answered) {
     auto document = json_answer(answered, "the discovery document");
     if (const auto* why = std::get_if<std::string>(&document)) return self->_fetched(index, *why, 0);
     const auto& metadata = std::get<boost::json::object>(document);

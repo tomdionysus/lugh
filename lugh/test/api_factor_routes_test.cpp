@@ -285,3 +285,48 @@ TEST_F(FactorRoutesTest, AForeignKeyOrChallengeProvesNothing) {
                                                                                                 {"signature", b64(got.signature)}}}});
   EXPECT_EQ(call(verb::post, "/api/v1/me/reauthenticate", body).status, 403u);
 }
+
+// What is not a WebAuthn request is refused before any ceremony: a purpose there is none of, an
+// assertion missing a part, a registration missing a part, and a challenge never issued.
+TEST_F(FactorRoutesTest, WhatIsNotAWebAuthnRequestIsRefused) {
+  const auto unknown = call(verb::post, "/api/v1/me/webauthn/options", R"({"purpose":"anything"})");
+  EXPECT_EQ(unknown.status, 400u);
+  EXPECT_EQ(error_of(unknown), "invalid");
+
+  const auto partial = call(verb::post, "/api/v1/me/reauthenticate", R"({"webauthn":{"challenge":"AAAA","id":"AAAA"}})");
+  EXPECT_EQ(partial.status, 400u);
+  EXPECT_EQ(error_of(partial), "invalid");
+
+  ASSERT_EQ(reauthenticate_with_code(rig.code_for(rig.secret)).status, 200u);
+  const auto missing = call(verb::post, "/api/v1/me/factors/webauthn", R"({"name":"laptop","challenge":"AAAA","client_data":"AAAA"})");
+  EXPECT_EQ(missing.status, 400u);
+  EXPECT_EQ(error_of(missing), "invalid");
+
+  auto key = for_lugh();
+  const auto created = key.create("a challenge Lugh never issued...");
+  const auto forged = call(verb::post, "/api/v1/me/factors/webauthn",
+                           boost::json::serialize(boost::json::object{{"name", "laptop"},
+                                                                      {"challenge", b64(std::string("a challenge Lugh never issued..."))},
+                                                                      {"client_data", b64(created.client_data_json)},
+                                                                      {"attestation_object", b64(created.attestation_object)}}));
+  EXPECT_EQ(forged.status, 403u);
+  EXPECT_EQ(error_of(forged), "refused");
+  EXPECT_EQ(factors().size(), 2u) << "the TOTP factor and the recovery codes, nothing added";
+}
+
+// A node with no relying party configured offers no WebAuthn: its endpoints say so.
+TEST_F(FactorRoutesTest, WithoutARelyingPartyThereIsNoWebAuthn) {
+  auto router = std::make_shared<lugh::http::Router>(
+      rig.io.get_executor(), std::make_shared<lugh::http::Throttle>(rig.time, lugh::http::RateLimits{{1000, 1000}, {1000, 1000}}),
+      std::make_shared<lugh::session::SessionCallers>(rig.sessions, [](const lugh::http::HttpRequest&) { return std::optional<lugh::http::Caller>{}; }));
+  lugh::api::FactorRoutes plain(rig.sessions, rig.windows, rig.directory, rig.factors, rig.authenticator, "Lugh");
+  plain.register_routes(*router);
+  const auto me = boost::json::parse(rig.get("/api/v1/me").body);
+  const auto csrf = std::string(me.at("session").at("csrf_token").as_string());
+  const std::vector<std::pair<std::string, std::string>> headers{
+      {"Content-Type", "application/json"}, {"X-CSRF-Token", csrf}, {"Cookie", "__Host-lugh_session=" + rig.jar.at("__Host-lugh_session")}};
+  const auto answer =
+      ::call(rig.io, router->middleware("/api"), verb::post, "/api/v1/me/webauthn/options", "192.0.2.80", R"({"purpose":"reauthenticate"})", headers);
+  ASSERT_TRUE(answer.answered);
+  EXPECT_EQ(answer.response->result_int(), 404);
+}

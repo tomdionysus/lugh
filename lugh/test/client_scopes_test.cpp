@@ -5,13 +5,14 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "lugh/scopes/scope.h"
-
 #include <gtest/gtest.h>
 
-#include "lugh/scopes/topic_scope.h"
+#include <string>
+#include <vector>
 
-using namespace lugh::scopes;
+#include "lugh/client/scopes.h"
+
+using namespace lugh::client;
 
 namespace {
 
@@ -121,4 +122,64 @@ TEST(TopicScope, EncodingRefusesWhatIsNotAFilter) {
   EXPECT_FALSE(encode_topic({TopicAction::sub, {TopicLevel{"x", true}}}));
   // Under the scope cap: a long topic is refused, which keeps tokens small.
   EXPECT_FALSE(encode_topic({TopicAction::sub, {text(std::string(1100, 'a'))}}));
+}
+
+// What a broker checks a client against (Lir, 2026-11-20; the stack's placement plan, L3).
+namespace {
+
+TopicGrants grants(std::vector<std::string> scopes, std::string subject = {}) { return TopicGrants::parse(scopes, subject); }
+
+}  // namespace
+
+TEST(TopicGrants, ParseSortsTheActionsAndSkipsOtherApplications) {
+  const auto parsed = grants({"openid", "lugh:directory.read", "tasks:read", "lir:pub:a/b", "lir:sub:a/#", "lir:retain:state/+"});
+  EXPECT_EQ(parsed.publish(), std::vector<std::string>{"a/b"});
+  EXPECT_EQ(parsed.subscribe(), std::vector<std::string>{"a/#"});
+  EXPECT_EQ(parsed.retain(), std::vector<std::string>{"state/+"});
+  EXPECT_TRUE(parsed.refused().empty());
+  EXPECT_TRUE(grants({"openid", "tasks:read"}).empty());
+}
+
+TEST(TopicGrants, AMalformedLirScopeIsRefusedWithWhy) {
+  const auto parsed = grants({"lir:publish:a", "lir:sub:a/#/b", "lir:pub:%zz", "lir:pub:a/b"});
+  EXPECT_EQ(parsed.publish(), std::vector<std::string>{"a/b"});
+  ASSERT_EQ(parsed.refused().size(), 3U);
+  EXPECT_EQ(parsed.refused()[0].scope, "lir:publish:a");
+  for (const auto& refused : parsed.refused()) EXPECT_FALSE(refused.why.empty()) << refused.scope;
+}
+
+TEST(TopicGrants, TheSubjectFillsItsLevel) {
+  const auto parsed = grants({"lir:pub:devices/{sub}/#", "lir:sub:{sub}"}, "alice");
+  EXPECT_EQ(parsed.publish(), std::vector<std::string>{"devices/alice/#"});
+  EXPECT_EQ(parsed.subscribe(), std::vector<std::string>{"alice"});
+}
+
+// Without a subject (an anonymous client), or with one that is not one literal level, a
+// scope naming {sub} grants nothing.
+TEST(TopicGrants, ASubjectThatCannotFillItsLevelRefusesTheScope) {
+  EXPECT_EQ(grants({"lir:pub:devices/{sub}"}).refused().size(), 1U);
+  for (const auto* subject : {"a/b", "+", "#", "a+b"}) {
+    const auto parsed = grants({"lir:pub:devices/{sub}"}, subject);
+    EXPECT_TRUE(parsed.empty()) << subject;
+    EXPECT_EQ(parsed.refused().size(), 1U) << subject;
+  }
+}
+
+// A grant names what a client may subscribe to; a shared group is the client's to choose.
+TEST(TopicGrants, ASharedSubscriptionFilterIsNeverGranted) {
+  const auto parsed = grants({"lir:sub:$share/g/a/#"});
+  EXPECT_TRUE(parsed.empty());
+  EXPECT_EQ(parsed.refused().size(), 1U);
+}
+
+// The subject goes into every {sub} level, so a short scope can name a filter longer than MQTT
+// allows (65535 bytes); that scope grants nothing.
+TEST(TopicGrants, AFilterLongerThanMqttAllowsIsRefused) {
+  std::string scope = "lir:sub:{sub}";
+  for (int i = 0; i < 79; ++i) scope += "/{sub}";
+  ASSERT_LE(scope.size(), kMostScopeBytes);
+  const auto parsed = grants({scope}, std::string(1000, 'a'));
+  EXPECT_TRUE(parsed.empty());
+  ASSERT_EQ(parsed.refused().size(), 1u);
+  EXPECT_EQ(parsed.refused()[0].why, "the filter is longer than MQTT allows");
 }

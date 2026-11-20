@@ -6,6 +6,36 @@ Lugh is the top of a stack of three (the maintainer, 2026-11-03): **Dannan** (`.
 
 This document began as the design of 2026-10-18, before any code existed. What is built is said where it is; what is still to come says so.
 
+## Why it exists
+
+Every system a person runs across their own machines ends up with the same unsolved
+problem: who is this, and are they allowed? Each one answers it alone. Macha (a media
+filesystem) has its own users and passwords; AthenaSIP (a SIP server) has realms and
+digests; T.O.M.S and blackraven-admin each keep a session store and a login page. None of
+them knows the others' users, a password changed in one is not changed in the rest, a
+second factor is wherever someone got round to it, and removing a person means visiting
+every system and hoping none was missed.
+
+Lugh answers the question once:
+
+- **One identity.** A person or a service is a principal, with a stable identifier that
+  never changes and is never reused, in groups that say what they belong to. Every system
+  keys its records on that identifier, not on a name or an address.
+- **One sign-in.** A password and a second factor, checked in one place, with lockout and
+  back-off that an attacker cannot turn into a denial of service. A browser signs in once
+  and every allowed application follows, each asking only for what it has not yet seen.
+- **One answer to "may they?"** Groups grant scopes; applications map groups to their own
+  roles; Lugh is the source of every principal's scope, installed into Dannan's own check
+  of who may write what.
+- **One record.** Every sign-in, token, change and key operation is in an audit log whose
+  entries chain by hash, so an edit or a deletion is detectable.
+- **Nothing static.** A cluster is born with one credential, root's password, shown once
+  and stored only as its hash. There is no bootstrap token, no key in a file, no setting
+  that opens anything.
+
+It is written for the Blackraven projects (T.O.M.S, blackraven-admin, Macha, AthenaSIP and
+those that follow), but nothing in it is specific to them.
+
 ## What it does
 
 | Surface | Who uses it | What it offers |
@@ -394,7 +424,7 @@ The conventions are the stack's, in `CONTRIBUTING.md`: C++20, `.clang-format` (G
 5. ~~**LDAP:** read-only bind and search, or writes?~~ Writable, mapped onto Lugh's model, with Password Modify for a user's own password (the maintainer, 2026-11-04, "level 2"; `TODO/2026-11-04-ldap.md`). Still open there: TLS 1.2 for old LDAP clients, and five smaller questions.
 6. ~~**Federation:**~~ Not planned (the maintainer, 2026-11-13): Lugh is the identity provider and defers to none.
 7. ~~**Certificates:**~~ Operator-supplied files only (the maintainer, 2026-11-13), renewed by whatever the host runs; Lugh holds no ACME account.
-8. ~~**Target platform:**~~ Linux with macOS for development; Raven (Alpine on the arm64 build node) is dropped from all development for now (the maintainer, 2026-11-13).
+8. ~~**Target platform:**~~ Linux (Debian, systemd), with macOS for development.
 9. ~~**Second factor for everyone:**~~ `mfa` is the default for every person, with `phr` (WebAuthn, P11) for infrastructure admin apps (the maintainer, 2026-11-13).
 10. **T.O.M.S sites** (to be decided at P13, the maintainer 2026-11-13): sites run plain HTTP over WireGuard. Do they get TLS for the OIDC redirect, or does T.O.M.S sign in through Lugh only at the hub?
 11. ~~**Break-glass accounts:**~~ One local break-glass account per project, local login off for everyone else (the maintainer, 2026-11-13).

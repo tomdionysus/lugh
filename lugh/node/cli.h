@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "lugh/version.h"
+
 namespace lugh::cli {
 
 // What the process is to do: serve, the default, or make a node's keyring and master key.
@@ -68,7 +70,7 @@ inline std::string usage(const std::string& settings) {
          "With no --config, the first of these that exists is read:\n"
          "\n"
          "  $LUGH_CONFIG\n"
-         "  /usr/local/etc/lugh/config.yaml\n"
+         "  " LUGH_INSTALLED_CONFIG "\n"
          "\n"
          "The master key is in none of these. `lugh-node init` writes a new one, 32 raw\n"
          "bytes, to standard output, which must not be a terminal; pipe it to\n"

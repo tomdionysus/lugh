@@ -224,3 +224,43 @@ TEST(SigninPages, TheDashboardIsWhereItsSignInReturns) {
   EXPECT_EQ(rig.get("/signin").location(), "/signin/done");
   EXPECT_EQ(rig.get("/signin?continue=https://evil.example/").location(), "/signin/done");
 }
+
+// The pages' own stylesheet, cached for an hour: it is the same for everyone.
+TEST(SigninPages, TheStylesheet) {
+  SigninRig rig;
+  const auto css = rig.get("/signin/style.css");
+  ASSERT_EQ(css.status, 200u);
+  EXPECT_EQ(css.header("Content-Type"), "text/css; charset=utf-8");
+  EXPECT_EQ(css.header("Cache-Control"), "public, max-age=3600");
+  EXPECT_FALSE(css.body.empty());
+}
+
+// A form is read exactly or not at all (forms.h): a malformed escape, or a field named twice,
+// is refused before the CSRF token or the password is looked at.
+TEST(SigninPages, AFormThatCannotBeReadIsRefused) {
+  SigninRig rig;
+  rig.enrolled("alice");
+  const auto form = rig.get("/signin");
+  for (const auto& body : {std::string("csrf=") + form.csrf() + "&login=alice&password=%zz", std::string("csrf=") + form.csrf() + "&login=a&login=b"}) {
+    const auto refused = rig.send(verb::post, "/signin", body, {{"Content-Type", "application/x-www-form-urlencoded"}});
+    EXPECT_EQ(refused.status, 400u) << body;
+    EXPECT_TRUE(refused.says("That form could not be read")) << body;
+  }
+  EXPECT_FALSE(rig.audited("signin.password.refused")) << "nothing was tried";
+}
+
+// Past the account's back-off, the page says how long to wait, in the page and in Retry-After
+// (RFC 9110 section 10.2.3), and the right password does not get through meanwhile.
+TEST(SigninPages, GuessingBacksOffWithRetryAfter) {
+  SigninRig rig;
+  rig.enrolled("alice");
+  for (int i = 0; i < 5; ++i) EXPECT_EQ(rig.sign_in("alice", "wrong password here").status, 401u);
+  const auto waiting = rig.sign_in("alice", kPassword);
+  ASSERT_EQ(waiting.status, 429u) << waiting.body;
+  EXPECT_EQ(waiting.header("Retry-After"), "1");
+  EXPECT_TRUE(waiting.says("Wait 1 second, then try again."));
+  EXPECT_FALSE(rig.jar.count("__Host-lugh_session"));
+
+  rig.advance(std::chrono::seconds(1));
+  EXPECT_EQ(rig.sign_in("alice", kPassword).location(), "/signin/factor");
+}

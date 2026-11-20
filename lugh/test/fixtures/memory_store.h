@@ -10,6 +10,7 @@
 #include <map>
 #include <mutex>
 #include <set>
+#include <stdexcept>
 
 #include "dannan/contract/thread_safety.h"
 #include "lugh/store/log_format.h"
@@ -17,16 +18,22 @@
 
 // The store's rules, in memory and nowhere else: versions, final removals, conditional
 // writes and unique indexes, as SealedStore keeps them. The contract tests run against
-// both (lugh/test/store_contract_test.cpp). Every answer is ready at once.
+// both (lugh/test/store_contract_test.cpp). Every answer is ready at once, and a test may arm
+// the faults a real store has: a write refused with an error, a read that throws as a failed
+// disk's does.
 class MemoryStore : public lugh::store::Store {
  public:
   explicit MemoryStore(std::vector<lugh::store::TableSpec> tables) {
     for (auto& spec : tables) _tables[spec.name].spec = std::move(spec);
   }
 
-  lugh::Task<std::optional<lugh::store::Record>> get(std::string table, std::string key) const override { co_return get_now(table, key); }
+  lugh::Task<std::optional<lugh::store::Record>> get(std::string table, std::string key) const override {
+    _read_fault(table);
+    co_return get_now(table, key);
+  }
 
   lugh::Task<std::optional<lugh::store::Record>> find(std::string table, std::string index, std::string value) const override {
+    _read_fault(table);
     std::string key;
     {
       dannan::contract::Lock lock(_mutex);
@@ -41,9 +48,13 @@ class MemoryStore : public lugh::store::Store {
     co_return get_now(table, key);
   }
 
-  lugh::Task<std::vector<lugh::store::Record>> list(std::string table) const override { co_return list_now(table); }
+  lugh::Task<std::vector<lugh::store::Record>> list(std::string table) const override {
+    _read_fault(table);
+    co_return list_now(table);
+  }
 
   lugh::Task<bool> removed(std::string table, std::string key) const override {
+    _read_fault(table);
     dannan::contract::Lock lock(_mutex);
     const auto* found = _entry(table, key);
     co_return found != nullptr && found->removed;
@@ -84,6 +95,18 @@ class MemoryStore : public lugh::store::Store {
 
   lugh::store::Write remove_now(std::string_view table, std::string_view key) { return _write(table, true, key, {}, std::nullopt); }
 
+  // The next `count` writes to `table` answer `error`, changing nothing.
+  void fail_writes(std::string table, lugh::store::StoreError error, int count = 1) {
+    dannan::contract::Lock lock(_mutex);
+    _write_faults[std::move(table)] = {error, count};
+  }
+
+  // The next `count` reads of `table` throw.
+  void fail_reads(std::string table, int count = 1) {
+    dannan::contract::Lock lock(_mutex);
+    _read_faults[std::move(table)] = count;
+  }
+
  private:
   struct Entry {
     std::uint64_t version = 0;
@@ -111,6 +134,10 @@ class MemoryStore : public lugh::store::Store {
     using lugh::store::Write;
     dannan::contract::Lock lock(_mutex);
 
+    if (const auto armed = _write_faults.find(name); armed != _write_faults.end() && armed->second.second > 0) {
+      --armed->second.second;
+      return Write::failure(armed->second.first, "an injected fault");
+    }
     const auto t = _tables.find(name);
     if (t == _tables.end()) return Write::failure(StoreError::not_found, "no table");
     auto& table = t->second;
@@ -154,6 +181,16 @@ class MemoryStore : public lugh::store::Store {
     return Write::success(current + 1);
   }
 
+  void _read_fault(std::string_view table) const {
+    dannan::contract::Lock lock(_mutex);
+    const auto armed = _read_faults.find(table);
+    if (armed == _read_faults.end() || armed->second <= 0) return;
+    --armed->second;
+    throw std::runtime_error("an injected fault reading " + std::string(table));
+  }
+
   mutable dannan::contract::Mutex _mutex;
   std::map<std::string, Table, std::less<>> _tables DANNAN_GUARDED_BY(_mutex);
+  std::map<std::string, std::pair<lugh::store::StoreError, int>, std::less<>> _write_faults DANNAN_GUARDED_BY(_mutex);
+  mutable std::map<std::string, int, std::less<>> _read_faults DANNAN_GUARDED_BY(_mutex);
 };

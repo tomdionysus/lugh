@@ -337,7 +337,9 @@ void Apps::remove(audit::Actor actor, std::string client_id, std::optional<std::
 void Apps::_put(audit::Actor actor, App app, std::uint64_t expected, std::string action, std::string detail, Executor executor, Done<Outcome<App>> done) {
   using Answer = Outcome<App>;
   const auto client_id = app.client_id;
-  _calls.put_settled(kTable, client_id, encode(app), expected, executor,
+  // Encoded before the call: its arguments are evaluated in no set order, and one moves `app`.
+  auto value = encode(app);
+  _calls.put_settled(kTable, client_id, std::move(value), expected, executor,
                      [audit = _audit, actor, app = std::move(app), action = std::move(action), detail = std::move(detail), executor,
                       done = std::move(done)](store::Write written) mutable {
                        if (!written.ok()) {

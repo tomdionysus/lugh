@@ -236,3 +236,44 @@ TEST_F(HttpsTest, ACertificateThatCannotBeUsedIsAnErrorAtTheStart) {
   EXPECT_THROW(HttpsClient(client_io, roots, HttpsClient::Certificate{chain, dir.write("other.key", other.key_pem).string()}), std::runtime_error);
   EXPECT_NO_THROW(HttpsClient(client_io, roots, HttpsClient::Certificate{chain, dir.write("mine.key", mine.key_pem).string()}));
 }
+
+// The methods the API takes beyond GET and POST each go as themselves.
+TEST_F(HttpsTest, PatchPutAndDeleteGoAsThemselves) {
+  for (const auto* method : {"PATCH", "PUT", "DELETE"}) {
+    HttpsRequest request;
+    request.method = method;
+    request.url = "https://localhost:" + port + "/api/v1/thing";
+    request.content_type = "application/json";
+    request.body = "{}";
+    const auto answer = send(request);
+    ASSERT_TRUE(answer.ok()) << method << ": " << answer.message;
+    EXPECT_EQ(seen().method, method);
+  }
+}
+
+// A server that takes the connection and then says nothing is given up on at the deadline.
+TEST(HttpsDeadline, ASilentServerIsGivenUpOnAtTheDeadline) {
+  net::io_context silent_io;
+  net::ip::tcp::acceptor acceptor(silent_io, {net::ip::make_address("127.0.0.1"), 0});
+  net::ip::tcp::socket held(silent_io);
+  acceptor.async_accept(held, [](boost::system::error_code) {});
+  std::thread silent([&] { silent_io.run(); });
+
+  TempDirectory dir;
+  TestCertificate pair;
+  net::io_context client_io;
+  HttpsClient client(client_io, dir.write("roots.pem", pair.certificate_pem).string());
+  HttpsRequest request;
+  request.url = "https://localhost:" + std::to_string(acceptor.local_endpoint().port()) + "/";
+  std::optional<lugh::Outcome<HttpsResponse>> out;
+  const auto started = std::chrono::steady_clock::now();
+  client.send(std::move(request), std::chrono::milliseconds(300), client_io.get_executor(),
+              [&](lugh::Outcome<HttpsResponse> answer) { out = std::move(answer); });
+  client_io.run();
+  ASSERT_TRUE(out);
+  EXPECT_FALSE(out->ok());
+  EXPECT_LT(std::chrono::steady_clock::now() - started, std::chrono::seconds(5));
+
+  silent_io.stop();
+  silent.join();
+}

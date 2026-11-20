@@ -290,3 +290,32 @@ TEST_F(PosixTest, TheRoute) {
   EXPECT_EQ(done.body.at("users"), 0) << "numbered when made, and nobody else exists";
   EXPECT_EQ(done.body.at("groups"), 0);
 }
+
+// A backfill that runs out of numbers numbers whom it can, says it ran out, and audits the pass;
+// those left over are numbered by a later pass over a wider range.
+TEST_F(PosixTest, ABackfillThatRunsOut) {
+  const auto alice = person("alice").value;
+  rig.advance(std::chrono::seconds(1));
+  const auto bob = person("bob").value;
+  const auto staff = group("staff").value;
+  rig.advance(std::chrono::seconds(1));
+  const auto ops = group("ops").value;
+  numbered({10000, 10000}, {20000, 20000});
+
+  const auto short_of = allocate();
+  EXPECT_EQ(short_of.fault, lugh::Fault::refused) << short_of.message;
+  EXPECT_EQ(read_user(alice.id).posix_number, 10000u);
+  EXPECT_FALSE(read_user(bob.id).posix_number);
+  EXPECT_TRUE(rig.audited("ldap.posix.allocate"));
+
+  numbered({10000, 10001}, {20000, 20000});
+  EXPECT_EQ(allocate().fault, lugh::Fault::refused) << "the groups' range is still used up";
+  EXPECT_EQ(read_user(bob.id).posix_number, 10001u);
+  EXPECT_EQ(read_group(staff.id).posix_number, 20000u);
+  EXPECT_FALSE(read_group(ops.id).posix_number);
+
+  numbered({10000, 10001}, {20000, 20001});
+  const auto done = allocate();
+  ASSERT_TRUE(done.ok()) << done.message;
+  EXPECT_EQ(read_group(ops.id).posix_number, 20001u);
+}

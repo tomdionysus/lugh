@@ -417,3 +417,29 @@ TEST(WebAuthnRecord, EncodesAndDecodes) {
   record.credential_id.clear();
   EXPECT_FALSE(decode_webauthn(encode(record))) << "a credential with no id";
 }
+
+// A record under the person's factors that no reader understands (a newer format, or damage) is
+// left out of what they are shown, and does not stop the rest from working.
+TEST_F(FactorsTest, ARecordThatCannotBeReadIsLeftOut) {
+  const auto setup = confirmed_totp();
+  const std::vector<unsigned char> unknown_kind{1, 0x7f};
+  const std::vector<unsigned char> damaged{1, static_cast<unsigned char>(FactorKind::webauthn), 0xff, 0xff};
+  ASSERT_TRUE(rig.store->put_now(Factors::kTable, alice.id + "/totp/0000000000000001", unknown_kind).ok());
+  ASSERT_TRUE(rig.store->put_now(Factors::kTable, alice.id + "/webauthn/0000000000000002", damaged).ok());
+  const auto listed =
+      read_value<std::vector<lugh::authn::FactorInfo>>([&](lugh::Executor executor, auto done) { factors->list(alice.id, kTestDeadline, executor, done); });
+  ASSERT_EQ(listed.size(), 1u);
+  EXPECT_EQ(listed[0].kind, FactorKind::totp);
+  EXPECT_TRUE(read_value<bool>([&](lugh::Executor executor, auto done) { factors->has_second_factor(alice.id, kTestDeadline, executor, done); }));
+  EXPECT_TRUE(wait_for<lugh::Outcome<lugh::Nothing>>([&](lugh::Executor executor, auto done) {
+                factors->totp_check(alice.id, rig.code_for(setup.secret), kTestDeadline, executor, done);
+              }).ok());
+}
+
+// Someone who never had recovery codes has none to use.
+TEST_F(FactorsTest, NoRecoveryCodesNoneToUse) {
+  EXPECT_EQ(wait_for<lugh::Outcome<std::size_t>>([&](lugh::Executor executor, auto done) {
+              factors->recovery_use(alice.id, lugh::text_secret("ABCD-EFGH-JKLM-NPQR"), kTestDeadline, executor, done);
+            }).fault,
+            Fault::refused);
+}

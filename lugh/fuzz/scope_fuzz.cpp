@@ -14,8 +14,8 @@
 #include <cstdlib>
 #include <string>
 
+#include "lugh/client/scopes.h"
 #include "lugh/scopes/scope.h"
-#include "lugh/scopes/topic_scope.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
   using namespace lugh::scopes;
@@ -36,5 +36,10 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     const auto again = decode_topic(*encoded);
     if (!again || !(*again == *topic)) std::abort();
   }
+
+  // A broker's parse of the same bytes as a grant: one scope gives at most one grant or refusal.
+  const std::string scopes[] = {input};
+  const auto grants = lugh::client::TopicGrants::parse(scopes, "alice");
+  if (grants.refused().size() + grants.publish().size() + grants.retain().size() + grants.subscribe().size() > 1) std::abort();
   return 0;
 }

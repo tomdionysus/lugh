@@ -11,12 +11,15 @@
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
+#include <openssl/x509v3.h>
 
 #include <functional>
 #include <string>
 
 // A fresh self-signed certificate and its key, as PEM, for a server under test. Made here
-// rather than kept as a fixture: a certificate committed to the repository would expire.
+// rather than kept as a fixture: a certificate committed to the repository would expire. Its
+// names are in subjectAltName (by default localhost and 127.0.0.1), as a real server's are: a client
+// that checks the name, such as OpenLDAP's libldap, matches there and not the deprecated CN (RFC 6125).
 struct TestCertificate {
   std::string certificate_pem;
   std::string key_pem;
@@ -24,7 +27,8 @@ struct TestCertificate {
   // Another key, matching no certificate here, for the tests about a pair that does not fit.
   std::string other_key_pem;
 
-  TestCertificate() {
+  // `names` in OpenSSL's subjectAltName syntax.
+  explicit TestCertificate(const char* names = "DNS:localhost,IP:127.0.0.1") {
     EVP_PKEY* key = EVP_PKEY_Q_keygen(nullptr, nullptr, "EC", "P-256");
     EVP_PKEY* other = EVP_PKEY_Q_keygen(nullptr, nullptr, "EC", "P-256");
 
@@ -38,6 +42,12 @@ struct TestCertificate {
     X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, reinterpret_cast<const unsigned char*>("localhost"), -1, -1, 0);
     X509_set_issuer_name(certificate, name);
     X509_set_pubkey(certificate, key);
+    X509V3_CTX context;
+    X509V3_set_ctx_nodb(&context);
+    X509V3_set_ctx(&context, certificate, certificate, nullptr, nullptr, 0);
+    X509_EXTENSION* alternative = X509V3_EXT_conf_nid(nullptr, &context, NID_subject_alt_name, names);
+    X509_add_ext(certificate, alternative, -1);
+    X509_EXTENSION_free(alternative);
     X509_sign(certificate, key, EVP_sha256());
 
     certificate_pem = _pem([&](BIO* bio) { PEM_write_bio_X509(bio, certificate); });

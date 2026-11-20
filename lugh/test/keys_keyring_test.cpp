@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "lugh/keys/keyring.h"
 #include "lugh/test/fixtures/hex.h"
 

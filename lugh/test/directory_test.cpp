@@ -408,3 +408,51 @@ TEST_F(DirectoryTest, PastTheDeadlineIsAFailureNeverAbsence) {
   EXPECT_EQ(made.fault, Fault::failed);
   EXPECT_NE(made.message.find("may yet be made"), std::string::npos) << made.message;
 }
+
+// The store's refusals as the directory says them: what is gone is not found, a stale version
+// is a conflict, a taken unique value a duplicate.
+TEST(DirectoryFaults, TheStoresRefusalsAsTheDirectorySaysThem) {
+  using lugh::store::StoreError;
+  EXPECT_EQ(fault_of(StoreError::none), Fault::none);
+  EXPECT_EQ(fault_of(StoreError::not_found), Fault::not_found);
+  EXPECT_EQ(fault_of(StoreError::removed), Fault::not_found);
+  EXPECT_EQ(fault_of(StoreError::conflict), Fault::conflict);
+  EXPECT_EQ(fault_of(StoreError::duplicate), Fault::duplicate);
+  EXPECT_EQ(fault_of(StoreError::invalid), Fault::invalid);
+  EXPECT_EQ(fault_of(StoreError::failed), Fault::failed);
+}
+
+// A display name and a group's description are printable UTF-8 within their caps, when made and
+// when changed (records.h).
+TEST_F(DirectoryTest, DisplayNamesAndDescriptionsArePrintable) {
+  const auto alice = rig.person("alice");
+  UserChange shown;
+  shown.display_name = std::string("Alice\x07");
+  EXPECT_EQ(wait_for<lugh::Outcome<User>>([&](lugh::Executor executor, auto done) {
+              directory->update_user(admin, alice.id, shown, std::nullopt, kTestDeadline, executor, done);
+            }).fault,
+            Fault::invalid);
+  shown.display_name = std::string(kMostDisplayBytes + 1, 'a');
+  EXPECT_EQ(wait_for<lugh::Outcome<User>>([&](lugh::Executor executor, auto done) {
+              directory->update_user(admin, alice.id, shown, std::nullopt, kTestDeadline, executor, done);
+            }).fault,
+            Fault::invalid);
+
+  const auto bell = std::string("ring\x07");
+  EXPECT_EQ(wait_for<lugh::Outcome<Group>>([&](lugh::Executor executor, auto done) {
+              directory->create_group(admin, "staff", bell, kTestDeadline, executor, done);
+            }).fault,
+            Fault::invalid);
+  const auto staff =
+      wait_for<lugh::Outcome<Group>>([&](lugh::Executor executor, auto done) { directory->create_group(admin, "staff", "", kTestDeadline, executor, done); });
+  ASSERT_TRUE(staff.ok()) << staff.message;
+  GroupChange described;
+  described.description = std::string(kMostDescriptionBytes + 1, 'a');
+  EXPECT_EQ(wait_for<lugh::Outcome<Group>>([&](lugh::Executor executor, auto done) {
+              directory->update_group(admin, staff.value.id, described, std::nullopt, kTestDeadline, executor, done);
+            }).fault,
+            Fault::invalid);
+  EXPECT_EQ(read_value<std::optional<User>>([&](lugh::Executor executor, auto done) { directory->user(alice.id, kTestDeadline, executor, done); })->version,
+            alice.version)
+      << "nothing changed";
+}

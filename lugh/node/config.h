@@ -20,6 +20,7 @@
 #include "lugh/network/cidr.h"
 #include "lugh/node/cli.h"
 #include "lugh/system/environment.h"
+#include "lugh/version.h"
 
 namespace lugh {
 
@@ -103,7 +104,7 @@ struct Config {
 // networks and levels are Lugh's to understand.
 class ConfigLoader {
  public:
-  static constexpr const char* kInstalledPath = "/usr/local/etc/lugh/config.yaml";
+  static constexpr const char* kInstalledPath = LUGH_INSTALLED_CONFIG;
 
   // default_path is read when neither --config nor $LUGH_CONFIG names a file, and only if
   // it exists; empty reads nothing.

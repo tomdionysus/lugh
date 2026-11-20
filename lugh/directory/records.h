@@ -14,6 +14,7 @@
 #include <string_view>
 #include <vector>
 
+#include "lugh/core/encoding.h"
 #include "lugh/core/secure_bytes.h"
 #include "lugh/store/store.h"
 
@@ -89,8 +90,8 @@ std::optional<std::string> normal_name(std::string_view text);
 // the domain, no spaces or control characters. Not RFC 5322; enough to refuse a mistake.
 std::optional<std::string> normal_email(std::string_view text);
 
-// Printable: no control characters, valid UTF-8, within `most` bytes.
-bool printable(std::string_view text, std::size_t most);
+// Printable: no control characters, valid UTF-8, within `most` bytes (encoding.h).
+using encoding::printable;
 
 // SecureBuffer: a record of a person is theirs, and is sealed before it leaves memory.
 SecureBuffer encode(const User& user);

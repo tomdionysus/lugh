@@ -5,20 +5,21 @@
 // Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 //
 
-#include "lugh/scopes/topic_scope.h"
+#include "lugh/client/scopes.h"
 
+#include <algorithm>
 #include <stdexcept>
 
 #include "dannan/encoding/percent.h"
-#include "lugh/directory/records.h"
-#include "lugh/scopes/scope.h"
+#include "lugh/core/encoding.h"
 
-namespace lugh::scopes {
+namespace lugh::client {
 
 namespace {
 
 constexpr std::string_view kSubject = "{sub}";
-// MQTT's limit on a topic filter, in bytes.
+constexpr std::string_view kShared = "$share/";
+// MQTT's limit on a topic name or filter, in bytes.
 constexpr std::size_t kMostFilterBytes = 65535;
 
 std::string_view action_text(TopicAction action) {
@@ -50,7 +51,27 @@ const dannan::encoding::PercentSet& literal_set() {
   return set;
 }
 
+std::vector<std::string_view> levels_of(std::string_view text) {
+  std::vector<std::string_view> out;
+  std::size_t at = 0;
+  while (true) {
+    const auto slash = text.find('/', at);
+    out.push_back(text.substr(at, slash == std::string_view::npos ? std::string_view::npos : slash - at));
+    if (slash == std::string_view::npos) return out;
+    at = slash + 1;
+  }
+}
+
 }  // namespace
+
+bool well_formed(std::string_view scope) {
+  if (scope.empty() || scope.size() > kMostScopeBytes) return false;
+  // RFC 6749 section 3.3: %x21 / %x23-5B / %x5D-7E.
+  return std::all_of(scope.begin(), scope.end(), [](char c) {
+    const auto byte = static_cast<unsigned char>(c);
+    return byte >= 0x21 && byte <= 0x7e && byte != '"' && byte != '\\';
+  });
+}
 
 bool valid_filter(const std::vector<TopicLevel>& levels) {
   if (levels.empty()) return false;
@@ -64,7 +85,7 @@ bool valid_filter(const std::vector<TopicLevel>& levels) {
     }
     bytes += level.text.size();
     if (level.text.find('/') != std::string::npos) return false;
-    if (!directory::printable(level.text, kMostFilterBytes)) return false;
+    if (!encoding::printable(level.text, kMostFilterBytes)) return false;
     const bool wildcard = level.text.find_first_of("+#") != std::string::npos;
     if (wildcard && level.text != "+" && level.text != "#") return false;
     if (level.text == "#" && i + 1 != levels.size()) return false;
@@ -97,11 +118,7 @@ std::optional<TopicScope> decode_topic(std::string_view scope) {
 
   TopicScope out;
   out.action = *action;
-  const auto filter = scope.substr(second + 1);
-  std::size_t at = 0;
-  while (true) {
-    const auto slash = filter.find('/', at);
-    const auto raw = filter.substr(at, slash == std::string_view::npos ? std::string_view::npos : slash - at);
+  for (const auto raw : levels_of(scope.substr(second + 1))) {
     TopicLevel level;
     if (raw == kSubject) {
       level.subject = true;
@@ -114,11 +131,64 @@ std::optional<TopicScope> decode_topic(std::string_view scope) {
       }
     }
     out.levels.push_back(std::move(level));
-    if (slash == std::string_view::npos) break;
-    at = slash + 1;
   }
   if (!valid_filter(out.levels)) return std::nullopt;
   return out;
 }
 
-}  // namespace lugh::scopes
+TopicGrants TopicGrants::parse(std::span<const std::string> scopes, std::string_view subject) {
+  TopicGrants out;
+  const auto prefix = std::string(kTopicPrefix) + ":";
+  for (const auto& scope : scopes) {
+    if (!std::string_view(scope).starts_with(prefix)) continue;
+    const auto refuse = [&](std::string why) { out._refused.push_back({scope, std::move(why)}); };
+    const auto decoded = decode_topic(scope);
+    if (!decoded) {
+      refuse("not a topic scope: the action, an escape, a brace or the filter is malformed");
+      continue;
+    }
+    std::string filter;
+    bool refused = false;
+    for (std::size_t i = 0; i < decoded->levels.size(); ++i) {
+      if (i > 0) filter.push_back('/');
+      const auto& level = decoded->levels[i];
+      if (!level.subject) {
+        filter += level.text;
+        continue;
+      }
+      if (subject.empty()) {
+        refuse("names {sub}, and there is no subject");
+      } else if (subject.find_first_of("/+#") != std::string_view::npos || !encoding::printable(subject, kMostFilterBytes)) {
+        refuse("names {sub}, and the subject is not one literal topic level");
+      } else {
+        filter += subject;
+        continue;
+      }
+      refused = true;
+      break;
+    }
+    if (refused) continue;
+    if (filter.starts_with(kShared)) {
+      refuse("grants a shared-subscription filter");
+      continue;
+    }
+    if (filter.size() > kMostFilterBytes) {
+      refuse("the filter is longer than MQTT allows");
+      continue;
+    }
+    switch (decoded->action) {
+      case TopicAction::pub:
+        out._publish.push_back(std::move(filter));
+        break;
+      case TopicAction::sub:
+        out._subscribe.push_back(std::move(filter));
+        break;
+      case TopicAction::retain:
+        out._retain.push_back(std::move(filter));
+        break;
+    }
+  }
+  return out;
+}
+
+}  // namespace lugh::client

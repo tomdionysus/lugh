@@ -861,3 +861,183 @@ TEST_F(OAuthFlowTest, PhrIsMetByAPasswordAndASecurityKey) {
   EXPECT_EQ(access.at("amr"), (boost::json::array{"pwd", "hwk"}));
   EXPECT_EQ(claims_of(std::string(body.at("id_token").as_string())).at("acr"), "urn:lugh:acr:phr");
 }
+
+// RFC 6749 section 5.2: a client asks only for the grants it was registered with, and a grant
+// Lugh has never heard of is unsupported_grant_type.
+TEST_F(OAuthFlowTest, AClientUsesOnlyItsOwnGrants) {
+  const auto [web, web_secret] = register_web();
+  const auto error_for = [&](const std::string& client_id, const std::string& secret, std::map<std::string, std::string> form) {
+    const auto answer = rig.request(verb::post, "/oauth2/token", form, {{"Authorization", basic(client_id, secret)}});
+    EXPECT_EQ(answer.status, 400u) << answer.body;
+    return std::string(boost::json::parse(answer.body).at("error").as_string());
+  };
+  EXPECT_EQ(error_for(web.client_id, web_secret, {{"grant_type", "client_credentials"}}), "unauthorized_client");
+  EXPECT_EQ(error_for(web.client_id, web_secret, {{"grant_type", "refresh_token"}, {"refresh_token", "x"}}), "unauthorized_client");
+  EXPECT_EQ(error_for(web.client_id, web_secret, {{"grant_type", "urn:ietf:params:oauth:grant-type:device_code"}, {"device_code", "x"}}),
+            "unauthorized_client");
+  EXPECT_EQ(error_for(web.client_id, web_secret, {{"grant_type", "password"}, {"username", "alice"}, {"password", kPassword}}), "unsupported_grant_type");
+
+  lugh::apps::App draft;
+  draft.name = "hub";
+  draft.kind = lugh::apps::Kind::service;
+  draft.auth = lugh::apps::ClientAuth::client_secret_basic;
+  draft.grants = lugh::apps::kClientCredentials;
+  draft.client_scopes = {"lugh:directory.read"};
+  draft.audiences = {"lugh"};
+  const auto service = wait_for<lugh::Outcome<lugh::apps::Apps::Made>>(
+      [&](lugh::Executor executor, auto done) { rig.apps->create(rig.admin, draft, kTestDeadline, executor, done); });
+  ASSERT_TRUE(service.ok()) << service.message;
+  EXPECT_EQ(error_for(service.value.app.client_id, std::string(lugh::secret_text(*service.value.secret)),
+                      {{"grant_type", "authorization_code"}, {"code", "x"}, {"redirect_uri", kRedirect}, {"code_verifier", kVerifier}}),
+            "unauthorized_client");
+}
+
+// RFC 8705 section 3: a client whose tokens are bound to its certificate is given none where
+// no certificate was presented, however else it authenticated.
+TEST_F(OAuthFlowTest, ACertificateBoundClientNeedsItsCertificate) {
+  lugh::apps::App draft;
+  draft.name = "hub";
+  draft.kind = lugh::apps::Kind::service;
+  draft.auth = lugh::apps::ClientAuth::client_secret_basic;
+  draft.grants = lugh::apps::kClientCredentials;
+  draft.client_scopes = {"lugh:directory.read"};
+  draft.audiences = {"lugh"};
+  draft.sender = lugh::apps::SenderConstraint::mtls;
+  const auto made = wait_for<lugh::Outcome<lugh::apps::Apps::Made>>(
+      [&](lugh::Executor executor, auto done) { rig.apps->create(rig.admin, draft, kTestDeadline, executor, done); });
+  ASSERT_TRUE(made.ok()) << made.message;
+  const auto answer = rig.request(verb::post, "/oauth2/token", {{"grant_type", "client_credentials"}},
+                                  {{"Authorization", basic(made.value.app.client_id, std::string(lugh::secret_text(*made.value.secret)))}});
+  EXPECT_EQ(answer.status, 400u);
+  EXPECT_EQ(boost::json::parse(answer.body).at("error"), "invalid_request");
+}
+
+// RFC 7662 section 2.1: introspection is for a client that can authenticate; a public client
+// cannot, so it is refused rather than told anything.
+TEST_F(OAuthFlowTest, APublicClientCannotIntrospect) {
+  lugh::apps::App draft;
+  draft.name = "TV";
+  draft.kind = lugh::apps::Kind::native;
+  draft.grants = lugh::apps::kDeviceCode;
+  draft.scopes = {"openid"};
+  draft.first_party = true;
+  const auto made = wait_for<lugh::Outcome<lugh::apps::Apps::Made>>(
+      [&](lugh::Executor executor, auto done) { rig.apps->create(rig.admin, draft, kTestDeadline, executor, done); });
+  ASSERT_TRUE(made.ok()) << made.message;
+  const auto answer = rig.post("/oauth2/introspect", {{"client_id", made.value.app.client_id}, {"token", "anything"}});
+  EXPECT_EQ(answer.status, 401u);
+  EXPECT_EQ(boost::json::parse(answer.body).at("error"), "invalid_client");
+}
+
+// RFC 8628 sections 3.4 and 3.5: polling faster than the interval is slow_down, and a code
+// nobody answered within its lifetime is expired_token, after which it is gone.
+TEST_F(OAuthFlowTest, ADevicePollsAtItsIntervalAndItsCodeExpires) {
+  lugh::apps::App draft;
+  draft.name = "TV";
+  draft.kind = lugh::apps::Kind::native;
+  draft.grants = lugh::apps::kDeviceCode;
+  draft.scopes = {"openid"};
+  draft.first_party = true;
+  const auto made = wait_for<lugh::Outcome<lugh::apps::Apps::Made>>(
+      [&](lugh::Executor executor, auto done) { rig.apps->create(rig.admin, draft, kTestDeadline, executor, done); });
+  ASSERT_TRUE(made.ok()) << made.message;
+  const auto id = made.value.app.client_id;
+  const auto codes = boost::json::parse(rig.post("/oauth2/device", {{"client_id", id}}).body);
+  const auto device_code = std::string(codes.at("device_code").as_string());
+  const auto poll = [&] {
+    return std::string(
+        boost::json::parse(
+            rig.post("/oauth2/token", {{"grant_type", "urn:ietf:params:oauth:grant-type:device_code"}, {"device_code", device_code}, {"client_id", id}}).body)
+            .at("error")
+            .as_string());
+  };
+  EXPECT_EQ(poll(), "authorization_pending");
+  EXPECT_EQ(poll(), "slow_down");
+  // Each slow_down adds five seconds to the interval (now ten); five on is too soon, and adds five again.
+  rig.advance(std::chrono::seconds(5));
+  EXPECT_EQ(poll(), "slow_down");
+  rig.advance(std::chrono::seconds(16));
+  EXPECT_EQ(poll(), "authorization_pending");
+
+  rig.advance(lugh::oauth::DeviceGrants::kLifetime);
+  EXPECT_EQ(poll(), "expired_token");
+  EXPECT_EQ(poll(), "invalid_grant") << "an expired code is gone";
+}
+
+// The user's side of the device grant: the page to type a code on, an answer that did not
+// come from that page, and a user the application is not allowed to.
+TEST_F(OAuthFlowTest, TheDevicePagesRefuseWhatTheyShould) {
+  lugh::apps::App draft;
+  draft.name = "TV";
+  draft.kind = lugh::apps::Kind::native;
+  draft.grants = lugh::apps::kDeviceCode;
+  draft.scopes = {"openid"};
+  draft.first_party = true;
+  const auto made = wait_for<lugh::Outcome<lugh::apps::Apps::Made>>(
+      [&](lugh::Executor executor, auto done) { rig.apps->create(rig.admin, draft, kTestDeadline, executor, done); });
+  ASSERT_TRUE(made.ok()) << made.message;
+  const auto id = made.value.app.client_id;
+  // Allowed to staff, which alice is not in for this test's own group.
+  const auto others = wait_for<lugh::Outcome<lugh::directory::Group>>([&](lugh::Executor executor, auto done) {
+                        rig.directory->create_group(rig.admin, "others", "", kTestDeadline, executor, done);
+                      }).value;
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::apps::App>>([&](lugh::Executor executor, auto done) {
+                rig.apps->access_set(rig.admin, id, others.id, true, kTestDeadline, executor, done);
+              }).ok());
+  const auto codes = boost::json::parse(rig.post("/oauth2/device", {{"client_id", id}}).body);
+  const auto user_code = std::string(codes.at("user_code").as_string());
+
+  rig.at_phr(alice.id);
+  const auto entry = rig.get("/signin/device");
+  ASSERT_EQ(entry.status, 200u);
+  EXPECT_TRUE(entry.says("Type the code your device shows."));
+
+  const auto forged = rig.post("/signin/device", {{"csrf", "forged"}, {"user_code", user_code}, {"decision", "allow"}});
+  EXPECT_TRUE(forged.says("That answer did not come from Lugh&#39;s own page.") || forged.says("That answer did not come from Lugh's own page."))
+      << forged.body;
+
+  const auto page = rig.get("/signin/device?user_code=" + user_code);
+  ASSERT_EQ(page.status, 200u) << page.body;
+  const auto refused = rig.post("/signin/device", {{"csrf", page.csrf()}, {"user_code", user_code}, {"decision", "allow"}});
+  EXPECT_TRUE(refused.says("You are not allowed to use this application.")) << refused.body;
+  EXPECT_EQ(boost::json::parse(rig.post("/oauth2/token", {{"grant_type", "urn:ietf:params:oauth:grant-type:device_code"},
+                                                          {"device_code", std::string(codes.at("device_code").as_string())},
+                                                          {"client_id", id}})
+                                   .body)
+                .at("error"),
+            "access_denied");
+}
+
+// OIDC Core 5.1: with the email scope, the address and email_verified false (Lugh records what an
+// administrator gave, unproved); and an application's roles for the groups the person is in.
+TEST_F(OAuthFlowTest, EmailAndRolesClaims) {
+  const auto [app, secret] = register_web();
+  ASSERT_TRUE(wait_for<lugh::Outcome<lugh::apps::App>>([&](lugh::Executor executor, auto done) {
+                rig.apps->roles_set(rig.admin, app.client_id, staff.id, {"operator", "auditor"}, kTestDeadline, executor, done);
+              }).ok());
+  const auto target = "/oauth2/authorize?response_type=code&client_id=" + app.client_id + "&redirect_uri=" + dannan::encoding::percent_encode(kRedirect) +
+                      "&scope=openid%20email&state=st8&nonce=n0nce&code_challenge=" + kChallenge + "&code_challenge_method=S256";
+  const auto back = sign_in_through(rig.get(target).location());
+  const auto tokens = redeem(app.client_id, secret, query_value(back, "code"));
+  ASSERT_EQ(tokens.status, 200u) << tokens.body;
+  const auto access = std::string(boost::json::parse(tokens.body).at("access_token").as_string());
+  const auto info = rig.request(verb::get, "/oauth2/userinfo", {}, {{"Authorization", "Bearer " + access}});
+  ASSERT_EQ(info.status, 200u) << info.body;
+  const auto claims = boost::json::parse(info.body);
+  EXPECT_EQ(claims.at("email"), "alice@example.com");
+  EXPECT_EQ(claims.at("email_verified"), false);
+  EXPECT_EQ(claims.at("roles"), (boost::json::array{"auditor", "operator"}));
+  EXPECT_FALSE(claims.as_object().contains("groups")) << "no groups scope asked";
+}
+
+// RFC 6749 section 2.3.1: a Basic header whose name or secret is not form-encoded is no client.
+TEST_F(OAuthFlowTest, ABasicHeaderThatDoesNotDecodeIsNoClient) {
+  const auto [app, secret] = register_web(true, lugh::apps::kAuthorizationCode);
+  const auto text = std::string("%zz:") + secret;
+  auto encoded = lugh::encoding::base64url(lugh::byte_span(text));
+  for (auto& c : encoded) c = c == '-' ? '+' : (c == '_' ? '/' : c);
+  while (encoded.size() % 4) encoded.push_back('=');
+  const auto answer = rig.request(verb::post, "/oauth2/introspect", {{"token", "anything"}}, {{"Authorization", "Basic " + encoded}});
+  EXPECT_EQ(answer.status, 401u);
+  EXPECT_EQ(boost::json::parse(answer.body).at("error"), "invalid_client");
+}

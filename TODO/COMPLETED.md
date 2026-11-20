@@ -2,6 +2,132 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-20: Release 0.2.0
+
+The maintainer: "complete current work and cut stable releases". 0.2.0, a minor bump (a stale 0.1.0 tag predates main's
+reset). It holds:
+- P8.0 and the cluster rig;
+- lugh_client for relying parties, and lugh::client_topics;
+- real-LDAP-client tests;
+- the argument-order fix and the clean CI;
+- the coverage work;
+- the Debian package and the README rewritten for installing and using Lugh.
+Pins: Dannan 0.9.2, Dagda 0.3.2, lir::mqtt d36356d. The release gate ran on node-b, once each:
+- RelWithDebInfo suite: 893 of 893;
+- ASan with UBSan and TSan, with Dannan, Dagda and lir::mqtt built instrumented (checked with nm): 893 of 893 each, no
+  sanitizer report;
+- fuzzing: all 13 targets, 300 s each, between 1.8 and 7.4 million runs each, nothing found;
+- the package built with its tests inside (893 of 893), lintian clean, installed and purged in a fresh container.
+Found by the release build:
+- GCC 14 at -O2 misreads two string concatenations (now single literals);
+- it misreads Boost.Asio's coroutine frames in the frozen store (that one warning is off for that one file until P8.8);
+- a relying party fetching lugh_client alone fetched Lir too (now only the node's build does; checked: a client-only build
+  fetches Dannan and nothing else).
+README links checked: 18, all 200.
+
+## 2026-11-20: The Debian package
+
+`lugh` for Debian trixie, by the stack's convention (Dannan's `debian/` the model; `docs/packaging.md`):
+- debhelper (compat 13) driving CMake's install rules in a new layout, `LUGH_INSTALL_LAYOUT=debian`:
+  - `/usr/bin/lugh-node` and `lugh-node(8)`;
+  - `/etc/lugh/config.yaml` as a conffile;
+  - the dashboard in `/usr/share/lugh/dashboard`, built in the package build;
+  - the unit in `/usr/lib/systemd/system`, templated from `deploy/lugh.service.in`;
+  - the `lugh` user by sysusers.
+- Built against the installed Dannan (`LUGH_SYSTEM_DEPENDENCIES`), so the package depends on `libdannan0.9` and bundles
+  nothing. The tests also use the installed Dagda (at its exact pin) and Lir's, or Lir cloned from the sibling checkout.
+- The binary's default configuration is the layout's (`LUGH_INSTALL_CONFIG`). The local layout keeps `cmake --install`
+  and `deploy/host-setup.sh`.
+- `tools/build-deb.sh` takes the version from `git describe` and refuses a tag the tree disagrees with.
+- The service is installed disabled. The postinst sets who may read what, `apt remove` keeps `/etc/lugh`, and
+  `apt purge` deletes it but never the keyring and store.
+
+The postinst, init, health, dashboard, remove and purge were checked in a fresh trixie container, and lintian is clean.
+
+Found on the way:
+- dpkg's hardening sets `_FORTIFY_SOURCE` too: Lugh now undefines it before setting 3.
+- GCC 14 at `-O2` misreads a string concatenation (rewritten as two literals) and Boost.Asio's coroutine frames, so the
+  package build does not make warnings errors; CI and the presets still do.
+- A sanitizer build refuses the installed libraries, since every library in the process must be instrumented.
+- The README is now about installing and using Lugh, with every project of the stack linked by its GitHub URL (18 links,
+  each answering 200).
+
+## 2026-11-20: Coverage closer to whole, and the test store's faults
+
+The maintainer's rule is about 100% coverage of all code. Lugh's own code, compiler-made branches filtered out (lcov's
+`--filter branch,exception,line,range`), went from 97.3% to 98.7% of lines, 92.6% to 93.5% of functions and 68.6% to 70.0%
+of branches. The new tests come from the design and the RFCs:
+- the sign-in pages: WebAuthn results at the wrong stage, refused or for no purpose; the stylesheet; an unreadable form;
+  the back-off page;
+- lugh-node's command line, a configuration that does not load, a port in use for HTTPS, mTLS and LDAP, and the mTLS
+  listener;
+- the token endpoint's grants a client may not use, a certificate-bound client without its certificate, introspection by
+  a public client, the device grant's slow_down, expiry and refusals, the email and roles claims, an undecodable Basic
+  header;
+- every app field through the API, the group list and read, the password change's refusals, the factor API's refusals;
+- lugh_client: issuers without an endpoint, PATCH, PUT and DELETE, a silent server given up on at the deadline, a filter
+  longer than MQTT allows;
+- the directory's printable checks, its store faults, and a POSIX backfill that runs out;
+- unreadable factor records, and a recovery code with none to use.
+The test store now injects faults per table (a write refused with an error, a read that throws), and
+`store_faults_test.cpp` covers the race and failure paths: a refresh rotation that lost a race revokes the family; a
+failed rotation, an unreadable client and an unreadable application are server errors; an enrolment whose password cannot
+be written fails; a code or recovery slot spent elsewhere at the same moment is refused.
+Found: the back-off page said "Wait 1 seconds" (now "1 second").
+Left, and why:
+- Fallbacks after a switch over every enumerator, which cannot run: `app_routes` name_of, `factors` kind_name,
+  `cose` 66, `filter` 249, `api_support` 43, `policy` 33, `scopes` 34, `app.cpp` 143, `directory` 64.
+- The frozen store and coroutine layer (`store/`, `core/awaited.h`), deleted at P8.8.
+- The periodic loops in lugh_node.cpp (key rotation, session refresh, logout delivery), on real timers in the process.
+- Lambda closing lines GCC counts as reached only when a callback falls off its end.
+- A few deadline paths that need a stalled store.
+Tests: 893, from 844 (49 new, none removed). Debug, ASan and TSan on node-b, once each: green, no sanitizer report.
+
+## 2026-11-20: A record encoded after it was moved from (GCC on x86-64), and CI green
+
+GitHub's GCC x86-64 job failed from its first run while every other build passed. `Directory::_put_user`, `_put_group` and
+`Apps::_put` passed `encode(record)` and a callback capturing the record by move as arguments of one call; C++ leaves
+their order unspecified, and GCC on x86-64 evaluates right to left, so the record was encoded after the move and stored
+with every string empty (found by a diagnostic test printing the stored bytes; valgrind saw nothing, as nothing was invalid).
+The record is now encoded before the call. A CI job runs clang-tidy's `bugprone-use-after-move` over Lugh's files and
+fails on a finding; its first run found nothing else in Lugh, and five sites in Dannan 0.9.2 and Dagda 0.3.2, passed to
+their sessions. It also found two tests using `std::search` without `<algorithm>`, compiling only through the precompiled
+header. Coverage is captured and uploaded after a failed test too, and lcov passes GoogleTest's inconsistent end lines:
+Lugh's own code at 96.8% of lines, 92.6% of functions, 48.8% of branches. Tests: 844, unchanged; every CI job green.
+
+## 2026-11-20: lugh::client_topics, the broker's checks on Lir's codec
+
+`may_publish` (a `pub` grant for a plain PUBLISH, a `retain` grant for a retained one) and `may_subscribe` (a `sub` grant
+covering the filter, or the filter inside `$share/<group>/`) over `TopicGrants`, in their own library,
+`lugh::client_topics`, so a relying party that is no broker links no MQTT. MQTT's topic rules are `lir::mqtt`'s (valid
+names and filters, matching, coverage with the '$' rule, shared filters), fetched from Lir's develop at 62b2004 with
+`LIR_BUILD_SERVER` off; CI checks Lir out beside Dannan and Dagda. Tests: 844, from 835 (nine new, from the grammar's
+meaning and MQTT 5.0 section 4.7). Debug, ASan and TSan on node-b, once each: green, no sanitizer report.
+
+## 2026-11-20: LDAP tested with a real client
+
+The maintainer: "You will test with a real LDAP client." Beside Lugh's own small client, which can send what a real one never would,
+OpenLDAP's libldap (what SSSD, PAM and most LDAP software use) drives the real lugh-node: LDAPS with the server's certificate
+and name checked, StartTLS after the rootDSE and a refused bind before it, a wrong password and an unverifiable server
+refused, a paged search (RFC 2696) walking the same entries as a whole one, and add, modify and delete under an app password
+that may. Found: the test certificate named its host only in the CN, which RFC 6125 has clients not trust; it now carries
+subjectAltName (and libldap checks "localhost" against the machine's hostname, so the tests connect by address).
+libldap-dev is a test dependency, in CI too. Tests: 835, from 829 (six new). Debug, ASan and TSan with the lugh_client work:
+green, no sanitizer report.
+
+## 2026-11-20: lugh_client for relying parties, and the topic-scope grammar moved into it
+
+The stack's placement plan (the maintainer: the lower of two projects that depend on each other keeps what both need): what Louhi and Lir
+had each written for themselves is lugh_client's (`2026-11-20-client-relying-party.md`, `2026-11-20-dependants.md`).
+`discover()`; `bearer_token()` (16 KiB, Louhi's bound); `RelyingParty` (the verifier, the key source and the audience);
+`TokenSource` (a service's client-credentials token, refreshed at two thirds of its life, failing over across issuers with a
+back-off that never parks); `testing::FakeHttps`, thread-safe, holding a request until the test answers. The topic-scope
+grammar moved from the node into lugh_client (`lugh/client/scopes.h`), with `TopicGrants::parse` for brokers; lugh-node grants
+by the same code, and `printable` moved into `lugh/core/encoding.h`. The PUBLISH and SUBSCRIBE checks follow on `lir::mqtt`.
+Found on the way: TokenSource fetched on any timer wake, but a stepped time source wakes early by design; and an OAuth test
+read begin() and end() of two copies. Tests: 829, from 814 (fifteen new, none removed). Debug, ASan and TSan on node-a with
+the real-LDAP-client branch, once each: green, no sanitizer report.
+
 ## 2026-11-20: P8.0, Dagda beside Dannan, and the cluster rig
 
 The maintainer's word to start P8, on Dagda 0.3.2 and Dannan 0.9.2. Dannan moves to 0.9.2, the patch Dagda 0.3.x builds on, declared with

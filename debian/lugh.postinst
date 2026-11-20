@@ -1,0 +1,53 @@
+#!/bin/sh
+#
+# Lugh - The Directory
+#
+# Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+# Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+#
+# lugh postinst: who may read what. The configuration and secrets.yaml are readable by the
+# service and nobody else; secrets.yaml is the site's, made empty here if absent and never part
+# of the package. The TLS pair and the master key credential are the operator's to put there.
+
+set -e
+
+CONFDIR=/etc/lugh
+STATEDIR=/var/lib/lugh
+CREDSTORE=/etc/credstore.encrypted
+
+
+#DEBHELPER#
+
+# After debhelper's snippets, where dh_installsysusers makes the lugh user.
+case "$1" in
+    configure)
+        chown root:lugh "$CONFDIR" "$CONFDIR/config.yaml"
+        chmod 0750 "$CONFDIR"
+        chmod 0640 "$CONFDIR/config.yaml"
+        if [ ! -e "$CONFDIR/secrets.yaml" ]; then
+            (umask 027 && : >"$CONFDIR/secrets.yaml")
+        fi
+        chown root:lugh "$CONFDIR/secrets.yaml"
+        chmod 0640 "$CONFDIR/secrets.yaml"
+
+        mkdir -p "$CONFDIR/tls"
+        chown root:lugh "$CONFDIR/tls"
+        chmod 0750 "$CONFDIR/tls"
+
+        # Before the first start, so `lugh-node init` can make the keyring in it; systemd's
+        # StateDirectory= keeps it so afterwards.
+        mkdir -p "$STATEDIR"
+        chown lugh:lugh "$STATEDIR"
+        chmod 0700 "$STATEDIR"
+
+        mkdir -p "$CREDSTORE"
+        chmod 0700 "$CREDSTORE"
+        ;;
+esac
+
+if [ "$1" = "configure" ] && [ -z "${2:-}" ]; then
+    echo "lugh is installed and disabled. Put the TLS pair in $CONFDIR/tls (cert.pem, key.pem), make the"
+    echo "keyring and seal the master key once (see /usr/share/doc/lugh), then: systemctl enable --now lugh"
+fi
+
+exit 0

@@ -88,10 +88,6 @@ Proposals to the maintainer where marked; nothing changes in Dannan until he rul
   view is below.
 - **N8:** nothing Lugh links changed from 0.4.1 to 0.5.6 (identity, signing, Argon2, custody, config and encoding identical); `context.h`
   only gains. To know: a call is watched for progress only if it asks, and call deadlines follow injected time.
-- **Alpine:** passes on amd64 with no source change (2026-11-13: Alpine 3.24.2, musl, GCC 15.2.0, Alpine's own Boost, OpenSSL, yaml-cpp
-  and GoogleTest; 646 passed, 1 skipped as root, as on Debian). arm64 not shown: emulation misreports `posix_spawn`, so Dannan proposes
-  an Alpine step in hosted CI on both architectures. Raven runs on the arm64 build node (the maintainer's Alpine commit `aaac977` seals under its OTP key),
-  so arm64 is the proof Lugh waits for.
 - **N9:** **proposal to the maintainer:** patch releases keep the ABI (abidiff in CI), SONAME at major.minor, so any 0.5.x patch loads under one
   Dagda tag. Until then, pin the Dannan the Dagda tag was built on.
 - **N10, built (Dannan `feature/partition`, for 0.7, reviewed 2026-11-14):** `context.nodes().partition()` (majority, members, reachable, the unreachable ids, when), `watch_partition()` for its changes, and `retire(id)` for the operator. Lugh puts the reading in Status and each change in the audit log (P8.1). Review found joins during a split can make both sides read majority (a joiner raises its side's count and denominator together); Dannan to choose a fix and add the case. Earlier: one reading on `Nodes`, measured against the roster as last agreed (shrunk only by an operator's retire, never by absence),
@@ -107,7 +103,7 @@ across listeners; connection caps and idle and handshake deadlines per listener;
 
 Dannan agreed (2026-11-13): the proposal is only that layer, so Decided 9 holds; the nine points are its requirements. Limits
 after a credential are a shared object Lugh charges and the listener consults at accept. Ports come from an inherited socket when
-one is given (systemd), otherwise bound with `CAP_NET_BIND_SERVICE` (OpenRC, Raven).
+one is given (systemd), otherwise bound with `CAP_NET_BIND_SERVICE`.
 
 ### Dagda's design, and Lugh's review (2026-11-13)
 
@@ -146,7 +142,6 @@ member, so sign-in fails there until then.
   abidiff in CI); the partition reading (an even split is a minority; joins add to the agreed roster, only a retire removes); the
   shared listener below the protocols with Lugh's nine requirements; CPU admission in a class-aware pool. Dannan's order: the ABI
   promise, Macha's items, the partition reading, CPU admission, the listener.
-- **Alpine, not now**, for Dannan and Dagda alike; and Raven is dropped from all of Lugh's development for now (the maintainer, 2026-11-13).
 - **TOTP replay under a per-user Dagda lease** (the maintainer, 2026-11-13), not the owning node's node-local space: leases are then on the sign-in path, at sign-in rates (told to Dagda). Dagda: one lease space keyed by user; an acquire is one replicated commit, so it is in slice 0's measurement (50 a second over 10,000 keys, p50 and p99). Consequence, stated: during a split a node that cannot reach the lease space's replicas cannot grant the lease, so a TOTP sign-in on that side fails closed ("try again shortly") rather than risk a replay. Recovery codes are single-use too and take the same lease. Accepted by the maintainer (2026-11-13).
 
 ## Slice 0's first figures for Lugh's shape (Dagda, 2026-11-14, Mac, today's head path)
@@ -215,7 +210,6 @@ while anything is queued. From Lir's review, `close()` writes what `send()` queu
 
 ## Of both
 
-- **Alpine (musl, GCC 15)** for Raven: every project must build and pass there. Has either been built on Alpine?
 - **Evidence, not booleans**: each of the above shown by a named case, as the capability reports do for Macha.
 
 ## Order

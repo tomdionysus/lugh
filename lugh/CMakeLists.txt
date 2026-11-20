@@ -19,6 +19,8 @@ add_library(lugh_client STATIC
     client/jose.cpp
     client/key_source.cpp
     client/oauth_client.cpp
+    client/relying_party.cpp
+    client/scopes.cpp
     client/testing.cpp
     client/verifier.cpp
 )
@@ -41,6 +43,22 @@ target_link_libraries(lugh_client
 )
 
 lugh_flags(lugh_client)
+
+# lugh::client_topics: a broker's checks against TopicGrants, on Lir's MQTT codec, apart so
+# that a relying party which is no broker links no MQTT. Built wherever Lir is: the node does
+# not link it, so a package build without its tests needs no Lir.
+if (TARGET lir::mqtt)
+    add_library(lugh_client_topics STATIC
+        client/topics.cpp
+    )
+    add_library(lugh::client_topics ALIAS lugh_client_topics)
+    target_link_libraries(lugh_client_topics
+        PUBLIC
+            lugh_client
+            lir::mqtt
+    )
+    lugh_flags(lugh_client_topics)
+endif()
 
 if (NOT LUGH_BUILD_NODE)
     return()
@@ -103,7 +121,6 @@ add_library(lugh STATIC
     network/cidr.cpp
     scopes/grants.cpp
     scopes/scope.cpp
-    scopes/topic_scope.cpp
     node/config.cpp
     oauth/client_auth.cpp
     oauth/consents.cpp
@@ -160,3 +177,8 @@ target_precompile_headers(lugh
 )
 
 lugh_flags(lugh)
+
+# GCC 14 at -O2 reports Boost.Asio's own awaitable frame as freed by a mismatched delete, in the
+# one file whose coroutines it inlines so: a false report (Asio allocates and frees the frame
+# with its own pair). The frozen store goes at P8.8, and the exception with it.
+set_source_files_properties(store/sealed_store.cpp PROPERTIES COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU>:-Wno-mismatched-new-delete>")

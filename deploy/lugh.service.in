@@ -7,23 +7,24 @@
 
 [Unit]
 Description=Lugh
-Documentation=file:///usr/local/share/lugh/docs/architecture.md
+Documentation=file://@LUGH_DOCDIR@/architecture.md
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 
-# The config ships verbatim from the repository. Only the deployment facts are overridden
+# Written by CMake from deploy/lugh.service.in, its paths the install layout's. The config ships
+# verbatim from the repository. Only the deployment facts are overridden
 # here: the privileged port, the installed certificate pair, the state directory and the
 # installed dashboard (read once at start; root's, so read-only to this service).
-ExecStart=/usr/local/bin/lugh-node \
-    --config /usr/local/etc/lugh/config.yaml \
+ExecStart=@LUGH_BINARY@ \
+    --config @LUGH_CONFDIR@/config.yaml \
     --port 443 \
-    --tls-certificate /usr/local/etc/lugh/tls/cert.pem \
-    --tls-key /usr/local/etc/lugh/tls/key.pem \
+    --tls-certificate @LUGH_CONFDIR@/tls/cert.pem \
+    --tls-key @LUGH_CONFDIR@/tls/key.pem \
     --state-directory /var/lib/lugh \
-    --static-directory /usr/local/share/lugh/dashboard
+    --static-directory @LUGH_SHAREDIR@/dashboard
 
 # `systemctl reload lugh` (a certificate renewal's hook): the certificate files read again for
 # the next handshake on every listener; a reload that fails keeps the old ones and logs which file.

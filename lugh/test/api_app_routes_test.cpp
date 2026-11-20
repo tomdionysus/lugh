@@ -78,7 +78,11 @@ TEST_F(AppRoutesTest, RefusesWhatIsNotAnApplication) {
   for (const auto* body : {R"({"name":"x","kind":"desktop"})", R"({"name":"x","kind":"web","colour":"red"})", R"({"name":7})",
                            R"({"name":"x","kind":"web","grant_types":["password"]})", R"({"name":"x","kind":"web","grant_types":["implicit"]})",
                            R"({"name":"x","kind":"spa","grant_types":["authorization_code"],"redirect_uris":["http://a.example.com/cb"]})",
-                           R"({"name":"x","kind":"api","scope_prefix":"lugh"})", "[]"}) {
+                           R"({"name":"x","kind":"api","scope_prefix":"lugh"})", "[]",
+                           R"({"name":"x","kind":"service","client_authentication":"client_secret_basic","grant_types":["client_credentials"],
+                               "jwks":{"keys":[]}})",
+                           R"({"name":"x","kind":"service","client_authentication":"client_secret_basic","grant_types":["client_credentials"],
+                               "tls_client_auth_subject_dn":"CN=x"})"}) {
     const auto answer = rig.post("/api/v1/apps", body);
     EXPECT_EQ(answer.status, 400u) << body;
     EXPECT_EQ(answer.error(), "invalid") << body;
@@ -130,4 +134,66 @@ TEST_F(AppRoutesTest, ChangingApplicationsNeedsAppsWrite) {
   EXPECT_EQ(rig.request(verb::get, "/api/v1/apps", "", {}, "Bearer reader").status, 200u);
   EXPECT_EQ(rig.request(verb::post, "/api/v1/apps", kWeb, {}, "Bearer reader").status, 403u);
   EXPECT_EQ(rig.request(verb::get, "/api/v1/apps", "", {}, "").status, 401u);
+}
+
+// Every field an administrator may set reads back as set, and null clears what may be cleared.
+TEST_F(AppRoutesTest, EveryFieldReadsBackAsSet) {
+  const auto id = std::string(rig.post("/api/v1/apps", kWeb).body.at("client_id").as_string());
+  const auto path = "/api/v1/apps/" + id;
+  const auto changed = rig.request(verb::patch, path, R"({
+    "icon_uri": "https://admin.example.com/icon.png",
+    "home_uri": "https://admin.example.com/",
+    "max_age": 3600,
+    "opaque_access_tokens": true,
+    "sender_constraint": "dpop",
+    "lifetimes": {"access_token": 120, "id_token": 240, "refresh_idle": 86400, "refresh_absolute": 604800}
+  })",
+                                   {{field::if_match, "*"}});
+  ASSERT_EQ(changed.status, 200u) << changed.response->body();
+  const auto& body = changed.body;
+  EXPECT_EQ(body.at("icon_uri"), "https://admin.example.com/icon.png");
+  EXPECT_EQ(body.at("home_uri"), "https://admin.example.com/");
+  EXPECT_EQ(body.at("max_age"), 3600);
+  EXPECT_EQ(body.at("opaque_access_tokens"), true);
+  EXPECT_EQ(body.at("sender_constraint"), "dpop");
+  EXPECT_EQ(body.at("lifetimes"), (boost::json::object{{"access_token", 120}, {"id_token", 240}, {"refresh_idle", 86400}, {"refresh_absolute", 604800}}));
+
+  // The JWK Set and the level are cleared by null, the key set going with private_key_jwt.
+  const auto cleared = rig.request(
+      verb::patch, path,
+      R"({"acr": null, "client_authentication": "tls_client_auth", "tls_client_auth_thumbprint": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "jwks": null})",
+      {{field::if_match, "*"}});
+  ASSERT_EQ(cleared.status, 200u) << cleared.response->body();
+  EXPECT_TRUE(cleared.body.at("acr").is_null());
+  EXPECT_FALSE(cleared.body.as_object().contains("jwks"));
+}
+
+// tls_client_auth (RFC 8705 section 2.1): the client's certificate named by its subject or by
+// its thumbprint, each read back as given.
+TEST_F(AppRoutesTest, ACertificateClientIsNamedByItsSubjectOrThumbprint) {
+  const auto made = rig.post("/api/v1/apps", R"({"name":"hub","kind":"service","client_authentication":"tls_client_auth",
+    "tls_client_auth_subject_dn":"CN=hub,O=Example","grant_types":["client_credentials"],"client_scopes":["lugh:directory.read"]})");
+  ASSERT_EQ(made.status, 201u) << made.response->body();
+  EXPECT_EQ(made.body.at("tls_client_auth_subject_dn"), "CN=hub,O=Example");
+  const auto id = std::string(made.body.at("client_id").as_string());
+  const auto print = std::string(43, 'A');
+  const auto changed = rig.request(verb::patch, "/api/v1/apps/" + id, R"({"tls_client_auth_subject_dn":"","tls_client_auth_thumbprint":")" + print + R"("})",
+                                   {{field::if_match, "*"}});
+  ASSERT_EQ(changed.status, 200u) << changed.response->body();
+  EXPECT_EQ(changed.body.at("tls_client_auth_thumbprint"), boost::json::value(print));
+  EXPECT_FALSE(changed.body.as_object().contains("tls_client_auth_subject_dn"));
+}
+
+TEST_F(AppRoutesTest, AChangeThatIsNotAnApplicationIsRefused) {
+  const auto id = std::string(rig.post("/api/v1/apps", kWeb).body.at("client_id").as_string());
+  const auto path = "/api/v1/apps/" + id;
+  for (const auto* body : {"[]", R"({"jwks":"keys"})", R"({"lifetimes":{"forever":1}})", R"({"lifetimes":{"id_token":-1}})",
+                           R"({"sender_constraint":"carrier pigeon"})", R"({"max_age":"an hour"})"}) {
+    const auto answer = rig.request(verb::patch, path, body, {{field::if_match, "*"}});
+    EXPECT_EQ(answer.status, 400u) << body;
+    EXPECT_EQ(answer.error(), "invalid") << body;
+  }
+  const auto group = std::string(rig.post("/api/v1/groups", R"({"name":"staff"})").body.at("id").as_string());
+  EXPECT_EQ(rig.request(verb::put, "/api/v1/apps/" + id + "/roles/" + group, "{}").status, 400u) << "roles is required, empty to clear";
+  EXPECT_EQ(rig.get(path).header(field::etag), "\"1\"") << "nothing changed";
 }

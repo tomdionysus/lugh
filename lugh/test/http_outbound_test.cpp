@@ -64,7 +64,8 @@ class OutboundTest : public ::testing::Test {
   }
 
   TempDirectory dir;
-  TestCertificate pair;
+  // Named for localhost alone, so an address is another name.
+  TestCertificate pair{"DNS:localhost"};
   std::string roots;
   std::string port;
   net::io_context server_io;

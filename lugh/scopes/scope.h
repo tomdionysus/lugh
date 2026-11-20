@@ -13,12 +13,13 @@
 #include <string_view>
 #include <vector>
 
+#include "lugh/client/scopes.h"
 #include "lugh/core/outcome.h"
 
 // What a scope is (TODO/2026-11-04-oauth.md, "The scope model"). A scope is one word of
 // RFC 6749 section 3.3's grammar, and one of four kinds: Lugh's own (`lugh:<area>.<verb>`),
 // OIDC's names, an application's (`<prefix>:<name>`), or a topic scope for Lir
-// (`lir:<action>:<filter>`, lugh/scopes/topic_scope.h). The prefix, the text before the
+// (`lir:<action>:<filter>`, lugh/client/scopes.h). The prefix, the text before the
 // first ':', says which application a scope belongs to, so a token for one audience never
 // carries another's.
 namespace lugh::scopes {
@@ -50,13 +51,17 @@ std::vector<std::string> oidc_scopes();
 
 enum class Kind { lugh, oidc, application, topic };
 
-// The longest scope Lugh grants. A topic filter is the long one; a token over its own cap
-// is refused when issued, which is what keeps tokens small.
-inline constexpr std::size_t kMostScopeBytes = 1024;
-
-// One word of RFC 6749 section 3.3: printable ASCII, no space, '"' or '\\', not empty, at most
-// kMostScopeBytes.
-bool well_formed(std::string_view scope);
+// The scope word's grammar and Lir's topic scopes are lugh_client's (lugh/client/scopes.h),
+// so the node grants by the grammar relying parties check by.
+using client::decode_topic;
+using client::encode_topic;
+using client::kMostScopeBytes;
+using client::kTopicPrefix;
+using client::TopicAction;
+using client::TopicLevel;
+using client::TopicScope;
+using client::valid_filter;
+using client::well_formed;
 
 // The text before the first ':', or nothing for a scope without one (an OIDC name).
 std::optional<std::string_view> prefix_of(std::string_view scope);
@@ -67,7 +72,7 @@ bool valid_prefix(std::string_view prefix);
 
 // The kind of a scope Lugh may grant, or why not: refused for something malformed, a
 // Lugh scope Lugh does not have, a word that is neither an OIDC name nor prefixed, or a
-// topic scope that does not decode (topic_scope.h). Whether an application's prefix is
+// topic scope that does not decode (lugh/client/scopes.h). Whether an application's prefix is
 // registered is the applications' to say (O3), not this.
 Outcome<Kind> grantable(std::string_view scope);
 
