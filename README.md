@@ -239,6 +239,11 @@ hardening: fuzzing, the sandbox on real hosts, key rotation drills and a threat 
 Dagda (P8), then the rollout to each project. Every phase ends green under ASan with UBSan
 and under TSan.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Everyone taking part follows the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Licence
 
 Copyright (C) 2026 Tom Cully. Licensed under the GNU GPLv3; see `LICENSE`.
