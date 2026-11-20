@@ -64,8 +64,6 @@ the readers of `lugh/secrets` from Dagda's catalogue (slice 5). For the maintain
   - The 40-byte head-identity advert serves Lugh.
   Belongs to P8.1 and P8.3.
 - **The maintainer, at P13**: `docs/architecture.md` question 10 (TLS for T.O.M.S sites, or sign-in only at the hub).
-- **Not merged, by the maintainer's choice**: GitHub's `main` carries aaac977 (Alpine and OpenRC for Raven). Raven is dropped for now (the maintainer,
-  2026-11-13); when it returns, merge `origin/main` into `develop` (about ten conflicts), test, fast-forward `main`, push.
 
 ## Dependencies pinned
 

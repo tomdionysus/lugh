@@ -394,7 +394,7 @@ The conventions are the stack's, in `CONTRIBUTING.md`: C++20, `.clang-format` (G
 5. ~~**LDAP:** read-only bind and search, or writes?~~ Writable, mapped onto Lugh's model, with Password Modify for a user's own password (the maintainer, 2026-11-04, "level 2"; `TODO/2026-11-04-ldap.md`). Still open there: TLS 1.2 for old LDAP clients, and five smaller questions.
 6. ~~**Federation:**~~ Not planned (the maintainer, 2026-11-13): Lugh is the identity provider and defers to none.
 7. ~~**Certificates:**~~ Operator-supplied files only (the maintainer, 2026-11-13), renewed by whatever the host runs; Lugh holds no ACME account.
-8. ~~**Target platform:**~~ Linux with macOS for development; Raven (Alpine on the arm64 build node) is dropped from all development for now (the maintainer, 2026-11-13).
+8. ~~**Target platform:**~~ Linux (Debian, systemd), with macOS for development.
 9. ~~**Second factor for everyone:**~~ `mfa` is the default for every person, with `phr` (WebAuthn, P11) for infrastructure admin apps (the maintainer, 2026-11-13).
 10. **T.O.M.S sites** (to be decided at P13, the maintainer 2026-11-13): sites run plain HTTP over WireGuard. Do they get TLS for the OIDC redirect, or does T.O.M.S sign in through Lugh only at the hub?
 11. ~~**Break-glass accounts:**~~ One local break-glass account per project, local login off for everyone else (the maintainer, 2026-11-13).
