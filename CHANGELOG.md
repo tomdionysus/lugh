@@ -3,6 +3,17 @@
 What each release added, changed and fixed, and what a project of the stack can now take from Lugh in place of its own
 code. Newest first. The tags are on `main`.
 
+## Unreleased: onto Dannan 0.10.0
+
+### Changed
+
+- Built against Dannan 0.10.0 (a new minor, so the ABI changes: a dependant passing its own Dannan to lugh_client moves
+  to 0.10.0 with it), and Dagda 0.4.0 for the tests. The package depends on `libdannan0.10`.
+- A sanitizer build passes its sanitizer to Dannan as `DANNAN_SANITIZE`.
+- `TokenSource` retries with Dannan's `RetryPolicy::unbounded`, the policy it wrote by hand before; it behaves as before.
+- From Dannan's release notes, Lugh moves next onto Dannan's callback vocabulary, encodings, SHA-1, `RandomId`,
+  `Prefix` and `RecordingSink`, each in its own step (`TODO/ACTIVE.md`). The first changes lugh_client's public types.
+
 ## 0.2.0: packaged, and lugh_client for relying parties (2026-11-20)
 
 Built against Dannan 0.9.2, Dagda 0.3.2 (the tests only) and lir::mqtt at d36356d (the tests and `lugh::client_topics`
