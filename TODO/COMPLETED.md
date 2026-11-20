@@ -2,6 +2,29 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-20: Release 0.2.0
+
+The maintainer: "complete current work and cut stable releases". 0.2.0, a minor bump (a stale 0.1.0 tag predates main's
+reset). It holds:
+- P8.0 and the cluster rig;
+- lugh_client for relying parties, and lugh::client_topics;
+- real-LDAP-client tests;
+- the argument-order fix and the clean CI;
+- the coverage work;
+- the Debian package and the README rewritten for installing and using Lugh.
+Pins: Dannan 0.9.2, Dagda 0.3.2, lir::mqtt d36356d. The release gate ran on node-b, once each:
+- RelWithDebInfo suite: 893 of 893;
+- ASan with UBSan and TSan, with Dannan, Dagda and lir::mqtt built instrumented (checked with nm): 893 of 893 each, no
+  sanitizer report;
+- fuzzing: all 13 targets, 300 s each, between 1.8 and 7.4 million runs each, nothing found;
+- the package built with its tests inside (893 of 893), lintian clean, installed and purged in a fresh container.
+Found by the release build:
+- GCC 14 at -O2 misreads two string concatenations (now single literals);
+- it misreads Boost.Asio's coroutine frames in the frozen store (that one warning is off for that one file until P8.8);
+- a relying party fetching lugh_client alone fetched Lir too (now only the node's build does; checked: a client-only build
+  fetches Dannan and nothing else).
+README links checked: 18, all 200.
+
 ## 2026-11-20: The Debian package
 
 `lugh` for Debian trixie, by the stack's convention (Dannan's `debian/` the model; `docs/packaging.md`):

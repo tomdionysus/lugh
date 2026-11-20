@@ -4,6 +4,10 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here (2026-11-20)
 
+**0.2.0 is released** (tag on `main`; `COMPLETED.md`), against Dannan 0.9.2, Dagda 0.3.2 and lir::mqtt d36356d (Lir's 0.1.0
+was not yet on GitHub). Its .deb is built and tested but not in the apt repository: the maintainer said not yet. Next release:
+repin lir::mqtt to Lir's tag, then Dannan 0.10.0 and Dagda's next.
+
 **P8.0 is done and merged into `develop`** (2026-11-20, the maintainer's word "Start P8.0 now"; `COMPLETED.md`). Dagda 0.3.2 is fetched
 beside Dannan 0.9.2, and `ClusterRig` (`lugh/test/fixtures/cluster_rig.h`) runs Lugh's spaces on Dagda's in-process cluster.
 
