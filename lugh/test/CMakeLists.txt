@@ -40,6 +40,7 @@ add_executable(lugh_tests
     client_oauth_test.cpp
     client_testing_test.cpp
     client_verifier_test.cpp
+    cluster_rig_test.cpp
     core_async_test.cpp
     core_encoding_test.cpp
     core_completion_test.cpp
@@ -106,7 +107,8 @@ add_executable(lugh_tests
     webauthn_cose_test.cpp
 )
 
-target_link_libraries(lugh_tests PRIVATE lugh GTest::gtest_main)
+# Dagda's in-process cluster and neutral owner (P8): the rigs Lugh's components move onto.
+target_link_libraries(lugh_tests PRIVATE lugh dagda::test_fixtures GTest::gtest_main)
 if (LUGH_SANITIZE STREQUAL "address")
     target_sources(lugh_tests PRIVATE sanitizer_options.cpp)
 elseif (LUGH_SANITIZE STREQUAL "thread")

@@ -2,6 +2,16 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-20: P8.0, Dagda beside Dannan, and the cluster rig
+
+The maintainer's word to start P8, on Dagda 0.3.2 and Dannan 0.9.2. Dannan moves to 0.9.2, the patch Dagda 0.3.x builds on, declared with
+`OVERRIDE_FIND_PACKAGE` so Dagda's `find_package(dannan)` takes the fetched one; Dagda is fetched from the sibling checkout at
+its tag, for node builds only. `ClusterRig` opens `lugh/scope` and `lugh/secrets` on Dagda's in-process cluster, one node or
+three, the first founding and the rest joining, maintenance on as a deployed node runs it. Found on the way: `Heads::current()`
+reads nothing, so it answers an empty view after founding, a restart or a peer's commit (the rig reads with `HeadRead::local`);
+and a node that missed a commit is brought up to date by its maintenance, not by the change notice. Tests: 814, from 809 (five
+new, none removed). Debug, ASan (clang 19) and TSan (clang 19) on node-a, once each: green, no sanitizer report.
+
 ## 2026-11-17: the CBOR decoder's counts bounded
 
 The hour-long fuzz campaign (twelve targets an hour each, about 3.4 billion inputs, nothing found) ended with `fuzz_webauthn` out

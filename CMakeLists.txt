@@ -5,7 +5,7 @@
 # Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 #
 
-cmake_minimum_required(VERSION 3.23)
+cmake_minimum_required(VERSION 3.24)
 
 # The root README carries this version in italics under its title. Bump both.
 project(lugh
@@ -51,13 +51,18 @@ find_package(OpenSSL 3.0 REQUIRED)
 # Dannan, the network layer Lugh hosts on, at a release tag, or at a commit while Lugh needs
 # something not yet tagged: from the sibling checkout, cloned into the build tree, so
 # building Lugh never touches ../dannan. Linked as dannan::dannan, the name an installed
-# Dannan exports too (find_package(dannan 0.9 CONFIG)). Now: 0.9.1, the public listener and its outbound
+# Dannan exports too (find_package(dannan 0.9 CONFIG)). Now: 0.9.2, the public listener and its outbound
 # connector, the worker pool, RS256 verification for WebAuthn, the sign-in back-off (Backoff,
 # Lugh's until 0.8.5, shared with Kvasir), and agreement, which P8's registers are built on
-# (libdannan.so.0.9).
+# (libdannan.so.0.9); 0.9.2 is the patch Dagda 0.3.x is built on.
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_REF "0.9.1")
+set(LUGH_DANNAN_REF "0.9.2")
+# Dagda, the store P8 moves Lugh onto, the same way: a release tag of the sibling checkout,
+# cloned into the build tree. Only the node needs it; lugh_client never does. Now: 0.3.2, slice 1
+# (the change notice) and Space::covers.
+set(LUGH_DAGDA_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dagda" CACHE PATH "Dagda's repository")
+set(LUGH_DAGDA_REF "0.3.2")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -82,13 +87,22 @@ if (LUGH_BUILD_FUZZING)
 endif()
 # Fetched into another build (lugh_client in a relying party), Lugh takes the Dannan that build
 # already has: one process, one Dannan. The consumer's pin must be one Lugh's commit is tested on.
+include(FetchContent)
 if (NOT TARGET dannan::dannan)
-    include(FetchContent)
-    FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_REF}")
+    # OVERRIDE_FIND_PACKAGE: Dagda's find_package(dannan) takes this one, not an installed one.
+    FetchContent_Declare(dannan GIT_REPOSITORY "${LUGH_DANNAN_REPOSITORY}" GIT_TAG "${LUGH_DANNAN_REF}" OVERRIDE_FIND_PACKAGE)
     set(DANNAN_BUILD_TESTING OFF CACHE BOOL "" FORCE)
     # Lugh links the library; Dannan's tools (dannan-node, dannan-ca, ...) are neither built nor installed.
     set(DANNAN_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(dannan)
+endif()
+# Until Dagda has a switch for its tools (asked of Dagda, 2026-11-20), they are built, and an
+# install carries dagda-migrate with the library. EXCLUDE_FROM_ALL would leave dagda-migrate unbuilt
+# and fail the install.
+if (LUGH_BUILD_NODE AND NOT TARGET dagda::dagda)
+    FetchContent_Declare(dagda GIT_REPOSITORY "${LUGH_DAGDA_REPOSITORY}" GIT_TAG "${LUGH_DAGDA_REF}")
+    set(DAGDA_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(dagda)
 endif()
 
 # ---------------------------------------------------------------- hardening
