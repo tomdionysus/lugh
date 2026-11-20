@@ -3,16 +3,31 @@
 What each release added, changed and fixed, and what a project of the stack can now take from Lugh in place of its own
 code. Newest first. The tags are on `main`.
 
-## Unreleased: onto Dannan 0.10.0
+## 0.3.0: onto Dannan 0.10.0 (2026-11-20)
+
+A release for source dependants, who fetch Lugh with FetchContent. Its Debian package is built and published once
+Dagda 0.4.0, on Dannan 0.10.0, is in the apt repository: until then, a package build would test against Dagda 0.3.2's
+packages, which are built on Dannan 0.9.2.
+
+Repin: Dannan 0.9.2 to 0.10.0. From its release notes, Lugh takes `RetryPolicy::unbounded` now and moves onto the rest
+in order (below). Dagda stays at 0.3.2 for the tests and lir::mqtt at d36356d; neither changed anything in Lugh.
 
 ### Changed
 
-- Built against Dannan 0.10.0 (a new minor, so the ABI changes: a dependant passing its own Dannan to lugh_client moves
-  to 0.10.0 with it), and Dagda 0.4.0 for the tests. The package depends on `libdannan0.10`.
+- Built against Dannan 0.10.0. It is a new minor, so the ABI changes: a dependant passing its own Dannan to lugh_client
+  moves to 0.10.0 with it. Dagda 0.3.2 serves the tests: its request for Dannan 0.9.2 is met by the fetched 0.10.0, and
+  its code compiles unchanged. The package will depend on `libdannan0.10`.
 - A sanitizer build passes its sanitizer to Dannan as `DANNAN_SANITIZE`.
 - `TokenSource` retries with Dannan's `RetryPolicy::unbounded`, the policy it wrote by hand before; it behaves as before.
 - From Dannan's release notes, Lugh moves next onto Dannan's callback vocabulary, encodings, SHA-1, `RandomId`,
   `Prefix` and `RecordingSink`, each in its own step (`TODO/ACTIVE.md`). The first changes lugh_client's public types.
+- Coming in 0.4.0: four flags and variables take the stack's config names (Dannan's `docs/config.md`): `--address`,
+  `--port`, `--issuer` and `--mtls-port` become `--server-address`, `--server-port`, `--oauth-issuer` and
+  `--oauth-mtls-port`, and `LUGH_ADDRESS` and the rest likewise.
+
+### Fixed
+
+- CodeQL failed from 0.2.0 on: its workflow did not check out Lir beside Dannan and Dagda.
 
 ## 0.2.0: packaged, and lugh_client for relying parties (2026-11-20)
 
