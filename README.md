@@ -167,6 +167,8 @@ LDAP, `lugh_client`, and hardening: fuzzing, the sandbox, key rotation drills an
 ([docs/threat-model.md](docs/threat-model.md)). Each node is its own directory today; next, Lugh's
 state moves onto Dagda so a cluster's nodes share one directory.
 
+What each release changed: [CHANGELOG.md](CHANGELOG.md).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Everyone taking part follows the
