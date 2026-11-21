@@ -79,8 +79,8 @@ export async function startNode(): Promise<Node> {
 	const child = spawn(
 		binary,
 		[
-			"--tls-certificate", certificate, "--tls-key", key, "--state-directory", `${home}/state`, "--address", "127.0.0.1", "--port", String(port),
-			"--issuer", url, "--static-directory", resolve(here, "../build/client"),
+			"--tls-certificate", certificate, "--tls-key", key, "--state-directory", `${home}/state`, "--server-address", "127.0.0.1", "--server-port", String(port),
+			"--oauth-issuer", url, "--static-directory", resolve(here, "../build/client"),
 		],
 		{ env: cleanEnvironment({ CREDENTIALS_DIRECTORY: `${home}/credentials` }), stdio: ["ignore", "pipe", "pipe"] },
 	);

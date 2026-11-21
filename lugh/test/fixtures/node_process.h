@@ -310,17 +310,10 @@ class Serving {
  private:
   static std::vector<std::string> command_line(const Workspace& workspace, const std::filesystem::path& state, std::uint16_t port,
                                                const std::vector<std::string>& arguments) {
-    std::vector<std::string> out{kBinary,
-                                 "--tls-certificate",
-                                 workspace.certificate.string(),
-                                 "--tls-key",
-                                 workspace.key.string(),
-                                 "--state-directory",
-                                 state.string(),
-                                 "--address",
-                                 "127.0.0.1",
-                                 "--port",
-                                 std::to_string(port)};
+    std::vector<std::string> out{kBinary,         "--tls-certificate",    workspace.certificate.string(),
+                                 "--tls-key",     workspace.key.string(), "--state-directory",
+                                 state.string(),  "--server-address",     "127.0.0.1",
+                                 "--server-port", std::to_string(port)};
     out.insert(out.end(), arguments.begin(), arguments.end());
     return out;
   }

@@ -9,6 +9,21 @@ Repin, with this release's gate: Dannan 0.10.0 to 0.10.1, a patch with 0.10.0's 
 Lugh changes: its fixes are to a node with a schedule, which Lugh does not run yet (P8), and to `tools/ci.sh
 install-debs`, which Lugh does not use, and `MemoryStore::each_held` is P8's to take.
 
+### Changed (breaking)
+
+- Four flags and environment variables take the stack's config names (Dannan's `docs/config.md`: the flag and the
+  variable are made from the whole dotted key). The old names are gone, not aliased:
+
+  | Setting | Was | Now |
+  |---|---|---|
+  | `server.address` | `--address`, `LUGH_ADDRESS` | `--server-address`, `LUGH_SERVER_ADDRESS` |
+  | `server.port` | `--port`, `LUGH_PORT` | `--server-port`, `LUGH_SERVER_PORT` |
+  | `oauth.issuer` | `--issuer`, `LUGH_ISSUER` | `--oauth-issuer`, `LUGH_OAUTH_ISSUER` |
+  | `oauth.mtls_port` | `--mtls-port`, `LUGH_MTLS_PORT` | `--oauth-mtls-port`, `LUGH_OAUTH_MTLS_PORT` |
+
+  The YAML keys do not change. The packaged unit passes `--server-port 443`; a unit or script of your own that passes
+  an old flag must be changed, or the node refuses to start, naming the flag.
+
 ## 0.3.0: onto Dannan 0.10.0 (2026-11-20)
 
 A release for source dependants, who fetch Lugh with FetchContent. Its Debian package is built and published once

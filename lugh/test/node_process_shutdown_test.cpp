@@ -37,7 +37,7 @@ void stops_on(int number, const std::string& name) {
 
   const auto port = dannan::test::free_port();
   const auto log = workspace.path("serve.log");
-  dannan::test::ChildProcess node({kBinary, "--config", config.string(), "--address", "127.0.0.1", "--port", std::to_string(port)}, log,
+  dannan::test::ChildProcess node({kBinary, "--config", config.string(), "--server-address", "127.0.0.1", "--server-port", std::to_string(port)}, log,
                                   {.environment = environment(credentials), .input = std::nullopt, .terminal = false});
   ASSERT_TRUE(wait_until_up(node, port, std::chrono::seconds(10))) << read_file(log);
 

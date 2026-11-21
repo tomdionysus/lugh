@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.24)
 # The tag, `lugh-node --version`, the package and the README's Status carry this version. Bump
 # them together.
 project(lugh
-    VERSION 0.3.0
+    VERSION 0.4.0
     DESCRIPTION "Lugh"
     LANGUAGES CXX
 )
@@ -69,7 +69,7 @@ find_package(OpenSSL 3.0 REQUIRED)
 # next, and DANNAN_SANITIZE (libdannan.so.0.10).
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_REF "0.10.0")
+set(LUGH_DANNAN_REF "0.10.1")
 # Dagda, the store P8 moves Lugh onto, the same way: a release tag of the sibling checkout,
 # cloned into the build tree. Only the node needs it; lugh_client never does. Now: 0.3.2, slice 1
 # (the change notice) and Space::covers.

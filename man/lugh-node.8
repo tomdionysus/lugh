@@ -4,7 +4,7 @@
 .\" Copyright (C) 2026 Tom Cully <mail@tomcully.com>
 .\" Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
 .\"
-.TH LUGH-NODE 8 "2026-11-20" "Lugh 0.3.0" "System Administration"
+.TH LUGH-NODE 8 "2026-11-20" "Lugh 0.4.0" "System Administration"
 .SH NAME
 lugh-node \- the directory and single sign-on service
 .SH SYNOPSIS
@@ -59,11 +59,11 @@ log.level: all, debug, info, warn or error (LUGH_LOG_LEVEL).
 .BR \-\-log\-format " \fIformat\fR"
 log.format: text or json (LUGH_LOG_FORMAT).
 .TP
-.BR \-\-address " \fIaddress\fR"
-server.address: the IP address to listen on (LUGH_ADDRESS).
+.BR \-\-server\-address " \fIaddress\fR"
+server.address: the IP address to listen on (LUGH_SERVER_ADDRESS).
 .TP
-.BR \-\-port " \fIport\fR"
-server.port (LUGH_PORT).
+.BR \-\-server\-port " \fIport\fR"
+server.port (LUGH_SERVER_PORT).
 .TP
 .BR \-\-tls\-certificate " \fIpath\fR", " \-\-tls\-key " \fIpath\fR"
 tls.certificate and tls.key (LUGH_TLS_CERTIFICATE, LUGH_TLS_KEY).
@@ -74,12 +74,12 @@ state.directory: the keyring and the store (LUGH_STATE_DIRECTORY).
 .BR \-\-static\-directory " \fIpath\fR"
 static.directory: the dashboard's files (LUGH_STATIC_DIRECTORY).
 .TP
-.BR \-\-issuer " \fIurl\fR"
-oauth.issuer: the https URL clients reach Lugh at (LUGH_ISSUER).
+.BR \-\-oauth\-issuer " \fIurl\fR"
+oauth.issuer: the https URL clients reach Lugh at (LUGH_OAUTH_ISSUER).
 .TP
-.BR \-\-mtls\-port " \fIport\fR"
+.BR \-\-oauth\-mtls\-port " \fIport\fR"
 oauth.mtls_port: a listener that asks for client certificates, or 0 for none
-(LUGH_MTLS_PORT).
+(LUGH_OAUTH_MTLS_PORT).
 .SH FILES
 .TP
 .I /etc/lugh/config.yaml
