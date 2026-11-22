@@ -2,6 +2,16 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-22: @lugh/admin-ui's components for the four
+
+What the four asked for (`2026-11-20-dependants.md`, "Components asked of the package"): `DataTable` with
+`useCursorPages` (Lir, Mimir, Kvasir: cursor or page, sortable, filterable), `DetailPanel` (Lir, Mimir: labelled,
+copyable), `useEvents` (Lir, Mimir: SSE, reopened after a back-off doubling to its longest, with jitter, never given
+up), `StatusPill` (Louhi, Mimir: colour from the service's map), and `SignIn` (all four: by password, by Lugh with the
+code flow and PKCE S256, the code and verifier handed to the service's back end; RFC 7636's own vector checks the
+challenge). Not taken, each asked by one alone: Lir's payload viewer, Mimir's number tile and editor, Louhi's JSON
+view. The package 9 to 24 tests; ten runs, all passed, on node-b.
+
 ## 2026-11-22: @lugh/admin-ui, and the dashboard's tests in Vitest's browser mode
 
 The shared admin UI (`2026-11-20-dependants.md`), first two steps:

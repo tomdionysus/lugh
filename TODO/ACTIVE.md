@@ -19,8 +19,9 @@ the install test; the .deb stays on the node. Putting it in the apt repository w
 **Onto Dannan 0.10.x: done in 0.5.0** (`COMPLETED.md`, 2026-11-22). Not taken: `agree::MemoryStore`, `each_held` and
 the agreement teardown fixes, which are P8's; the ack levels.
 
-**Next, not blocked** (the maintainer, 2026-11-22): `@lugh/admin-ui` first, in Lugh's repository, then coverage, each
-landed on its own. P8 waits on Dannan and Dagda. Settled: the synchronous `Result` returns (the config loader, the
+**Next, not blocked** (the maintainer, 2026-11-22): `@lugh/admin-ui` is done (`COMPLETED.md`, 2026-11-22, on
+develop; the four told), and goes out in the next tag, which the four depend on by file path. Coverage next. P8 waits
+on Dannan and Dagda. Settled: the synchronous `Result` returns (the config loader, the
 record codecs) stay as they are, per CONTRIBUTING's errors rule: what happened returns its result.
 
 **At the move to Dannan 0.11.0** (Lir, 2026-11-22): Dannan carries Boost.JSON's compiled part in libdannan (its
@@ -29,13 +30,8 @@ linking both carries it twice. Lir's plugin (it links `lugh::client_topics`, fet
 that Lugh release before Lir moves its own pin to 0.11.0, so that release goes out soon after Dannan's tag.
 
 **Also waiting to be done, not blocked:**
-- `@lugh/admin-ui`: the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`,
-  "The shared admin UI"). npm, tested in GitHub CI, so no cluster time. In Lugh's repository, a workspace beside the
-  dashboard, which consumes it, versioned and tagged with Lugh. The dashboard's 5 Playwright tests move into Vitest's
-  browser mode, one runner for the package and its consumers (the maintainer, 2026-11-22), and asked again knowing
-  what it costs: they become component tests against a mocked API, and no real-node test of the dashboard remains
-  (the C++ process tests keep the sign-in pages). Neither the Vitest nor the Playwright tests run in GitHub CI yet;
-  the package's work adds them.
+- `@lugh/admin-ui`'s later asks, each from one consumer alone (theirs to build unless another asks): Lir's payload
+  viewer, Mimir's number tile with a sparkline and monospace editor, Louhi's read-only JSON view.
 - Coverage: the rest of the gap, file by file (`COMPLETED.md`, "Coverage closer to whole", lists what is left and why).
 
 **P8, the cluster on the stack** (`2026-11-13-p8-plan.md`). P8.0 is done. The rest waits on its dependencies, by the

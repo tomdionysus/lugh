@@ -5,6 +5,24 @@ code. Newest first. The tags are on `main`.
 
 ## Unreleased
 
+### Added
+
+- `@lugh/admin-ui` (`lugh/ui`): the stack's admin UI shell, which Lir, Louhi, Mimir and Kvasir take for their own
+  admin UIs, carved from Lugh's dashboard, which now consumes it (one npm workspace, `package.json` at the top). The
+  T.O.M.S styles; `AdminShell`, `NavBar`, `Messages`, `Confirm`; `ApiClient` (a base path, the CSRF token, 401 and
+  403 to the UI), `useApi`, `useLoad`, `useAct`; and what the four asked for: `DataTable` (sortable, filterable, paged
+  by cursor with `useCursorPages` or by page), `DetailPanel` (copyable fields), `StatusPill` (colour from the
+  service's map), `useEvents` (server-sent events, reopened after a back-off), and `SignIn` (by the service's password,
+  by Lugh with the code flow and PKCE, or both; the code goes to the service's back end). Source, compiled by the
+  consumer's Vite: depend on it by file path at a Lugh tag (`"@lugh/admin-ui": "file:<lugh>/lugh/ui"`), import
+  `@lugh/admin-ui/styles/reset.css` and `admin.css` once at the root, and bring React 19 and React Router 7.
+- The dashboard's and the package's tests run in Vitest's browser mode (Chromium), and in GitHub CI.
+
+### Changed
+
+- The dashboard's five Playwright tests on a real node became six component tests of the same story against Lugh's
+  API in memory (the maintainer); the sign-in pages are still tested on the real node by the process tests.
+
 Repin: lir::mqtt 0.1.0 to 0.2.0. From its release notes nothing in Lugh changes: the codec's API is 0.1.0's, its
 UTF-8 check is now Dannan's (the same Dannan 0.10.2 Lugh pins), and its new `lir::client` is for the principal events
 publisher, after P8.1. Its Debian package is now `liblir-mqtt0.2`. A Lugh fetched into a Lir build still takes that
