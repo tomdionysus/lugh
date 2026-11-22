@@ -1,14 +1,12 @@
 import { useState } from "react";
 
-import { useConfirm } from "../components/Confirm";
-import Messages from "../components/Messages";
+import { ApiError, Messages, useAct, useConfirm, useLoad, when } from "@lugh/admin-ui";
+
 import QrCode from "../components/QrCode";
-import useAct from "../hooks/useAct";
 import useAPI from "../hooks/useAPI";
-import useLoad from "../hooks/useLoad";
 import { useSigned } from "../layouts/AdminLayout";
-import { ApiError, type Factor, type TotpSetup } from "../lib/API";
-import { assurance, when } from "../lib/format";
+import type { Factor, TotpSetup } from "../lib/API";
+import { assurance } from "../lib/format";
 import { assert, available, register } from "../lib/webauthn";
 
 const MINIMUM_PASSWORD = 12;

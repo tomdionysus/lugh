@@ -1,0 +1,14 @@
+{
+  "name": "lugh-workspace",
+  "private": true,
+  "description": "Lugh's npm workspace: @lugh/admin-ui (lugh/ui), the stack's admin UI shell, and the dashboard that consumes it",
+  "workspaces": [
+    "lugh/ui",
+    "dashboard"
+  ],
+  "scripts": {
+    "build": "npm run build -w dashboard",
+    "typecheck": "npm run typecheck -w @lugh/admin-ui && npm run typecheck -w lugh-dashboard",
+    "test": "npm test -w @lugh/admin-ui && npm test -w lugh-dashboard"
+  }
+}

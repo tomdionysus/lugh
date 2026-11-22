@@ -20,9 +20,10 @@ endif
 %:
 	dh $@ --buildsystem=cmake --builddirectory=debian/build
 
-# The dashboard's build, which the install takes from dashboard/build/client.
+# The dashboard's build, which the install takes from dashboard/build/client: the npm workspace at
+# the top (the dashboard and @lugh/admin-ui).
 override_dh_auto_build:
-	cd dashboard && npm ci --no-audit --no-fund && npm run build
+	npm ci --no-audit --no-fund && npm run build
 	dh_auto_build
 
 # Warnings are not errors here: dpkg's flags (-O2 with its hardening) are not the ones the code is
@@ -53,4 +54,4 @@ override_dh_installsystemd:
 
 override_dh_auto_clean:
 	dh_auto_clean
-	rm -rf dashboard/build dashboard/node_modules dashboard/.react-router
+	rm -rf dashboard/build node_modules dashboard/node_modules lugh/ui/node_modules dashboard/.react-router

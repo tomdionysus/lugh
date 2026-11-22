@@ -144,7 +144,8 @@ tools/lugh_dev_cert.sh && tools/lugh_dev_init.sh
 CREDENTIALS_DIRECTORY=config/dev/credentials ./build/lugh-node --config config/config.yaml
 ```
 
-The dashboard is in `dashboard/` (`npm ci && npm run build`). [CONTRIBUTING.md](CONTRIBUTING.md)
+The dashboard is in `dashboard/`, on the stack's shared admin UI `@lugh/admin-ui` in `lugh/ui`;
+both are one npm workspace at the top (`npm ci && npm run build`). [CONTRIBUTING.md](CONTRIBUTING.md)
 has the conventions, the presets (`asan`, `tsan`, `fuzz`) and the tests.
 
 ## The stack

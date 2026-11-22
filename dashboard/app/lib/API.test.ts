@@ -84,7 +84,7 @@ describe("API", () => {
 	it("refuses an answer that is not Lugh's JSON", async () => {
 		const { api } = lugh({ "GET /api/v1/users": () => new Response("<html>a proxy's page</html>", { status: 502, headers: { "content-type": "text/html" } }) });
 		const refused = await api.users().catch(e => e);
-		expect(refused.code).toBe("not_lugh");
+		expect(refused.code).toBe("not_json");
 	});
 
 	it("reads each list from the member Lugh answers it in", async () => {

@@ -300,7 +300,8 @@ install(DIRECTORY docs/ DESTINATION "${LUGH_DOCDIR}")
 # The unit, its paths the layout's.
 configure_file(deploy/lugh.service.in "${PROJECT_BINARY_DIR}/lugh.service" @ONLY)
 
-# The dashboard (P7), built first with `npm ci && npm run build` in dashboard/. Vite fingerprints
+# The dashboard (P7), built first with `npm ci && npm run build` at the top (the npm workspace of
+# dashboard/ and @lugh/admin-ui in lugh/ui). Vite fingerprints
 # its assets, so the installed copy is removed before the new one goes in; root's, read-only to
 # the service. Turn LUGH_INSTALL_DASHBOARD off to install without one.
 option(LUGH_INSTALL_DASHBOARD "Install the dashboard's build" ON)
@@ -308,7 +309,7 @@ set(LUGH_DASHBOARD_BUILD "${CMAKE_CURRENT_SOURCE_DIR}/dashboard/build/client")
 if (LUGH_INSTALL_DASHBOARD)
     install(CODE "
         if (NOT EXISTS \"${LUGH_DASHBOARD_BUILD}/index.html\")
-            message(FATAL_ERROR \"The dashboard is not built: run 'npm ci && npm run build' in dashboard/ first, or configure with -DLUGH_INSTALL_DASHBOARD=OFF\")
+            message(FATAL_ERROR \"The dashboard is not built: run 'npm ci && npm run build' at the top of the tree first, or configure with -DLUGH_INSTALL_DASHBOARD=OFF\")
         endif()
         file(REMOVE_RECURSE \"\$ENV{DESTDIR}${LUGH_SHAREDIR}/dashboard\")
     ")

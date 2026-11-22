@@ -1,10 +1,10 @@
 import { useState } from "react";
 
-import { errorOf } from "../lib/API";
+import { errorOf } from "../lib/api";
 
 // A change made from a screen: its error or its confirmation, shown once, and then whatever must
 // be read again.
-export default function useAct(after?: () => Promise<unknown> | void) {
+export function useAct(after?: () => Promise<unknown> | void) {
 	const [error, setError] = useState("");
 	const [message, setMessage] = useState("");
 

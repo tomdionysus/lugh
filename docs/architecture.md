@@ -115,7 +115,7 @@ A separate, installable target with real public headers under `include/lugh/` an
 
 React 19, React Router 7 in SPA mode, Vite 7 and TypeScript 5.9, laid out like blackraven-admin's `dashboard/app/` (`screens/`, `components/` with paired `.css`, `layouts/`, `hooks/`, `lib/API.ts`). The look follows T.O.M.S:
 
-- Plain CSS on custom properties in `app.css`, with no component library: `--bg #0c0e10`, `--surface #15181c`, `--surface-raised #1c2026`, `--border #272c33`, `--text #e8ebee`, `--text-muted #939da7`, `--good #00cc44`, `--warn #ffb020`, `--bad #ff4d4d`, with `--radius 14px` and `--gap 16px`.
+- Plain CSS on custom properties in `@lugh/admin-ui`'s `styles/admin.css` (`lugh/ui`, the stack's shared admin UI, which the dashboard and the other services' admin UIs consume), with no component library: `--bg #0c0e10`, `--surface #15181c`, `--surface-raised #1c2026`, `--border #272c33`, `--text #e8ebee`, `--text-muted #939da7`, `--good #00cc44`, `--warn #ffb020`, `--bad #ff4d4d`, with `--radius 14px` and `--gap 16px`.
 - Self-hosted Roboto Variable for body text, one display face for the wordmark only, translucent cards, pill navigation, uppercase letter-spaced section labels, and `color-mix()` tints. Dark only.
 - An admin tool needs things T.O.M.S never had, mainly dense tables, forms, confirmation dialogs and diffs of policy changes. They are built in the same tokens and idioms.
 
@@ -123,7 +123,7 @@ The dashboard is same-origin with Lugh, so it does not hold a token in the brows
 
 The dashboard is served from disk, as in T.O.M.S and blackraven-admin (the maintainer, 2026-10-18):
 
-- `npm ci && npm run build` writes `dashboard/build/client/`, and `cmake --install` copies it to the layout's share directory (`/usr/share/lugh/dashboard` for the package, `/usr/local/share/lugh/dashboard` for a local install). Install fails with an explanation if the build is missing, and it deletes the old copy first, because Vite fingerprints its assets.
+- `npm ci && npm run build` at the top (the npm workspace of the dashboard and `@lugh/admin-ui`) writes `dashboard/build/client/`, and `cmake --install` copies it to the layout's share directory (`/usr/share/lugh/dashboard` for the package, `/usr/local/share/lugh/dashboard` for a local install). Install fails with an explanation if the build is missing, and it deletes the old copy first, because Vite fingerprints its assets.
 - The static handler serves only that directory, configured by `static.directory`. `/api`, `/oauth2`, `/signin`, `/.well-known`, `/health` and `/ready` are reserved, so a wrong path there gets a JSON 404, never `index.html`.
 - The installed copy is owned by root and read-only to the `lugh` user. `ProtectSystem=strict` makes it read-only to the service in any case.
 - The handler refuses symlinks, dot-files and any path that resolves outside the directory.

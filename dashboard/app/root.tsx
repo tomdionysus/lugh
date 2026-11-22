@@ -2,8 +2,9 @@ import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration }
 
 import type { Route } from "./+types/root";
 import "@fontsource-variable/roboto/wght.css";
-import "./reset.css";
-import "./app.css";
+import "@lugh/admin-ui/styles/reset.css";
+import "@lugh/admin-ui/styles/admin.css";
+import "./lugh.css";
 
 export function meta() {
 	return [{ title: "Lugh" }];

@@ -17,8 +17,9 @@ sudo apt build-dep ./
 tools/build-deb.sh
 ```
 
-The package is written to `build-deb/`. The dashboard is built inside the build (`npm ci`, which
-fetches its dependencies); the tests run inside it too, and `DEB_BUILD_OPTIONS=nocheck` skips them.
+The package is written to `build-deb/`. The dashboard is built inside the build (`npm ci` at the
+top, the npm workspace of the dashboard and `@lugh/admin-ui`, which fetches their dependencies);
+the tests run inside it too, and `DEB_BUILD_OPTIONS=nocheck` skips them.
 
 ## Dependencies
 

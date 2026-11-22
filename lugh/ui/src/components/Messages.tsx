@@ -1,5 +1,5 @@
 // What a screen says after a change: the error, or what was done.
-export default function Messages({ error, message, loadError }: { error?: string; message?: string; loadError?: string }) {
+export function Messages({ error, message, loadError }: { error?: string; message?: string; loadError?: string }) {
 	return (
 		<>
 			{loadError && <p className="form-error">{loadError}</p>}

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
-// A confirmation in the dashboard's own idiom, not the browser's: what will happen, said plainly,
-// and two buttons. Escape or the backdrop cancels.
-export default function Confirm({
+// A confirmation in the UI's own idiom, not the browser's: what will happen, said plainly, and two
+// buttons. Escape or the backdrop cancels.
+export function Confirm({
 	title,
 	children,
 	action,
