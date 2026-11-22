@@ -2,6 +2,20 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-22: Five TokenSource cases, from Louhi
+
+Louhi moves its node token onto `TokenSource` and deletes its own copy; five of its cases tested behaviour Lugh's suite
+did not, so they move here (`client_relying_party_test.cpp`), and Louhi deletes its copies. No code changed: TokenSource
+already behaved as each requires.
+- Never fetched again sooner than `kLeastRefresh`, to the millisecond, for a life of 3 s and of 0 s.
+- Discovery that fails (an error, a body not JSON, another issuer's document) is retried on the back-off, 5, 10 and
+  20 s, each to the millisecond, until it is the issuer's own; then the token is taken.
+- No scopes sends no `scope` parameter at all.
+- After `stop()`, a pending refresh asks nothing, and the token held is kept.
+- A TokenSource let go is freed though its timer is pending, and asks nothing.
+893 to 898 tests. The relying-party suite, now 17, ran 50 times each in debug (node-d), ASan (node-c) and TSan (node-a):
+all passed, no sanitizer report.
+
 ## 2026-11-20: Release 0.3.0
 
 The Dannan 0.10.0 move, released for source dependants (the coordinating session's option (a); the four config-name

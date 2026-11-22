@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <boost/asio/io_context.hpp>
 
 #include "dannan/test/fixtures/stepped_time.h"
@@ -220,6 +221,110 @@ TEST_F(RelyingPartyTest, NothingIsAskedAfterStopAndALateAnswerIsDropped) {
   settle();
   EXPECT_FALSE(source->current());
   advance(seconds(600));
+  EXPECT_EQ(https.sent_to(token_url(kSiteA)), 1U);
+}
+
+// A short life is not a busy loop: the next fetch waits at least kLeastRefresh, to the
+// millisecond, however short the life the issuer gave, none included.
+TEST_F(RelyingPartyTest, ATokenSourceIsNeverFetchedAgainSoonerThanTenSeconds) {
+  https.queue(token_url(kSiteA), 200, token_answer("first", 3));
+  https.queue(token_url(kSiteA), 200, token_answer("second", 0));
+  https.queue(token_url(kSiteA), 200, token_answer("third", 300));
+  source = TokenSource::make(https, io.get_executor(), credentials({kSiteA}), time, wall);
+  source->start();
+  ASSERT_TRUE(pump([&] { return source->current() == "first"; }));
+
+  for (const auto* next : {"second", "third"}) {
+    const auto asked = https.sent_to(token_url(kSiteA));
+    advance(TokenSource::kLeastRefresh - std::chrono::milliseconds(1));
+    EXPECT_EQ(https.sent_to(token_url(kSiteA)), asked) << next;
+    advance(std::chrono::milliseconds(1));
+    ASSERT_TRUE(pump([&] { return source->current() == next; })) << next;
+    EXPECT_EQ(https.sent_to(token_url(kSiteA)), asked + 1) << next;
+  }
+}
+
+// Discovery that fails in any way (an error, a body that is not JSON, another issuer's document)
+// is retried on the back-off until the issuer's own is read, and then the token is taken.
+TEST_F(RelyingPartyTest, ATokenSourceRetriesDiscoveryUntilItIsTheIssuers) {
+  https.answer(discovery_url(kSiteA), 500, {});
+  https.queue(token_url(kSiteA), 200, token_answer("at-last", 300));
+  source = TokenSource::make(https, io.get_executor(), credentials({kSiteA}), time, wall);
+  source->start();
+  ASSERT_TRUE(pump([&] { return source->status().failures == 1; }));
+
+  fake::FakeHttps::Response not_json;
+  not_json.status = 200;
+  not_json.content_type = "application/json";
+  not_json.body = "not json";
+  const auto retried_after = [&](seconds backoff, std::uint32_t failures) {
+    const auto asked = https.sent_to(discovery_url(kSiteA));
+    advance(backoff - std::chrono::milliseconds(1));
+    EXPECT_EQ(https.sent_to(discovery_url(kSiteA)), asked) << backoff.count();
+    advance(std::chrono::milliseconds(1));
+    if (failures) {
+      EXPECT_TRUE(pump([&] { return source->status().failures == failures; })) << backoff.count();
+    }
+  };
+  https.answer(discovery_url(kSiteA), not_json);
+  retried_after(seconds(5), 2);
+  https.answer(discovery_url(kSiteA), 200, discovery_of(kSiteB));
+  retried_after(seconds(10), 3);
+  EXPECT_FALSE(source->current());
+  https.answer(discovery_url(kSiteA), 200, discovery_of(kSiteA));
+  retried_after(seconds(20), 0);
+  ASSERT_TRUE(pump([&] { return source->current() == "at-last"; }));
+  EXPECT_EQ(https.sent_to(discovery_url(kSiteA)), 4U);
+  EXPECT_EQ(source->status().failures, 0U);
+}
+
+// No scopes given asks for every scope the client is granted (RFC 6749 section 3.3): the form
+// carries no scope parameter at all, not an empty one.
+TEST_F(RelyingPartyTest, ATokenSourceWithNoScopesSendsNoScope) {
+  https.queue(token_url(kSiteA), 200, token_answer("first", 300));
+  source = TokenSource::make(https, io.get_executor(), credentials({kSiteA}), time, wall);
+  source->start();
+  ASSERT_TRUE(pump([&] { return source->current() == "first"; }));
+
+  const auto sent = https.sent();
+  const auto request = std::find_if(sent.begin(), sent.end(), [](const auto& r) { return r.url == token_url(kSiteA); });
+  ASSERT_NE(request, sent.end());
+  std::vector<std::string> names;
+  for (std::size_t at = 0; at <= request->body.size();) {
+    const auto end = std::min(request->body.find('&', at), request->body.size());
+    const auto field = request->body.substr(at, end - at);
+    names.push_back(field.substr(0, field.find('=')));
+    at = end + 1;
+  }
+  EXPECT_NE(std::find(names.begin(), names.end(), "grant_type"), names.end()) << request->body;
+  EXPECT_EQ(std::find(names.begin(), names.end(), "scope"), names.end()) << request->body;
+}
+
+// stop() with a refresh due asks nothing, ever, and keeps the token it holds.
+TEST_F(RelyingPartyTest, AfterStopAPendingRefreshAsksNothing) {
+  https.queue(token_url(kSiteA), 200, token_answer("first", 300));
+  source = TokenSource::make(https, io.get_executor(), credentials({kSiteA}), time, wall);
+  source->start();
+  ASSERT_TRUE(pump([&] { return source->current() == "first"; }));
+  source->stop();
+  settle();
+  advance(std::chrono::hours(1));
+  EXPECT_EQ(https.sent_to(token_url(kSiteA)), 1U);
+  EXPECT_EQ(source->current(), "first");
+}
+
+// A token source let go is gone: the refresh timer still pending holds it only weakly, and
+// asks nothing when it comes due.
+TEST_F(RelyingPartyTest, ATokenSourceLetGoIsNotFetchedByATimerStillPending) {
+  https.queue(token_url(kSiteA), 200, token_answer("first", 300));
+  auto held = TokenSource::make(https, io.get_executor(), credentials({kSiteA}), time, wall);
+  held->start();
+  ASSERT_TRUE(pump([&] { return held->current() == "first"; }));
+  std::weak_ptr<TokenSource> weak = held;
+  held.reset();
+  settle();
+  EXPECT_TRUE(weak.expired()) << "a pending timer keeps nothing alive";
+  advance(std::chrono::hours(1));
   EXPECT_EQ(https.sent_to(token_url(kSiteA)), 1U);
 }
 
