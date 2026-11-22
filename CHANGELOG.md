@@ -25,6 +25,8 @@ code. Newest first. The tags are on `main`.
 - Lugh's encodings (hex, base32, base64, base64url, the UTF-8 checks) are Dannan's `encoding/base.h`, which was taken
   from Lugh's; the spellings each accepts are unchanged. A refresh token's secret part decodes straight into secure
   memory.
+- TOTP computes with Dannan's `identity::hmac_sha1`; Lugh's own HMAC-SHA-1 is gone. The codes are the same (RFC 4226
+  and RFC 6238's vectors).
 
 ## 0.4.0: the stack's config names (2026-11-22)
 
