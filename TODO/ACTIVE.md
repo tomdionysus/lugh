@@ -11,14 +11,17 @@ once a release's gate is green, without asking (the maintainer, 2026-11-22).
 The dependants (Louhi, Kvasir, Mimir, Lir's plugin) were told of each change before it landed and at each tag; none
 needs a change now.
 
-**The Debian package:** none since 0.2.0. It waits for Dagda's release on Dannan 0.10.x in the apt repository, because
-the package build runs the tests against Dagda's packages. Building it locally is fine; putting it in the apt repository
-waits on the maintainer's word.
+**The Debian package:** none in the apt repository since 0.2.0: that waits for Dagda's release on Dannan 0.10.x there,
+because the package build runs the tests against Dagda's packages. Meanwhile 0.5.0's is built locally on a build node
+(the maintainer, 2026-11-22), against Dannan 0.10.2's and Dagda's debs built from their tags there, then lintian and
+the install test; the .deb stays on the node. Putting it in the apt repository waits on the maintainer's word.
 
 **Onto Dannan 0.10.x: done in 0.5.0** (`COMPLETED.md`, 2026-11-22). Not taken: `agree::MemoryStore`, `each_held` and
 the agreement teardown fixes, which are P8's; the ack levels.
 
-**Next, not blocked:** `@lugh/admin-ui` (below), and coverage. P8 waits on Dannan and Dagda.
+**Next, not blocked** (the maintainer, 2026-11-22): `@lugh/admin-ui` first, in Lugh's repository, then coverage, each
+landed on its own. P8 waits on Dannan and Dagda. Settled: the synchronous `Result` returns (the config loader, the
+record codecs) stay as they are, per CONTRIBUTING's errors rule: what happened returns its result.
 
 **At the move to Dannan 0.11.0** (Lir, 2026-11-22): Dannan carries Boost.JSON's compiled part in libdannan (its
 `json.cpp`, `boost/json/src.hpp`), so `lugh/client/boost_json.cpp` goes and lugh_client takes Dannan's, or a process
@@ -27,8 +30,9 @@ that Lugh release before Lir moves its own pin to 0.11.0, so that release goes o
 
 **Also waiting to be done, not blocked:**
 - `@lugh/admin-ui`: the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`,
-  "The shared admin UI"). npm, tested in GitHub CI, so no cluster time. The dashboard's 5 Playwright tests move into
-  Vitest's browser mode, one runner for the package and its consumers (the maintainer, 2026-11-22).
+  "The shared admin UI"). npm, tested in GitHub CI, so no cluster time. In Lugh's repository, a workspace beside the
+  dashboard, which consumes it, versioned and tagged with Lugh. The dashboard's 5 Playwright tests move into Vitest's
+  browser mode, one runner for the package and its consumers (the maintainer, 2026-11-22).
 - Coverage: the rest of the gap, file by file (`COMPLETED.md`, "Coverage closer to whole", lists what is left and why).
 
 **P8, the cluster on the stack** (`2026-11-13-p8-plan.md`). P8.0 is done. The rest waits on its dependencies, by the
@@ -66,7 +70,6 @@ no-duplication rule:
 - **Hashing on `sched::WorkerPool`**, at P8.1. Until then the hashing queue is unbounded, a known gap.
 - **Socket activation** for the listeners, deferred: `inherited_socket` checks LISTEN_PID, which a test cannot set.
 - **lugh_client as an installed package** (`find_package(lugh)`, asked by Kvasir), with a `lugh-dev` Debian package.
-- Small: whether the remaining synchronous `Result` returns (config loader, record codecs) should throw.
 
 ## Dependencies pinned (develop)
 
