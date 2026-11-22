@@ -160,7 +160,7 @@ void HttpsClient::send(HttpsRequest request, Deadline deadline, Executor executo
       Completion<Answer>::start(deadline, executor, std::move(done), [] { return Answer::failure(Fault::timed_out, "no answer within the deadline"); });
   auto where = https_target(request.url);
   const auto port = where ? port_number(where->port) : std::nullopt;
-  if (!port) return answer->finish(Answer::failure(Fault::failed, "not an https URL"));
+  if (!port) return answer->finish(Answer::failure(Fault::invalid, "not an https URL"));
   // The methods Lugh's endpoints and API take, and nothing else.
   beast::http::verb method;
   if (request.method == "GET") {
@@ -174,7 +174,7 @@ void HttpsClient::send(HttpsRequest request, Deadline deadline, Executor executo
   } else if (request.method == "DELETE") {
     method = beast::http::verb::delete_;
   } else {
-    return answer->finish(Answer::failure(Fault::failed, "not a method this client sends: " + request.method));
+    return answer->finish(Answer::failure(Fault::invalid, "not a method this client sends: " + request.method));
   }
   dannan::listen::ClientTls tls;
   tls.trust = _trust;

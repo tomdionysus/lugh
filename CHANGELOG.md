@@ -16,6 +16,9 @@ code. Newest first. The tags are on `main`.
     endpoint that answered 503.
   - `timed_out`: no answer within the deadline; a write may yet land. Lugh's own deadlines answer it where they said
     `failed`.
+- `invalid` now also names a reply `lugh_client` could not read: an answer that is not JSON, or lacks what it must
+  carry (a token endpoint's `access_token`, an introspection's `active`, a device or pushed request's fields), where it
+  said `failed`; and a request the HTTPS client will not send (not an https URL, a method it does not send).
 - `lugh::undecided(fault)` says whether a request was left undecided (failed, unavailable or timed out), never refused.
 - The API answers `503 unavailable` and `503 timed_out` for the two (`docs/api.md`); `500 failed` keeps the store, the
   keys and the randomness.

@@ -122,6 +122,12 @@ TEST_F(ApiTest, TheApisErrorsAreLughsFaults) {
   const auto bare = fault_for(403, boost::json::value());
   EXPECT_EQ(bare.fault, lugh::Fault::refused);
   EXPECT_EQ(bare.message.rfind("status 403", 0), 0u);
+  HttpsResponse garbled;
+  garbled.status = 200;
+  garbled.content_type = "application/json";
+  garbled.body = "{not json";
+  https.answer(url("/users/u1"), garbled);
+  EXPECT_EQ(call(client, {"GET", "/users/u1", std::nullopt, ""}).fault, lugh::Fault::invalid) << "a reply that cannot be read";
   https.forget_answers();
   EXPECT_EQ(call(client, {"GET", "/users/u1", std::nullopt, ""}).fault, lugh::Fault::unavailable);
 }

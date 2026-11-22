@@ -72,7 +72,7 @@ void ApiClient::call(ApiCall call, Deadline deadline, Executor executor, Done<Ou
     if (!answered.value.body.empty()) {
       boost::system::error_code ec;
       out.body = boost::json::parse(answered.value.body, ec);
-      if (ec) return done(Answer::failure(Fault::failed, "the API's answer is not JSON"));
+      if (ec) return done(Answer::failure(Fault::invalid, "the API's answer is not JSON"));
     }
     if (out.status >= 200 && out.status < 300) return done(Answer::success(std::move(out)));
     std::string code;
