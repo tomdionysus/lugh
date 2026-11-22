@@ -2,6 +2,25 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-22: @lugh/admin-ui, and the dashboard's tests in Vitest's browser mode
+
+The shared admin UI (`2026-11-20-dependants.md`), first two steps:
+- `lugh/ui`, package `@lugh/admin-ui`: the T.O.M.S styles, `AdminShell` (the layout, with the brand, sections,
+  account, status, sign-out and notice a service gives it), `NavBar`, `Messages`, `Confirm`/`useConfirm`, `useLoad`,
+  `useAct`, `useApi`, `when`, and `ApiClient` (a base path; the CSRF token once the service gives it; 401 and a 403's
+  code to the UI). Source, compiled by the consumer's Vite. The dashboard consumes it as an npm workspace (the
+  `package.json` at the top), keeping Lugh's own: its API, sections, the passkey step-up, the QR code.
+- Every test of both in Vitest's browser mode, Chromium through Playwright, and in GitHub CI (the `admin-ui` job:
+  install, typecheck, test, build).
+Five tests deleted, why: the dashboard's Playwright tests on a real `lugh-node` (P7) moved into Vitest's browser mode
+(the maintainer, asked twice, the second time knowing the cost). They became six component tests of the same story
+(`dashboard/app/dashboard.test.tsx`) against Lugh's API in memory (`app/test/fakeLugh.ts`): root at phr with the
+sections they administer and no step-up; a person added and their enrolment link made; a group made and the person put
+in it; root's passkey on their account and the audit log, its chain intact; the sign-out form with the CSRF token; the
+step-up offered below phr. What no longer runs: the dashboard on a real node, Lugh's sign-in pages and a virtual
+passkey in Chromium; the process tests (`node_process_*`) keep the pages. Counts: the package 9, the dashboard 19
+(the story 6, the API 9, the library 3, the QR code 1); ten runs of both, all passed, on node-b.
+
 ## 2026-11-22: 0.5.0's Debian package, built locally
 
 The maintainer's word: built now, published later. On node-b, in `debian:trixie` containers (so nothing went on the

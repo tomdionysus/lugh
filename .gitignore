@@ -11,6 +11,8 @@
 node_modules/
 /dashboard/build/
 /dashboard/.react-router/
+# Vitest's browser mode keeps a screenshot of each failure.
+__screenshots__/
 
 # The development certificate and key that tools/lugh_dev_cert.sh writes.
 /config/dev/

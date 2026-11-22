@@ -99,6 +99,10 @@ jobs:
       - name: Install
         run: npm ci --no-audit --no-fund
 
+      # Vitest's browser mode runs the tests in Chromium, through Playwright.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
       - name: Typecheck
         run: npm run typecheck
 
