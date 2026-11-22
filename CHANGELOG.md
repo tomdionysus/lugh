@@ -27,6 +27,8 @@ code. Newest first. The tags are on `main`.
   memory.
 - TOTP computes with Dannan's `identity::hmac_sha1`; Lugh's own HMAC-SHA-1 is gone. The codes are the same (RFC 4226
   and RFC 6238's vectors).
+- A user's or group's id is Dannan's `identity::RandomId`, spelled as before: thirty-two lower-case hex digits. Client
+  ids, key ids and token ids keep their own spellings, which relying parties see.
 
 ## 0.4.0: the stack's config names (2026-11-22)
 

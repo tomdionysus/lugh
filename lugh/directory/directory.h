@@ -137,7 +137,10 @@ class Directory : public std::enable_shared_from_this<Directory> {
  private:
   using Then = std::function<void()>;
 
-  std::optional<std::string> _new_id();
+  // A user's or a group's id: Dannan's RandomId, sixteen random bytes. A store record's key
+  // stays its text, as P8's register map keys it.
+  struct RecordIdTag {};
+  static std::string _new_id();
   // The steps every operation is made of, each with the store's real answer, no deadline of
   // their own: the operation's Completion keeps that.
   void _user(std::string id, Executor executor, Done<Outcome<std::optional<User>>> done) const;
