@@ -20,7 +20,7 @@ Type=simple
 # installed dashboard (read once at start; root's, so read-only to this service).
 ExecStart=@LUGH_BINARY@ \
     --config @LUGH_CONFDIR@/config.yaml \
-    --port 443 \
+    --server-port 443 \
     --tls-certificate @LUGH_CONFDIR@/tls/cert.pem \
     --tls-key @LUGH_CONFDIR@/tls/key.pem \
     --state-directory /var/lib/lugh \

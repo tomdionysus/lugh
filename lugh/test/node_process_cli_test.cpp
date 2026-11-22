@@ -28,16 +28,11 @@ struct HeldPort {
 };
 
 std::vector<std::string> serving(const Workspace& workspace, const Initialised& node, std::uint16_t port) {
-  return {"--tls-certificate",
-          workspace.certificate.string(),
-          "--tls-key",
-          workspace.key.string(),
-          "--state-directory",
-          node.state.string(),
-          "--address",
-          "127.0.0.1",
-          "--port",
-          std::to_string(port)};
+  return {"--tls-certificate", workspace.certificate.string(),
+          "--tls-key",         workspace.key.string(),
+          "--state-directory", node.state.string(),
+          "--server-address",  "127.0.0.1",
+          "--server-port",     std::to_string(port)};
 }
 
 }  // namespace
@@ -79,7 +74,7 @@ TEST(NodeProcessCli, APortInUseStopsTheNode) {
   auto mtls = serving(workspace, node, dannan::test::free_port());
   const auto config = workspace.path("mtls.yaml");
   write_file(config, "tls: { client_ca: " + workspace.certificate.string() + " }\n");
-  mtls.insert(mtls.end(), {"--config", config.string(), "--mtls-port", std::to_string(held.port())});
+  mtls.insert(mtls.end(), {"--config", config.string(), "--oauth-mtls-port", std::to_string(held.port())});
   const auto mtls_ran = run(workspace, mtls, {.environment = environment(node.credentials), .input = std::nullopt});
   EXPECT_EQ(mtls_ran.status, 1) << mtls_ran.err;
 
@@ -99,7 +94,7 @@ TEST(NodeProcessCli, TheMtlsListenerServesTheSameRoutes) {
   const auto config = workspace.path("mtls.yaml");
   write_file(config, "tls: { client_ca: " + workspace.certificate.string() + " }\n");
   const auto mtls_port = dannan::test::free_port();
-  Serving serving(workspace, node.state, node.credentials, std::nullopt, {"--config", config.string(), "--mtls-port", std::to_string(mtls_port)});
+  Serving serving(workspace, node.state, node.credentials, std::nullopt, {"--config", config.string(), "--oauth-mtls-port", std::to_string(mtls_port)});
   ASSERT_TRUE(serving.up()) << serving.log();
   const auto health = request(mtls_port, boost::beast::http::verb::get, "/health");
   ASSERT_TRUE(health.has_value()) << serving.log();

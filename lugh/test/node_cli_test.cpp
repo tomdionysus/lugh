@@ -40,15 +40,16 @@ TEST(Cli, TheSwitches) {
 }
 
 TEST(Cli, EverythingElseGoesToTheReaderInOrder) {
-  const auto options = parse({"init", "--config", "/a.yaml", "--passphrase", "--port=8099", "--prot", "80"});
+  const auto options = parse({"init", "--config", "/a.yaml", "--passphrase", "--server-port=8099", "--prot", "80"});
   EXPECT_TRUE(options.passphrase);
-  EXPECT_EQ(options.arguments, (std::vector<std::string>{"init", "--config", "/a.yaml", "--port=8099", "--prot", "80"}));
+  EXPECT_EQ(options.arguments, (std::vector<std::string>{"init", "--config", "/a.yaml", "--server-port=8099", "--prot", "80"}));
 }
 
 TEST(Cli, UsageNamesEverySetting) {
   const auto text = lugh::cli::usage(lugh::ConfigLoader::describe());
-  for (const auto* flag : {"--config", "--address", "--port", "--tls-certificate", "--tls-key", "--log-level", "--log-format", "--state-directory",
-                           "--passphrase", "init", "systemd-creds", "LUGH_PORT", "server.port"}) {
+  for (const auto* flag :
+       {"--config", "--server-address", "--server-port", "--tls-certificate", "--tls-key", "--log-level", "--log-format", "--state-directory", "--oauth-issuer",
+        "--oauth-mtls-port", "--passphrase", "init", "systemd-creds", "LUGH_SERVER_PORT", "server.port"}) {
     EXPECT_NE(text.find(flag), std::string::npos) << flag;
   }
 }

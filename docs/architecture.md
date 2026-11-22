@@ -123,7 +123,7 @@ The dashboard is same-origin with Lugh, so it does not hold a token in the brows
 
 The dashboard is served from disk, as in T.O.M.S and blackraven-admin (the maintainer, 2026-10-18):
 
-- `npm ci && npm run build` writes `dashboard/build/client/`, and `cmake --install` copies it to `/usr/local/share/lugh/dashboard`. Install fails with an explanation if the build is missing, and it deletes the old copy first, because Vite fingerprints its assets.
+- `npm ci && npm run build` writes `dashboard/build/client/`, and `cmake --install` copies it to the layout's share directory (`/usr/share/lugh/dashboard` for the package, `/usr/local/share/lugh/dashboard` for a local install). Install fails with an explanation if the build is missing, and it deletes the old copy first, because Vite fingerprints its assets.
 - The static handler serves only that directory, configured by `static.directory`. `/api`, `/oauth2`, `/signin`, `/.well-known`, `/health` and `/ready` are reserved, so a wrong path there gets a JSON 404, never `index.html`.
 - The installed copy is owned by root and read-only to the `lugh` user. `ProtectSystem=strict` makes it read-only to the service in any case.
 - The handler refuses symlinks, dot-files and any path that resolves outside the directory.
@@ -380,10 +380,12 @@ YAML, layered as in blackraven-admin: `config.yaml`, then `secrets.yaml` beside 
 
 ## Install and the host
 
-`sudo cmake --install build-release` is the whole deployment, as in blackraven-admin:
+Two install layouts (`LUGH_INSTALL_LAYOUT`):
 
-- the binary goes to `/usr/local/bin/lugh`, the config to `/usr/local/etc/lugh`, the dashboard to `/usr/local/share/lugh/dashboard`, state to `/var/lib/lugh` (0700, owned by user `lugh`) and the unit to `/etc/systemd/system/lugh.service`;
-- `deploy/host-setup.sh` then creates the user and sets permissions.
+- **debian**, the Debian package (`docs/packaging.md`): `/usr/bin/lugh-node`, `/etc/lugh/config.yaml` as a conffile, the dashboard in `/usr/share/lugh/dashboard`, the unit in `/usr/lib/systemd/system`, and the `lugh` user from sysusers. The package's scripts set who may read what; the service is installed disabled.
+- **local**, `sudo cmake --install build-release` on a node built in place: the binary to `/usr/local/bin/lugh-node`, the config to `/usr/local/etc/lugh`, the dashboard to `/usr/local/share/lugh/dashboard` and the unit to `/etc/systemd/system/lugh.service`; `deploy/host-setup.sh` then creates the user, sets permissions and restarts the service.
+
+Either way state is in `/var/lib/lugh` (0700, owned by `lugh`), the one place the service writes.
 
 Docker is not used. A first node is initialised with `lugh init`, which creates the node's master key, the cluster CA (if open question 1 goes that way) and the first admin's one-time enrolment credential. Further nodes join with a one-time enrolment token and receive the DEKs over the join handshake.
 
@@ -410,7 +412,7 @@ The conventions are the stack's, in `CONTRIBUTING.md`: C++20, `.clang-format` (G
 
 ## Decided, 2026-10-18
 
-- **The dashboard is served from disk**, installed to `/usr/local/share/lugh/dashboard`, as in T.O.M.S and blackraven-admin. It is not compiled into the binary.
+- **The dashboard is served from disk**, installed to the layout's share directory, as in T.O.M.S and blackraven-admin. It is not compiled into the binary.
 - **Macha's code is copied into Lugh and adapted** (superseded 2026-11-03: Lugh uses Dannan and Dagda, which are written from their own designs, and copies nothing from Macha; `docs/provenance.md` records what P1 to P5 took).
 - **Every node holds every extent** (superseded 2026-11-04: `lugh/scope` is on every node, `lugh/secrets` on Lugh nodes, by Dagda's placement).
 - **No static credentials** (the maintainer, 2026-10-18). There is no bootstrap token, no key or password in a file or setting, and nothing else built in. At genesis, which is `lugh init` on a new cluster's first node, Lugh makes the user `root`, in the group `administrators`, with a randomly generated password. It shows that password once and stores only its hash. That password is the only credential a cluster is born with. Root's first sign-in goes from that password straight to enrolling a second factor, once. That is the one exception to "enrolment starts from a link" (`authn/genesis.h`). Every other administrator is made by root or by another administrator.

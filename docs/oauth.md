@@ -11,9 +11,9 @@ sign-in pages and the API alone.
 
 | Setting | Is |
 |---|---|
-| `oauth.issuer` (`--issuer`, `LUGH_ISSUER`) | The issuer, an https URL with no query, fragment or trailing `/` |
+| `oauth.issuer` (`--oauth-issuer`, `LUGH_OAUTH_ISSUER`) | The issuer, an https URL with no query, fragment or trailing `/` |
 | `oauth.allow_client_secrets` | Whether an application may use `client_secret_basic`. Off by default |
-| `oauth.mtls_port` (`--mtls-port`, `LUGH_MTLS_PORT`) | A second listener that asks for client certificates, for `tls_client_auth` and tokens bound to a certificate. 0 for none |
+| `oauth.mtls_port` (`--oauth-mtls-port`, `LUGH_OAUTH_MTLS_PORT`) | A second listener that asks for client certificates, for `tls_client_auth` and tokens bound to a certificate. 0 for none |
 | `tls.client_ca` | The CA a client certificate must chain to for its subject to name an application |
 | `oauth.outbound_ca` | The roots an application's certificate must chain to when Lugh posts to it; the system's when not set. It changes the roots, never whether they are checked |
 
