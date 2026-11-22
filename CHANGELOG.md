@@ -33,6 +33,8 @@ code. Newest first. The tags are on `main`.
   gone. What is accepted is unchanged: host bits set past the length were refused before and still are
   (`10.0.0.1/8` stops the start, naming the setting). New: an IPv4-mapped range (`::ffff:10.0.0.0/104`) is read as
   the IPv4 one it means.
+- `lugh-node` logs through Dannan's `status::SwappableSink`: stderr until the configuration is read, then the
+  configured sink, under one logger. The tests capture with Dannan's `test::RecordingSink`; Lugh's copy is gone.
 
 ## 0.4.0: the stack's config names (2026-11-22)
 

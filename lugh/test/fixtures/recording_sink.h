@@ -7,57 +7,8 @@
 
 #pragma once
 
-#include <mutex>
-#include <string>
-#include <string_view>
-#include <vector>
+#include "dannan/test/fixtures/recording_sink.h"
 
-#include "dannan/contract/thread_safety.h"
-#include "dannan/status/log.h"
-
-// A sink that keeps every record, at every level, for tests about what the node logs.
-class RecordingSink : public dannan::status::LogSink {
- public:
-  bool enabled(dannan::status::LogLevel) const noexcept override { return true; }
-
-  void write(dannan::status::LogLevel level, std::string_view scope, std::string_view message) override {
-    dannan::contract::Lock lock(_mutex);
-    _records.push_back({level, std::string(scope), std::string(message)});
-  }
-
-  // Every message, in order, optionally of one level only.
-  std::vector<std::string> lines() const {
-    dannan::contract::Lock lock(_mutex);
-    std::vector<std::string> found;
-    for (const auto& record : _records) found.push_back(record.message);
-    return found;
-  }
-
-  std::vector<std::string> lines(dannan::status::LogLevel level) const {
-    dannan::contract::Lock lock(_mutex);
-    std::vector<std::string> found;
-    for (const auto& record : _records) {
-      if (record.level == level) found.push_back(record.message);
-    }
-    return found;
-  }
-
-  // The whole log as one string, "scope: message" a line, for asking whether something was
-  // said at all.
-  std::string text() const {
-    dannan::contract::Lock lock(_mutex);
-    std::string all;
-    for (const auto& record : _records) all += record.scope + ": " + record.message + "\n";
-    return all;
-  }
-
- private:
-  struct Record {
-    dannan::status::LogLevel level;
-    std::string scope;
-    std::string message;
-  };
-
-  mutable dannan::contract::Mutex _mutex;
-  std::vector<Record> _records DANNAN_GUARDED_BY(_mutex);
-};
+// The stack's one capture sink, Dannan's, for tests about what the node logs: every record at
+// every level, with its scope.
+using RecordingSink = dannan::test::RecordingSink;
