@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.24)
 # The tag, `lugh-node --version`, the package and the README's Status carry this version. Bump
 # them together.
 project(lugh
-    VERSION 0.4.0
+    VERSION 0.5.0
     DESCRIPTION "Lugh"
     LANGUAGES CXX
 )

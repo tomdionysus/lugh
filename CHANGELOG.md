@@ -3,7 +3,11 @@
 What each release added, changed and fixed, and what a project of the stack can now take from Lugh in place of its own
 code. Newest first. The tags are on `main`.
 
-## Unreleased
+## 0.5.0: onto the rest of Dannan 0.10.x (2026-11-22)
+
+A release for source dependants, as 0.3.0 and 0.4.0 were. Lugh's own copies of what Dannan 0.10.x carries are gone:
+the callback vocabulary, the encodings, HMAC-SHA-1, random ids, address ranges, the sinks and durable directories, and
+the fuzz targets run through Dannan's harness. Still on Dannan 0.10.2, Dagda 0.3.2 for the tests and lir::mqtt 0.1.0.
 
 ### Changed (breaking, for `lugh_client`)
 
