@@ -32,7 +32,10 @@ that Lugh release before Lir moves its own pin to 0.11.0, so that release goes o
 - `@lugh/admin-ui`: the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`,
   "The shared admin UI"). npm, tested in GitHub CI, so no cluster time. In Lugh's repository, a workspace beside the
   dashboard, which consumes it, versioned and tagged with Lugh. The dashboard's 5 Playwright tests move into Vitest's
-  browser mode, one runner for the package and its consumers (the maintainer, 2026-11-22).
+  browser mode, one runner for the package and its consumers (the maintainer, 2026-11-22), and asked again knowing
+  what it costs: they become component tests against a mocked API, and no real-node test of the dashboard remains
+  (the C++ process tests keep the sign-in pages). Neither the Vitest nor the Playwright tests run in GitHub CI yet;
+  the package's work adds them.
 - Coverage: the rest of the gap, file by file (`COMPLETED.md`, "Coverage closer to whole", lists what is left and why).
 
 **P8, the cluster on the stack** (`2026-11-13-p8-plan.md`). P8.0 is done. The rest waits on its dependencies, by the
