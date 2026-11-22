@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-22: lir::mqtt 0.2.0
+
+The pin moved from 0.1.0 (Lir's word: the codec's API is unchanged). With installed dependencies, `find_package(lir)`
+now asks for the pin, not a version written out. Lir asked whether a Lir build that fetches Lugh gets one lir::mqtt:
+it does (`if NOT TARGET lir::mqtt` on both paths), told. Debug on node-a at 327ff16: 903 of 903 (a pin move: no
+sanitizers, the maintainer's rule).
+
 ## 2026-11-22: Release 0.5.0
 
 Onto the rest of Dannan 0.10.x: steps 1 to 7 (below), and two more in this release.

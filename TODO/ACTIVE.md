@@ -69,7 +69,7 @@ no-duplication rule:
 |---|---|---|
 | Dannan | 0.10.2 (`LUGH_DANNAN_REF`) | everything |
 | Dagda | 0.3.2 (`LUGH_DAGDA_REF`) | the tests only; the node does not link it until P8 |
-| Lir | 0.1.0 (`LUGH_LIR_REF`) | the tests and `lugh::client_topics` only |
+| Lir | 0.2.0 (`LUGH_LIR_REF`) | the tests and `lugh::client_topics` only |
 
 Each comes from the sibling checkout (`../dannan`, `../dagda`, `../lir`), cloned into the build tree. A relying party that
 fetches lugh_client alone (`LUGH_BUILD_NODE=OFF`) fetches Dannan and nothing else. The package build uses the installed
