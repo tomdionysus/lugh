@@ -372,7 +372,8 @@ void OAuthClient::revoke(const Secret& token, Deadline deadline, Executor execut
           boost::system::error_code ec;
           const auto parsed = boost::json::parse(answered.value.body, ec);
           if (ec || !parsed.is_object())
-            return done(Answer::failure(Fault::failed, "the revocation endpoint answered " + std::to_string(answered.value.status)));
+            return done(Answer::failure(answered.value.status == 503 ? Fault::unavailable : Fault::failed,
+                                        "the revocation endpoint answered " + std::to_string(answered.value.status)));
           done(Answer::failure(Fault::refused, string_claim(parsed.as_object(), "error").value_or("refused") + ": " +
                                                    string_claim(parsed.as_object(), "error_description").value_or("")));
         });

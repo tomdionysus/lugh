@@ -13,6 +13,7 @@ add_executable(lugh_tests
     api_audit_routes_test.cpp
     api_concurrency_test.cpp
     api_factor_routes_test.cpp
+    api_faults_test.cpp
     api_group_routes_test.cpp
     api_key_routes_test.cpp
     api_policy_routes_test.cpp

@@ -126,7 +126,7 @@ TEST_F(RelyingPartyTest, DiscoverRefusesAnotherIssuersDocumentAndFailsWhenUnreac
   discover(https, "https://nowhere.example", seconds(5), io.get_executor(), [&](lugh::Outcome<Endpoints> got) { unreachable = std::move(got); });
   ASSERT_TRUE(pump([&] { return other && unreachable; }));
   EXPECT_EQ(other->fault, lugh::Fault::refused);
-  EXPECT_EQ(unreachable->fault, lugh::Fault::failed);
+  EXPECT_EQ(unreachable->fault, lugh::Fault::unavailable);
 }
 
 TEST_F(RelyingPartyTest, ARelyingPartyVerifiesTokensForItsAudienceOnly) {

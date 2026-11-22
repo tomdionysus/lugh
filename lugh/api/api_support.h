@@ -40,12 +40,17 @@ inline void write_fault(const std::shared_ptr<http::HttpResponse>& response, Fau
       return http::write_error(response, http::status::bad_request, "invalid", message);
     case Fault::refused:
       return http::write_error(response, http::status::conflict, "refused", message);
+    // What failed is in the log, not the response.
+    case Fault::unavailable:
+      return http::write_error(response, http::status::service_unavailable, "unavailable", "a part of the directory could not be reached");
+    case Fault::timed_out:
+      // Past a deadline a change may yet land, so this does not say nothing changed.
+      return http::write_error(response, http::status::service_unavailable, "timed_out", "no answer within the deadline; a change may yet land");
     case Fault::none:
     case Fault::failed:
       break;
   }
-  // The store, the randomness or the deadline: what failed is in the log, not the response.
-  // Past a deadline a change may yet land, so this does not say nothing changed.
+  // The store, the keys or the randomness.
   http::write_error(response, http::status::internal_server_error, "failed", "the request could not be completed");
 }
 

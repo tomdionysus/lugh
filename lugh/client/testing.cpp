@@ -15,7 +15,7 @@
 namespace lugh::client::testing {
 
 void FakeHttps::send(HttpsRequest request, Deadline, Executor executor, Done<Outcome<Response>> done) {
-  auto answer = Outcome<Response>::failure(Fault::failed, "the connection failed");
+  auto answer = Outcome<Response>::failure(Fault::unavailable, "the connection failed");
   {
     dannan::contract::Lock lock(_mutex);
     _sent.push_back(request);

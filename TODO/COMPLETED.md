@@ -2,6 +2,28 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-22: The callback vocabulary is Dannan's
+
+The first step onto the rest of Dannan 0.10.x. `lugh::Fault`, `Outcome`, `Nothing`, `Completion`, `Done`, `Executor`,
+`Deadline` and `answer_now` are aliases of `dannan::contract`'s (`contract/completion.h`), so Lugh's names are the stack's
+types, not copies. The two kinds Lugh lacked are taken where they apply:
+- `timed_out`: Lugh's deadlines (`answering`, the HTTPS client, the audit log's walk, LDAP's bound-user read).
+- `unavailable`: a connection that failed, an issuer whose discovery could not be fetched, a 503 from the API or an
+  issuer's revocation endpoint. An answer past the body bound is `invalid`.
+- `lugh::undecided(fault)`, true for failed, unavailable and timed out: the authenticator and LDAP's bind take it where
+  they tested `failed`, so a timeout is never read as a refusal.
+- The API answers `503 unavailable` and `503 timed_out`; `lugh_client` reads both back, and `503 busy` as unavailable.
+The dependants (Louhi, Kvasir, Mimir, Lir) were told before it landed; none needs a change now.
+
+898 to 897 tests. Five `Completion` tests were removed, because they tested Dannan's `Completion`, `answer_now` and
+deadline, which Dannan's own `contract_completion_test.cpp` covers case for case. Added: two of the vocabulary (Lugh's
+names are Dannan's types; which faults are undecided) and two of the API's status and code per fault. Gate at 6d19904:
+debug on node-a, TSan on node-a, ASan on node-b, 897 of 897 each, no sanitizer report, dependencies instrumented; the new
+and changed suites (45 tests) 20 times each in all three, all passed.
+
+Left for its own step: a reply that could not be read (not JSON, a field missing) still answers `failed` in
+`lugh_client`, where Dannan's vocabulary says `invalid`.
+
 ## 2026-11-22: Release 0.4.0
 
 The stack's config names (`--server-address`, `--server-port`, `--oauth-issuer`, `--oauth-mtls-port` and their

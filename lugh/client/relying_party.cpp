@@ -44,7 +44,7 @@ std::string text_of(const dannan::identity::Secret& secret) {
 
 void discover(Https& https, const std::string& issuer, Deadline deadline, Executor executor, Done<Outcome<Endpoints>> done) {
   https.send(discovery_request(issuer), deadline, std::move(executor), [issuer, done = std::move(done)](Outcome<HttpsResponse> answered) {
-    if (!answered.ok()) return done(Outcome<Endpoints>::failure(Fault::failed, issuer + "'s discovery: " + answered.message));
+    if (!answered.ok()) return done(Outcome<Endpoints>::failure(answered.fault, issuer + "'s discovery: " + answered.message));
     auto document = json_answer(answered, issuer + "'s discovery");
     if (const auto* why = std::get_if<std::string>(&document)) return done(Outcome<Endpoints>::failure(Fault::refused, *why));
     auto endpoints = Endpoints::from_discovery(std::get<boost::json::object>(document), issuer);

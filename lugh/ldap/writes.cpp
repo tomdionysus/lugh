@@ -41,6 +41,8 @@ Result result_of(const Outcome<T>& outcome) {
     case Fault::refused:
       return refused(ResultCode::constraint_violation, outcome.message);
     case Fault::failed:
+    case Fault::unavailable:
+    case Fault::timed_out:
       break;
   }
   return refused(ResultCode::unavailable, "the request could not be completed, and may yet be made");

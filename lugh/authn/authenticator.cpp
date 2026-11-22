@@ -151,7 +151,7 @@ void Authenticator::totp(SignIn sign_in, std::string code, std::string source, D
 
   auto self = shared_from_this();
   _factors->totp_check(sign_in.user_id, std::move(code), kStepDeadline, executor, [=](Outcome<> checked) mutable {
-    if (checked.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
+    if (undecided(checked.fault)) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
     if (!checked.ok()) {
       self->_failed(account, address);
       return self->_code_refused(std::move(sign_in), source, "signin.totp.refused", executor, to(answer));
@@ -172,7 +172,7 @@ void Authenticator::recovery(SignIn sign_in, Secret code, std::string source, De
 
   auto self = shared_from_this();
   _factors->recovery_use(sign_in.user_id, std::move(code), kStepDeadline, executor, [=](Outcome<std::size_t> used) mutable {
-    if (used.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
+    if (undecided(used.fault)) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
     if (!used.ok()) {
       self->_failed(account, address);
       return self->_code_refused(std::move(sign_in), source, "signin.recovery.refused", executor, to(answer));
@@ -206,7 +206,7 @@ void Authenticator::redeem(Secret token, Secret password, std::string source, De
   };
 
   _links->peek(Secret(link->reveal()), kStepDeadline, executor, [=](Outcome<std::string> peeked) {
-    if (peeked.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed));
+    if (undecided(peeked.fault)) return answer->finish(Step::of(Step::Kind::failed));
     if (!peeked.ok()) return refused(std::nullopt, false);
     self->_directory->user(peeked.value, kStepDeadline, executor, [=](Outcome<std::optional<directory::User>> found) {
       if (!found.ok()) return answer->finish(Step::of(Step::Kind::failed));
@@ -218,7 +218,7 @@ void Authenticator::redeem(Secret token, Secret password, std::string source, De
 
       const audit::Actor actor{user->id, source};
       self->_links->spend(Secret(link->reveal()), actor, kStepDeadline, executor, [=](Outcome<std::string> spent) {
-        if (!spent.ok()) return answer->finish(Step::of(spent.fault == Fault::failed ? Step::Kind::failed : Step::Kind::refused));
+        if (!spent.ok()) return answer->finish(Step::of(undecided(spent.fault) ? Step::Kind::failed : Step::Kind::refused));
         self->_passwords->set(actor, *user, Secret(chosen->reveal()), kStepDeadline, executor, [=](Outcome<> set) {
           if (!set.ok()) {
             self->_logger.error("enrolment of " + user->id + ": the link is spent and the password was not set: " + set.message);
@@ -261,7 +261,7 @@ void Authenticator::enrol_confirm(SignIn sign_in, std::string factor_id, std::st
   const audit::Actor actor{sign_in.user_id, source};
   auto self = shared_from_this();
   _factors->totp_confirm(actor, sign_in.user_id, std::move(factor_id), std::move(code), kStepDeadline, executor, [=](Outcome<> confirmed) mutable {
-    if (confirmed.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
+    if (undecided(confirmed.fault)) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
     if (!confirmed.ok()) return self->_code_refused(std::move(sign_in), source, "enrolment.totp.refused", executor, to(answer));
     sign_in.amr.push_back("otp");
     self->_enrolled(std::move(sign_in), source, executor, to(answer));
@@ -290,7 +290,7 @@ void Authenticator::webauthn(SignIn sign_in, std::string credential_id, webauthn
   auto self = shared_from_this();
   _factors->webauthn_check(sign_in.user_id, std::move(expected), std::move(credential_id), std::move(client_data_json), std::move(authenticator_data),
                            std::move(signature), kStepDeadline, executor, [=](Outcome<webauthn::Asserted> checked) mutable {
-                             if (checked.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
+                             if (undecided(checked.fault)) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
                              if (!checked.ok()) {
                                self->_failed(account, address);
                                return self->_code_refused(std::move(sign_in), source, "signin.webauthn.refused", executor, to(answer));
@@ -326,7 +326,7 @@ void Authenticator::passkey(std::string user_handle, std::string credential_id, 
     if (!user->enrolled) return refused(user->id, "not enrolled");
     self->_factors->webauthn_check(user->id, expected, credential_id, client_data_json, authenticator_data, signature, kStepDeadline, executor,
                                    [=](Outcome<webauthn::Asserted> checked) {
-                                     if (checked.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed));
+                                     if (undecided(checked.fault)) return answer->finish(Step::of(Step::Kind::failed));
                                      if (!checked.ok()) return refused(user->id, checked.message);
                                      self->_accounts.succeeded(account);
                                      self->_policies->required(user->id, kStepDeadline, executor, [=](Outcome<Assurance> required) {
@@ -352,7 +352,7 @@ void Authenticator::enrol_webauthn(SignIn sign_in, std::string name, webauthn::E
   auto self = shared_from_this();
   _factors->webauthn_register(actor, sign_in.user_id, std::move(name), std::move(expected), std::move(client_data_json), std::move(attestation_object),
                               kStepDeadline, executor, [=](Outcome<FactorInfo> registered) mutable {
-                                if (registered.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
+                                if (undecided(registered.fault)) return answer->finish(Step::of(Step::Kind::failed, std::move(sign_in)));
                                 if (!registered.ok())
                                   return self->_code_refused(std::move(sign_in), source, "enrolment.webauthn.refused", executor, to(answer));
                                 push_webauthn_methods(sign_in, registered.value.backed_up, verified);
@@ -391,7 +391,7 @@ void Authenticator::reauthenticate_totp(std::string user_id, std::string code, s
       return self->_record("reauth.totp.refused", user_id, user_id, source, "a code where phr is required", executor,
                            [answer] { answer->finish(Step::of(Step::Kind::refused)); });
     self->_factors->totp_check(user_id, std::move(code), kStepDeadline, executor, [=](Outcome<> checked) {
-      if (checked.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed));
+      if (undecided(checked.fault)) return answer->finish(Step::of(Step::Kind::failed));
       if (!checked.ok()) {
         self->_failed(account, address);
         return self->_record("reauth.totp.refused", user_id, user_id, source, "wrong code", executor,
@@ -413,7 +413,7 @@ void Authenticator::reauthenticate_webauthn(std::string user_id, std::string cre
   auto self = shared_from_this();
   _factors->webauthn_check(user_id, std::move(expected), std::move(credential_id), std::move(client_data_json), std::move(authenticator_data),
                            std::move(signature), kStepDeadline, executor, [=](Outcome<webauthn::Asserted> checked) {
-                             if (checked.fault == Fault::failed) return answer->finish(Step::of(Step::Kind::failed));
+                             if (undecided(checked.fault)) return answer->finish(Step::of(Step::Kind::failed));
                              if (!checked.ok()) {
                                self->_failed(account, address);
                                return self->_record("reauth.webauthn.refused", user_id, user_id, source, checked.message, executor,

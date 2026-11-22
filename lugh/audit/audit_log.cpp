@@ -142,7 +142,7 @@ struct AuditLog::Walk {
 void AuditLog::entries(std::uint64_t from, std::size_t most, Deadline deadline, Executor executor, Done<Outcome<std::vector<Entry>>> done) const {
   auto walk = std::make_shared<Walk>();
   walk->page = Completion<Outcome<std::vector<Entry>>>::start(deadline, executor, std::move(done), [] {
-    return Outcome<std::vector<Entry>>::failure(Fault::failed, "the audit log was not read within the deadline");
+    return Outcome<std::vector<Entry>>::failure(Fault::timed_out, "the audit log was not read within the deadline");
   });
   walk->executor = std::move(executor);
   walk->sequence = std::max<std::uint64_t>(from, 1);

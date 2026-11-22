@@ -3,6 +3,23 @@
 What each release added, changed and fixed, and what a project of the stack can now take from Lugh in place of its own
 code. Newest first. The tags are on `main`.
 
+## Unreleased
+
+### Changed (breaking, for `lugh_client`)
+
+- The callback vocabulary is the stack's, Dannan's `contract/completion.h`: `lugh::Fault`, `Outcome`, `Nothing`,
+  `Completion`, `Done`, `Executor`, `Deadline` and `answer_now` are Dannan's own types now, not copies, so a dependant
+  passes one where the other is asked. Code that names `lugh::` keeps compiling. A `switch` over `Fault` must handle
+  two new kinds:
+  - `unavailable`: a server or a part of the directory could not be reached. `lugh_client` answers it where it said
+    `failed` for a connection that failed, an issuer whose discovery could not be fetched, and an API or revocation
+    endpoint that answered 503.
+  - `timed_out`: no answer within the deadline; a write may yet land. Lugh's own deadlines answer it where they said
+    `failed`.
+- `lugh::undecided(fault)` says whether a request was left undecided (failed, unavailable or timed out), never refused.
+- The API answers `503 unavailable` and `503 timed_out` for the two (`docs/api.md`); `500 failed` keeps the store, the
+  keys and the randomness.
+
 ## 0.4.0: the stack's config names (2026-11-22)
 
 A release for source dependants, as 0.3.0 was: its Debian package follows Dagda's release on Dannan 0.10.x in the apt

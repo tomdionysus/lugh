@@ -20,10 +20,10 @@
 // start one another.
 namespace lugh {
 
-// An operation's answer, Outcome-shaped: `failed` with `late` when the deadline passes.
+// An operation's answer, Outcome-shaped: `timed_out` with `late` when the deadline passes.
 template <typename T>
 std::shared_ptr<Completion<Outcome<T>>> answering(Deadline deadline, Executor executor, Done<Outcome<T>> done, const char* late) {
-  return Completion<Outcome<T>>::start(deadline, std::move(executor), std::move(done), [late] { return Outcome<T>::failure(Fault::failed, late); });
+  return Completion<Outcome<T>>::start(deadline, std::move(executor), std::move(done), [late] { return Outcome<T>::failure(Fault::timed_out, late); });
 }
 
 // A step's refusal, answered as the operation's own type.

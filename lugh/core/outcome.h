@@ -7,48 +7,22 @@
 
 #pragma once
 
-#include <string>
-#include <utility>
+#include "dannan/contract/completion.h"
 
+// The stack's one Fault and Outcome, Dannan's (contract/completion.h): a caller branches on a
+// Fault the same way whichever system of the stack answered. The API maps each to a status and
+// an error code (lugh/api/api_support.h), so a new kind is taken with care.
 namespace lugh {
 
-// Why a request about the directory or a credential was refused. Vocabulary for the API,
-// which maps each to a status and an error code (P5), so a new one is added with care.
-enum class Fault {
-  none,
-  // No such user, group, factor or link; or one that was removed.
-  not_found,
-  // Not at the version the caller expected.
-  conflict,
-  // A name or email another record already has.
-  duplicate,
-  // A value out of bounds or of the wrong shape. The message says what was wanted.
-  invalid,
-  // Understood, and not allowed: a disabled account, a spent link, the last factor.
-  refused,
-  // The store, the keys or the randomness failed; nothing was changed that is not undone.
-  failed,
-};
+using dannan::contract::Fault;
+using dannan::contract::fault_name;
+using dannan::contract::Nothing;
 
-struct Nothing {};
-
-// A Result with a reason a program can act on.
 template <typename T = Nothing>
-struct Outcome {
-  Fault fault = Fault::none;
-  std::string message;
-  T value{};
+using Outcome = dannan::contract::Outcome<T>;
 
-  bool ok() const { return fault == Fault::none; }
-
-  static Outcome success(T value = T{}) { return Outcome{Fault::none, {}, std::move(value)}; }
-  static Outcome failure(Fault fault, std::string message) { return Outcome{fault, std::move(message), T{}}; }
-
-  // The same refusal, for an Outcome of another type.
-  template <typename U>
-  static Outcome from(const Outcome<U>& other) {
-    return failure(other.fault, other.message);
-  }
-};
+// Neither yes nor no: the request was not decided, because something failed, could not be
+// reached or did not answer in time. A caller says so, never that it was refused.
+constexpr bool undecided(Fault fault) noexcept { return fault == Fault::failed || fault == Fault::unavailable || fault == Fault::timed_out; }
 
 }  // namespace lugh

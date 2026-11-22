@@ -8,8 +8,8 @@ What is being worked on now and what comes next. When an item ships, move it to 
 are tagged on `main`; `CHANGELOG.md` says what each holds. The merged `feature/*` branches were deleted, locally and on
 GitHub (the maintainer's word, 2026-11-22).
 
-The dependants (Louhi, Kvasir, Mimir, Lir's plugin) were told of the four renamed flags at the tag, and that the
-callback vocabulary (below) comes next.
+The dependants (Louhi, Kvasir, Mimir, Lir's plugin) were told of the four renamed flags at the tag, and of the callback
+vocabulary before it landed; none needs a change now. 0.5.0 gathers the Dannan 0.10.x steps below.
 
 **The Debian package:** none since 0.2.0. It waits for Dagda's release on Dannan 0.10.x in the apt repository, because
 the package build runs the tests against Dagda's packages. Building it locally is fine; putting it in the apt repository
@@ -17,9 +17,8 @@ waits on the maintainer's word.
 
 **After 0.4.0: onto the rest of Dannan 0.10.x** (from its release notes; one step each, as each changes behaviour or
 public API):
-1. **The callback vocabulary.** lugh_client's and the node's `Outcome`, `Fault` and `Completion` become Dannan's
-   `contract/completion.h` (one Fault kind for the stack; `unavailable` and `timed_out` answer 503). This changes
-   lugh_client's public types, so tell Louhi, Kvasir, Mimir and Lir first.
+1. ~~The callback vocabulary~~: done (`COMPLETED.md`, 2026-11-22). Its follow-up: a reply `lugh_client` could not read
+   (not JSON, a field missing) answers `invalid`, not `failed`, as Dannan's vocabulary says.
 2. **The encodings.** `lugh/core/encoding.h` becomes `encoding/base.h`; its exact decoders write a secret straight
    into a `SecureBuffer`.
 3. **TOTP's HMAC-SHA-1** becomes `identity::hmac_sha1`.

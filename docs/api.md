@@ -60,7 +60,12 @@ secret.
 | 428 | `if_match_required` | A write to something that exists, without `If-Match` |
 | 429 | `rate_limited` | Too many requests; see `Retry-After` |
 | 503 | `busy` | Every work thread is taken and the queue is full; see `Retry-After` |
-| 500 | `failed` | The store failed; nothing was changed |
+| 503 | `unavailable` | A part of the directory could not be reached; nothing was changed |
+| 503 | `timed_out` | No answer within the deadline; a change may yet land, so read before writing again |
+| 500 | `failed` | The store, the keys or the randomness failed; nothing was changed |
+
+The codes are the stack's one Fault (Dannan's `contract/completion.h`), which `lugh_client` hands
+its caller: `changed` is `conflict`, `busy` is `unavailable`, and 401 and 403 are `refused`.
 
 A field the route does not know is refused, not ignored, so a misspelling is never a silent
 no-op.

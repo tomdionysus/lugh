@@ -64,7 +64,7 @@ class Exchange : public std::enable_shared_from_this<Exchange> {
         if (written) return self->_failed("the request could not be written");
         self->_parser.body_limit(HttpsClient::kMostAnswerBytes);
         beast::http::async_read(*self->_stream, self->_buffer, self->_parser, [self](boost::system::error_code answered, std::size_t) {
-          if (answered == beast::http::error::body_limit) return self->_failed("the answer is larger than the bound");
+          if (answered == beast::http::error::body_limit) return self->_failed("the answer is larger than the bound", Fault::invalid);
           if (answered) return self->_failed("no answer came");
           self->_timer.cancel();
           self->_stream->close();
@@ -82,11 +82,11 @@ class Exchange : public std::enable_shared_from_this<Exchange> {
   }
 
  private:
-  // On the strand.
-  void _failed(const std::string& why) {
+  // On the strand. A server that cannot be reached, or does not answer, is unavailable.
+  void _failed(const std::string& why, Fault fault = Fault::unavailable) {
     _timer.cancel();
     if (_stream) _stream->abort();
-    _answer->finish(Outcome<HttpsResponse>::failure(Fault::failed, why));
+    _answer->finish(Outcome<HttpsResponse>::failure(fault, why));
   }
 
   net::strand<net::io_context::executor_type> _strand;
@@ -156,7 +156,8 @@ HttpsClient::~HttpsClient() = default;
 
 void HttpsClient::send(HttpsRequest request, Deadline deadline, Executor executor, Done<Outcome<HttpsResponse>> done) {
   using Answer = Outcome<HttpsResponse>;
-  auto answer = Completion<Answer>::start(deadline, executor, std::move(done), [] { return Answer::failure(Fault::failed, "no answer within the deadline"); });
+  auto answer =
+      Completion<Answer>::start(deadline, executor, std::move(done), [] { return Answer::failure(Fault::timed_out, "no answer within the deadline"); });
   auto where = https_target(request.url);
   const auto port = where ? port_number(where->port) : std::nullopt;
   if (!port) return answer->finish(Answer::failure(Fault::failed, "not an https URL"));

@@ -76,7 +76,7 @@ void Binder::bind(std::string name, Secret password, std::string address, Deadli
     // A waiting account costs nothing, and an app password is no way round the wait.
     if (self->_authenticator->waiting_for(user->id, "ldap:" + address)) return answer->finish(refused());
     self->_app_passwords->verify(user->id, std::move(*shaped), address, kStepDeadline, executor, [=](Outcome<authn::AppPasswordMatch> match) {
-      if (match.fault == Fault::failed) return answer->finish(unavailable());
+      if (undecided(match.fault)) return answer->finish(unavailable());
       if (!match.ok()) return self->_password(login, self->_tree->dn_of(*user), held, address, executor, answer);
       self->_grants->effective(user->id, kStepDeadline, executor, [=](Outcome<std::vector<std::string>> held_scopes) {
         if (!held_scopes.ok()) return answer->finish(unavailable());
@@ -113,8 +113,8 @@ void Binder::_password(std::string name, std::string dn, std::shared_ptr<Secret>
 
 void Binder::current(Bound bound, Deadline deadline, Executor executor, Done<Outcome<std::optional<Bound>>> done) const {
   using Answer = Outcome<std::optional<Bound>>;
-  auto answer =
-      Completion<Answer>::start(deadline, executor, std::move(done), [] { return Answer::failure(Fault::failed, "the bound user could not be read"); });
+  auto answer = Completion<Answer>::start(deadline, executor, std::move(done),
+                                          [] { return Answer::failure(Fault::timed_out, "the bound user could not be read in time"); });
   auto self = shared_from_this();
   const auto user_id = bound.caller.id;
   _directory->user(user_id, kStepDeadline, executor, [=](Outcome<std::optional<directory::User>> user) {
