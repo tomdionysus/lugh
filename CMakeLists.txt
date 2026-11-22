@@ -76,9 +76,9 @@ set(LUGH_DANNAN_REF "0.10.2")
 set(LUGH_DAGDA_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dagda" CACHE PATH "Dagda's repository")
 set(LUGH_DAGDA_REF "0.3.2")
 # Lir's MQTT codec, the stack's one, for lugh::client_topics: only lir::mqtt is built
-# (LIR_BUILD_SERVER off). Now: 0.1.0, the rewritten codec's first release.
+# (LIR_BUILD_SERVER off). Now: 0.2.0, on Dannan 0.10.2 like Lugh; its codec's API is 0.1.0's.
 set(LUGH_LIR_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../lir" CACHE STRING "Lir's repository, a path or a URL")
-set(LUGH_LIR_REF "0.1.0")
+set(LUGH_LIR_REF "0.2.0")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -117,7 +117,7 @@ if (LUGH_SYSTEM_DEPENDENCIES)
         find_package(dagda ${LUGH_DAGDA_REF} EXACT CONFIG REQUIRED)
     endif()
     if (LUGH_BUILD_TESTING AND NOT TARGET lir::mqtt)
-        find_package(lir 0.1.0 CONFIG QUIET)
+        find_package(lir ${LUGH_LIR_REF} CONFIG QUIET)
         if (NOT lir_FOUND)
             FetchContent_Declare(lir GIT_REPOSITORY "${LUGH_LIR_REPOSITORY}" GIT_TAG "${LUGH_LIR_REF}" EXCLUDE_FROM_ALL)
             set(LIR_BUILD_SERVER OFF CACHE BOOL "" FORCE)

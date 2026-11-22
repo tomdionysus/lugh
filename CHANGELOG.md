@@ -3,6 +3,13 @@
 What each release added, changed and fixed, and what a project of the stack can now take from Lugh in place of its own
 code. Newest first. The tags are on `main`.
 
+## Unreleased
+
+Repin: lir::mqtt 0.1.0 to 0.2.0. From its release notes nothing in Lugh changes: the codec's API is 0.1.0's, its
+UTF-8 check is now Dannan's (the same Dannan 0.10.2 Lugh pins), and its new `lir::client` is for the principal events
+publisher, after P8.1. Its Debian package is now `liblir-mqtt0.2`. A Lugh fetched into a Lir build still takes that
+build's `lir::mqtt` and fetches none of its own.
+
 ## 0.5.0: onto the rest of Dannan 0.10.x (2026-11-22)
 
 A release for source dependants, as 0.3.0 and 0.4.0 were. Lugh's own copies of what Dannan 0.10.x carries are gone:
