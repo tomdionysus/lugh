@@ -25,14 +25,17 @@ public API):
    and its seeds) in a library both the libFuzzer binaries and `lugh_tests` link, and `lugh_tests` runs
    `dannan::fuzz::smoke` over each, so every gate and CI exercises them. Their `std::abort()` findings become throws, so
    a finding fails a test, not the binary. Four targets (keyring, store log, records, envelope) have no corpus: their
-   seeds are made in code, as `seeds.sh` makes them now.
-Then 0.5.0: these steps, released together.
+   seeds are made in code, by the code that writes each format (the maintainer, 2026-11-22).
+9. **Step 1's follow-up**, before the release (the maintainer, 2026-11-22): a reply `lugh_client` could not read (not
+   JSON, a field missing) answers `invalid`, not `failed`, so 0.5.0 carries the whole Fault change at once.
+Then 0.5.0: these steps, released together; main and the tag are pushed once its gate is green (the maintainer,
+2026-11-22: main and tags may be pushed without asking).
 Not taken: `agree::MemoryStore`, `each_held` and the agreement teardown fixes, which are P8's; the ack levels.
 
 **Also waiting to be done, not blocked:**
 - `@lugh/admin-ui`: the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`,
-  "The shared admin UI"). npm, tested in GitHub CI, so no cluster time. Whether the dashboard's 5 Playwright tests move
-  into Vitest's browser mode is asked of the maintainer.
+  "The shared admin UI"). npm, tested in GitHub CI, so no cluster time. The dashboard's 5 Playwright tests move into
+  Vitest's browser mode, one runner for the package and its consumers (the maintainer, 2026-11-22).
 - Coverage: the rest of the gap, file by file (`COMPLETED.md`, "Coverage closer to whole", lists what is left and why).
 
 **P8, the cluster on the stack** (`2026-11-13-p8-plan.md`). P8.0 is done. The rest waits on its dependencies, by the
