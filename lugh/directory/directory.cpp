@@ -10,6 +10,7 @@
 #include <set>
 
 #include "dannan/identity/crypto.h"
+#include "dannan/identity/random_id.h"
 #include "lugh/core/awaited.h"
 #include "lugh/core/encoding.h"
 #include "lugh/core/steps.h"
@@ -18,7 +19,6 @@ namespace lugh::directory {
 
 namespace {
 
-constexpr std::size_t kIdBytes = 16;
 constexpr const char* kNameRule = "a name is 1 to 64 letters, digits, '.', '_' or '-', starting with a letter or digit";
 
 std::string join_change(const std::vector<std::string>& fields) {
@@ -105,10 +105,8 @@ void Directory::create_user(audit::Actor actor, NewUser fresh, Deadline deadline
   auto self = shared_from_this();
   _free(kUsers, "name", *name, "the name " + *name + " is taken", executor, refusing(answer), [=]() mutable {
     self->_free(kUsers, "email", email, "the address " + email + " is taken", executor, refusing(answer), [=]() mutable {
-      const auto id = self->_new_id();
-      if (!id) return answer->finish(Answer::failure(Fault::failed, "no randomness for an ID"));
       User user;
-      user.id = *id;
+      user.id = _new_id();
       user.kind = fresh.kind;
       user.enrolled = fresh.kind == Kind::service;
       user.name = *name;
@@ -329,10 +327,8 @@ void Directory::create_group(audit::Actor actor, std::string name, std::string d
 
   auto self = shared_from_this();
   _free(kGroups, "name", *normal, "the name " + *normal + " is taken", executor, refusing(answer), [=]() mutable {
-    const auto id = self->_new_id();
-    if (!id) return answer->finish(Answer::failure(Fault::failed, "no randomness for an ID"));
     Group group;
-    group.id = *id;
+    group.id = _new_id();
     group.name = *normal;
     group.description = description;
     group.created = group.updated = (self->_wall.unix_ms() / 1000);
@@ -609,11 +605,8 @@ void Directory::groups_of(std::string user_id, Deadline deadline, Executor execu
 
 // ---------------------------------------------------------------- steps
 
-std::optional<std::string> Directory::_new_id() {
-  const auto bytes = dannan::identity::random_bytes(kIdBytes);
-  if (bytes.empty()) return std::nullopt;
-  return dannan::identity::hex(bytes);
-}
+// Thirty-two hex digits, as every user and group id has always been spelled.
+std::string Directory::_new_id() { return dannan::identity::to_string(dannan::identity::RandomId<RecordIdTag>::random()); }
 
 void Directory::_user(std::string id, Executor executor, Done<Outcome<std::optional<User>>> done) const {
   using Answer = Outcome<std::optional<User>>;

@@ -59,7 +59,7 @@ class Receiver {
   explicit Receiver(const Workspace& workspace) {
     const auto certificates = std::make_shared<dannan::listen::Certificates>(dannan::listen::CertificatePaths{workspace.certificate, workspace.key, {}});
     _server = std::make_shared<lhttp::HttpServer>(std::make_shared<RecordingSink>(), _io, certificates,
-                                                  std::make_shared<lhttp::ClientAddress>(std::vector<lugh::network::Cidr>{}));
+                                                  std::make_shared<lhttp::ClientAddress>(std::vector<lugh::network::Prefix>{}));
     _server->middleware_add(
         [this](const lhttp::HttpRequest& request, const std::string&, std::shared_ptr<lhttp::HttpResponse> response, std::function<void(bool)> next) {
           {

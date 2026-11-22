@@ -53,7 +53,8 @@ struct Running {
         dannan::listen::CertificatePaths{dir.write("cert.pem", pair.certificate_pem), dir.write("key.pem", pair.key_pem),
                                          client_ca.empty() ? std::filesystem::path() : dir.write("ca.pem", client_ca)});
 
-    server = std::make_shared<HttpServer>(logger, io_context, certificates, std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}), limits, mtls);
+    server =
+        std::make_shared<HttpServer>(logger, io_context, certificates, std::make_shared<ClientAddress>(std::vector<lugh::network::Prefix>{}), limits, mtls);
     for (auto& middleware : middlewares) server->middleware_add(std::move(middleware));
 
     const auto listening = server->listen("127.0.0.1", 0);
@@ -239,7 +240,7 @@ TEST(HttpServer, ListeningOnNonsenseFails) {
   TempDirectory dir;
   net::io_context io_context;
   auto server = std::make_shared<HttpServer>(std::make_shared<RecordingSink>(), io_context, certificates_in(dir),
-                                             std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}));
+                                             std::make_shared<ClientAddress>(std::vector<lugh::network::Prefix>{}));
 
   const auto status = server->listen("not-an-address", 0);
   EXPECT_FALSE(status.ok);
@@ -252,7 +253,7 @@ TEST(HttpServer, APortInUseFails) {
   TempDirectory dir;
   net::io_context io_context;
   auto second = std::make_shared<HttpServer>(std::make_shared<RecordingSink>(), io_context, certificates_in(dir),
-                                             std::make_shared<ClientAddress>(std::vector<lugh::network::Cidr>{}));
+                                             std::make_shared<ClientAddress>(std::vector<lugh::network::Prefix>{}));
 
   EXPECT_FALSE(second->listen("127.0.0.1", running.server->port()).ok);
 }

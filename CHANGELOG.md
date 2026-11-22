@@ -3,6 +3,56 @@
 What each release added, changed and fixed, and what a project of the stack can now take from Lugh in place of its own
 code. Newest first. The tags are on `main`.
 
+## 0.5.0: onto the rest of Dannan 0.10.x (2026-11-22)
+
+A release for source dependants, as 0.3.0 and 0.4.0 were. Lugh's own copies of what Dannan 0.10.x carries are gone:
+the callback vocabulary, the encodings, HMAC-SHA-1, random ids, address ranges, the sinks and durable directories, and
+the fuzz targets run through Dannan's harness. Still on Dannan 0.10.2, Dagda 0.3.2 for the tests and lir::mqtt 0.1.0.
+
+### Changed (breaking, for `lugh_client`)
+
+- The callback vocabulary is the stack's, Dannan's `contract/completion.h`: `lugh::Fault`, `Outcome`, `Nothing`,
+  `Completion`, `Done`, `Executor`, `Deadline` and `answer_now` are Dannan's own types now, not copies, so a dependant
+  passes one where the other is asked. Code that names `lugh::` keeps compiling. A `switch` over `Fault` must handle
+  two new kinds:
+  - `unavailable`: a server or a part of the directory could not be reached. `lugh_client` answers it where it said
+    `failed` for a connection that failed, an issuer whose discovery could not be fetched, and an API or revocation
+    endpoint that answered 503.
+  - `timed_out`: no answer within the deadline; a write may yet land. Lugh's own deadlines answer it where they said
+    `failed`.
+- `invalid` now also names a reply `lugh_client` could not read: an answer that is not JSON, or lacks what it must
+  carry (a token endpoint's `access_token`, an introspection's `active`, a device or pushed request's fields), where it
+  said `failed`; and a request the HTTPS client will not send (not an https URL, a method it does not send).
+- `lugh::undecided(fault)` says whether a request was left undecided (failed, unavailable or timed out), never refused.
+- The API answers `503 unavailable` and `503 timed_out` for the two (`docs/api.md`); `500 failed` keeps the store, the
+  keys and the randomness.
+
+### Changed
+
+- Lugh's encodings (hex, base32, base64, base64url, the UTF-8 checks) are Dannan's `encoding/base.h`, which was taken
+  from Lugh's; the spellings each accepts are unchanged. A refresh token's secret part decodes straight into secure
+  memory.
+- TOTP computes with Dannan's `identity::hmac_sha1`; Lugh's own HMAC-SHA-1 is gone. The codes are the same (RFC 4226
+  and RFC 6238's vectors).
+- A user's or group's id is Dannan's `identity::RandomId`, spelled as before: thirty-two lower-case hex digits. Client
+  ids, key ids and token ids keep their own spellings, which relying parties see.
+- Address ranges (`proxy.trusted_networks`, an app password's networks) are Dannan's `listen::Prefix`; Lugh's `Cidr` is
+  gone. What is accepted is unchanged: host bits set past the length were refused before and still are
+  (`10.0.0.1/8` stops the start, naming the setting). New: an IPv4-mapped range (`::ffff:10.0.0.0/104`) is read as
+  the IPv4 one it means.
+- `lugh-node` logs through Dannan's `status::SwappableSink`: stderr until the configuration is read, then the
+  configured sink, under one logger. The tests capture with Dannan's `test::RecordingSink`; Lugh's copy is gone.
+- The 13 fuzz targets are registered with Dannan's harness (`dannan::testing`) and `lugh_tests` runs each through
+  `dannan::fuzz::smoke` (its seeds, thousands of mutations, random inputs), so every gate and CI exercises them, not
+  only a campaign. A finding is a throw that names it, not `std::abort()`. The keyring, store log, envelope and record
+  targets have seeds now, made by the formats' own writers.
+
+### Fixed
+
+- A state directory the node makes (`lugh-node init`, a keyring's directory) is synced into its parent, by Dannan's
+  `identity::durable_create_directories`: before, a power cut just after `init` could lose the directory with the
+  keyring in it. A directory synced after a removal is Dannan's `durable_sync_directory`.
+
 ## 0.4.0: the stack's config names (2026-11-22)
 
 A release for source dependants, as 0.3.0 was: its Debian package follows Dagda's release on Dannan 0.10.x in the apt

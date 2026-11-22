@@ -13,10 +13,13 @@
 #include <cstdlib>
 #include <string>
 
+#include "lugh/fuzz/target.h"
 #include "lugh/http/forms.h"
 #include "lugh/session/pre_sessions.h"
 
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
+namespace {
+
+int run(const std::uint8_t* data, std::size_t size) {
   using namespace lugh;
   const std::string input(reinterpret_cast<const char*>(data), size);
   const auto newline = input.find('\n');
@@ -25,7 +28,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
 
   if (const auto form = http::parse_form(body)) {
     for (const auto& [name, value] : *form) {
-      if (name.empty()) std::abort();
+      if (name.empty()) lugh::fuzz::finding("a form field with no name");
     }
   }
   http::HttpRequest request{http::verb::post, "/signin", 11};
@@ -37,3 +40,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   if (const auto handle = http::cookie(request, session::PreSessions::kCookie)) (void)session::PreSessions::handle_ok(*handle);
   return 0;
 }
+
+const dannan::fuzz::Registration registered(
+    "form", [](std::span<const std::uint8_t> input) { run(input.data(), input.size()); }, [] { return lugh::fuzz::corpus("form"); });
+
+}  // namespace

@@ -11,9 +11,12 @@
 #include <cstdint>
 #include <span>
 
+#include "lugh/fuzz/target.h"
 #include "lugh/ldap/filter.h"
 
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
+namespace {
+
+int run(const std::uint8_t* data, std::size_t size) {
   using namespace lugh::ldap;
   ber::Reader reader(std::span<const unsigned char>(data, size));
   const auto element = reader.next();
@@ -31,3 +34,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   (void)pinned_value(*filter, "uid");
   return 0;
 }
+
+const dannan::fuzz::Registration registered(
+    "filter", [](std::span<const std::uint8_t> input) { run(input.data(), input.size()); }, [] { return lugh::fuzz::corpus("filter"); });
+
+}  // namespace

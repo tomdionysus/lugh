@@ -45,8 +45,9 @@ class HttpsTest : public ::testing::Test {
     roots = dir.write("roots.pem", pair.certificate_pem).string();
     const auto certificates = std::make_shared<dannan::listen::Certificates>(
         dannan::listen::CertificatePaths{dir.write("cert.pem", pair.certificate_pem), dir.write("key.pem", pair.key_pem), {}});
-    server = std::make_shared<http::HttpServer>(std::make_shared<RecordingSink>(), server_io, certificates,
-                                                std::make_shared<http::ClientAddress>(std::vector<lugh::network::Cidr>{}), http::HttpPipeline::Limits{}, mtls);
+    server =
+        std::make_shared<http::HttpServer>(std::make_shared<RecordingSink>(), server_io, certificates,
+                                           std::make_shared<http::ClientAddress>(std::vector<lugh::network::Prefix>{}), http::HttpPipeline::Limits{}, mtls);
     server->middleware_add(
         [this](const http::HttpRequest& request, const std::string&, std::shared_ptr<http::HttpResponse> response, std::function<void(bool)> next) {
           std::lock_guard held(_mutex);

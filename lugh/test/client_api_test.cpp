@@ -116,11 +116,20 @@ TEST_F(ApiTest, TheApisErrorsAreLughsFaults) {
   EXPECT_EQ(fault_for(428, error("if_match_required", "send If-Match")).fault, lugh::Fault::invalid);
   EXPECT_EQ(fault_for(401, error("unauthorized", "no token")).fault, lugh::Fault::refused);
   EXPECT_EQ(fault_for(500, error("failed", "the request could not be completed")).fault, lugh::Fault::failed);
+  EXPECT_EQ(fault_for(503, error("unavailable", "a part of the directory could not be reached")).fault, lugh::Fault::unavailable);
+  EXPECT_EQ(fault_for(503, error("timed_out", "no answer within the deadline")).fault, lugh::Fault::timed_out);
+  EXPECT_EQ(fault_for(503, error("busy", "every work thread is taken")).fault, lugh::Fault::unavailable);
   const auto bare = fault_for(403, boost::json::value());
   EXPECT_EQ(bare.fault, lugh::Fault::refused);
   EXPECT_EQ(bare.message.rfind("status 403", 0), 0u);
+  HttpsResponse garbled;
+  garbled.status = 200;
+  garbled.content_type = "application/json";
+  garbled.body = "{not json";
+  https.answer(url("/users/u1"), garbled);
+  EXPECT_EQ(call(client, {"GET", "/users/u1", std::nullopt, ""}).fault, lugh::Fault::invalid) << "a reply that cannot be read";
   https.forget_answers();
-  EXPECT_EQ(call(client, {"GET", "/users/u1", std::nullopt, ""}).fault, lugh::Fault::failed);
+  EXPECT_EQ(call(client, {"GET", "/users/u1", std::nullopt, ""}).fault, lugh::Fault::unavailable);
 }
 
 // RFC 9449 section 7: a token bound to a key goes as `DPoP <token>`, with a proof for the method and

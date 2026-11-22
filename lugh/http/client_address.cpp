@@ -9,18 +9,7 @@
 
 namespace lugh::http {
 
-namespace {
-
-std::vector<dannan::listen::Prefix> prefixes_of(const std::vector<network::Cidr>& networks) {
-  std::vector<dannan::listen::Prefix> out;
-  out.reserve(networks.size());
-  for (const auto& network : networks) out.push_back(dannan::listen::Prefix{network.address(), static_cast<std::uint8_t>(network.prefix())});
-  return out;
-}
-
-}  // namespace
-
-ClientAddress::ClientAddress(std::vector<network::Cidr> trusted_proxies) : _trusted_proxies(prefixes_of(trusted_proxies)) {}
+ClientAddress::ClientAddress(std::vector<network::Prefix> trusted_proxies) : _trusted_proxies(std::move(trusted_proxies)) {}
 
 std::string ClientAddress::resolve(const boost::asio::ip::address& peer, const HttpRequest& request) const {
   // Several X-Forwarded-For lines are one list, in order (RFC 9110 5.3).

@@ -2,6 +2,60 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-22: Release 0.5.0
+
+Onto the rest of Dannan 0.10.x: steps 1 to 7 (below), and two more in this release.
+- Step 8: the 13 fuzz targets register with Dannan's harness (`lugh/fuzz/target.h`); `lugh_tests` runs each through
+  `dannan::fuzz::smoke`, and each libFuzzer binary is its target and one driver. Findings throw, naming themselves.
+  The keyring, store log, envelope and record targets have seeds, made by the formats' own writers (the maintainer).
+- Step 9: a reply `lugh_client` cannot read answers `invalid`, not `failed` (the maintainer: before the release).
+  The gate's first debug run caught eight of its messages with their first space lost by an edit; restored
+  (f538da6), and ASan and TSan run again on the fix.
+900 to 903 tests (the three fuzz smoke tests). Gate at f538da6: debug on node-b, ASan on node-c, TSan on node-a, 903
+of 903 each, no sanitizer report, dependencies instrumented; the new and changed suites (30 tests) 20 times each in all
+three; fuzzing on node-a, all 13 targets 300 s each, between 1.2 and 8.2 million runs each, nothing found. The tagged
+tree differs from f538da6 only in TODO, checked by diff.
+
+## 2026-11-22: Onto Dannan 0.10.x, steps 2 to 7
+
+Each step its own commit; `CHANGELOG.md` (Unreleased) says what each changes.
+- The encodings are Dannan's `encoding/base.h`, behind Lugh's names; a refresh token's secret decodes into secure memory.
+- TOTP's HMAC-SHA-1 is Dannan's `identity::hmac_sha1`; Lugh's own is gone.
+- A user's and group's id is Dannan's `RandomId`, spelled as before. Client ids, kids and jtis keep their own spellings,
+  which relying parties see; factor keys are not ids of that kind. The "no randomness" branches went with it:
+  `random_bytes` throws, so they could never run.
+- Address ranges are Dannan's `listen::Prefix`; Lugh's `Cidr` is gone, and `lugh::network::prefix_of` is the one helper
+  left (nothing, not a throw, for a value a person typed). Lugh's eleven range tests are kept, renamed, as Dannan's
+  suite does not cover lengths that split a byte or the families never meeting.
+- The node's late sink swap is Dannan's `SwappableSink`; the tests' capture sink is Dannan's `RecordingSink`.
+- A directory the node makes is synced into its parent (`durable_create_directories`), a fix: a power cut just after
+  `init` could lose the keyring's directory.
+897 to 900 tests (three of the encodings: secrets into secure memory, base64's exactness, printable within its bound).
+Gate at 0fcc559: debug on node-d, ASan on node-b, TSan on node-a, 900 of 900 each, no sanitizer report, dependencies
+instrumented; the new and changed suites (122 tests) 20 times each in all three, all passed.
+
+## 2026-11-22: The callback vocabulary is Dannan's
+
+The first step onto the rest of Dannan 0.10.x. `lugh::Fault`, `Outcome`, `Nothing`, `Completion`, `Done`, `Executor`,
+`Deadline` and `answer_now` are aliases of `dannan::contract`'s (`contract/completion.h`), so Lugh's names are the stack's
+types, not copies. The two kinds Lugh lacked are taken where they apply:
+- `timed_out`: Lugh's deadlines (`answering`, the HTTPS client, the audit log's walk, LDAP's bound-user read).
+- `unavailable`: a connection that failed, an issuer whose discovery could not be fetched, a 503 from the API or an
+  issuer's revocation endpoint. An answer past the body bound is `invalid`.
+- `lugh::undecided(fault)`, true for failed, unavailable and timed out: the authenticator and LDAP's bind take it where
+  they tested `failed`, so a timeout is never read as a refusal.
+- The API answers `503 unavailable` and `503 timed_out`; `lugh_client` reads both back, and `503 busy` as unavailable.
+The dependants (Louhi, Kvasir, Mimir, Lir) were told before it landed; none needs a change now.
+
+898 to 897 tests. Five `Completion` tests were removed, because they tested Dannan's `Completion`, `answer_now` and
+deadline, which Dannan's own `contract_completion_test.cpp` covers case for case. Added: two of the vocabulary (Lugh's
+names are Dannan's types; which faults are undecided) and two of the API's status and code per fault. Gate at 6d19904:
+debug on node-a, TSan on node-a, ASan on node-b, 897 of 897 each, no sanitizer report, dependencies instrumented; the new
+and changed suites (45 tests) 20 times each in all three, all passed.
+
+Left for its own step: a reply that could not be read (not JSON, a field missing) still answers `failed` in
+`lugh_client`, where Dannan's vocabulary says `invalid`.
+
 ## 2026-11-22: Release 0.4.0
 
 The stack's config names (`--server-address`, `--server-port`, `--oauth-issuer`, `--oauth-mtls-port` and their

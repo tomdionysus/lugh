@@ -140,7 +140,7 @@ void AppPasswords::create(audit::Actor actor, std::string user_id, std::string n
   scopes = scopes::united(std::move(scopes));
   if (networks.size() > kMostNetworks) return answer->finish(Answer::failure(Fault::invalid, "an app password names at most 16 networks"));
   for (auto& text : networks) {
-    const auto network = network::Cidr::parse(text);
+    const auto network = network::prefix_of(text);
     if (!network) return answer->finish(Answer::failure(Fault::invalid, "not a network: " + text));
     text = network->to_string();
   }
@@ -227,7 +227,7 @@ void AppPasswords::verify(std::string user_id, Secret password, std::string sour
         if (record.networks.empty()) return true;
         if (ec) return false;
         return std::any_of(record.networks.begin(), record.networks.end(), [&](const std::string& text) {
-          const auto network = network::Cidr::parse(text);
+          const auto network = network::prefix_of(text);
           return network && network->contains(address);
         });
       };

@@ -24,10 +24,13 @@ if (NOT LUGH_HAS_FUZZER)
 endif()
 
 # The top level instruments every object for a fuzz build (LUGH_FUZZ_SANITIZERS); a target links
-# libFuzzer's main besides.
+# libFuzzer's main besides. Each binary is one target, registered with Dannan's harness
+# (lugh/fuzz/target.h), and the driver that hands libFuzzer's input to it; lugh_tests runs the
+# same sources through dannan::fuzz::smoke.
 function(lugh_fuzz_target name source)
-    add_executable(${name} ${source})
-    target_link_libraries(${name} PRIVATE lugh)
+    add_executable(${name} ${source} driver.cpp target.cpp)
+    target_link_libraries(${name} PRIVATE lugh dannan::testing)
+    target_compile_definitions(${name} PRIVATE LUGH_FUZZ_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/corpus")
     target_compile_options(${name} PRIVATE ${LUGH_FUZZ_FLAGS} -fno-omit-frame-pointer)
     target_link_options(${name} PRIVATE ${LUGH_FUZZ_FLAGS})
     lugh_flags(${name})

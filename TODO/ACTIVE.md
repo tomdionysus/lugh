@@ -4,37 +4,26 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here (2026-11-22)
 
-**Releases.** 0.2.0 (packaged), 0.3.0 (Dannan 0.10.0) and 0.4.0 (the stack's config names, Dannan 0.10.2; source only)
-are tagged on `main`; `CHANGELOG.md` says what each holds. The merged `feature/*` branches were deleted, locally and on
-GitHub (the maintainer's word, 2026-11-22).
+**Releases.** 0.2.0 (packaged), 0.3.0 (Dannan 0.10.0), 0.4.0 (the stack's config names) and 0.5.0 (onto the rest of
+Dannan 0.10.x; source only) are tagged on `main`; `CHANGELOG.md` says what each holds. Main and release tags are pushed
+once a release's gate is green, without asking (the maintainer, 2026-11-22).
 
-**After 0.4.0's tag:** tell the dependants (Louhi, Kvasir, Mimir, Lir's plugin) that the four flags were renamed.
+The dependants (Louhi, Kvasir, Mimir, Lir's plugin) were told of each change before it landed and at each tag; none
+needs a change now.
 
 **The Debian package:** none since 0.2.0. It waits for Dagda's release on Dannan 0.10.x in the apt repository, because
 the package build runs the tests against Dagda's packages. Building it locally is fine; putting it in the apt repository
 waits on the maintainer's word.
 
-**After 0.4.0: onto the rest of Dannan 0.10.x** (from its release notes; one step each, as each changes behaviour or
-public API):
-1. **The callback vocabulary.** lugh_client's and the node's `Outcome`, `Fault` and `Completion` become Dannan's
-   `contract/completion.h` (one Fault kind for the stack; `unavailable` and `timed_out` answer 503). This changes
-   lugh_client's public types, so tell Louhi, Kvasir, Mimir and Lir first.
-2. **The encodings.** `lugh/core/encoding.h` becomes `encoding/base.h`; its exact decoders write a secret straight
-   into a `SecureBuffer`.
-3. **TOTP's HMAC-SHA-1** becomes `identity::hmac_sha1`.
-4. **Random IDs** become `identity::RandomId<Tag>`.
-5. **`network::Cidr`** becomes `listen::Prefix`, which refuses host bits set past the length (`10.0.0.1/8` would then
-   stop the start; say so in the release notes).
-6. **The tests' `RecordingSink`** becomes `test::RecordingSink`, and lugh_node's late logger swap becomes
-   `status::SwappableSink`.
-7. Directories made and synced by hand use `identity::durable_create_directories` and `durable_sync_directory`.
-8. The fuzz targets also run as smoke tests in `lugh_tests` through `dannan::testing`, so CI exercises each corpus.
-Not taken: `agree::MemoryStore`, `each_held` and the agreement teardown fixes, which are P8's; the ack levels.
+**Onto Dannan 0.10.x: done in 0.5.0** (`COMPLETED.md`, 2026-11-22). Not taken: `agree::MemoryStore`, `each_held` and
+the agreement teardown fixes, which are P8's; the ack levels.
+
+**Next, not blocked:** `@lugh/admin-ui` (below), and coverage. P8 waits on Dannan and Dagda.
 
 **Also waiting to be done, not blocked:**
 - `@lugh/admin-ui`: the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`,
-  "The shared admin UI"). npm, tested in GitHub CI, so no cluster time. Whether the dashboard's 5 Playwright tests move
-  into Vitest's browser mode is asked of the maintainer.
+  "The shared admin UI"). npm, tested in GitHub CI, so no cluster time. The dashboard's 5 Playwright tests move into
+  Vitest's browser mode, one runner for the package and its consumers (the maintainer, 2026-11-22).
 - Coverage: the rest of the gap, file by file (`COMPLETED.md`, "Coverage closer to whole", lists what is left and why).
 
 **P8, the cluster on the stack** (`2026-11-13-p8-plan.md`). P8.0 is done. The rest waits on its dependencies, by the

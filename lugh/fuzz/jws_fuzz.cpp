@@ -17,8 +17,11 @@
 #include <string_view>
 
 #include "lugh/client/jose.h"
+#include "lugh/fuzz/target.h"
 
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
+namespace {
+
+int run(const std::uint8_t* data, std::size_t size) {
   using namespace lugh::client;
   if (size == 0) return 0;
   const std::string_view text(reinterpret_cast<const char*>(data + 1), size - 1);
@@ -34,9 +37,14 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   if (ec || !parsed.is_object()) return 0;
   if (const auto jwk = from_jwk(parsed.as_object())) {
     const auto again = public_jwk(*jwk);
-    if (!again) std::abort();
+    if (!again) lugh::fuzz::finding("a JWK read that cannot be written");
     const auto back = from_jwk(*again);
-    if (!back || back->public_key != jwk->public_key) std::abort();
+    if (!back || back->public_key != jwk->public_key) lugh::fuzz::finding("a JWK written that does not read back as the same key");
   }
   return 0;
 }
+
+const dannan::fuzz::Registration registered(
+    "jws", [](std::span<const std::uint8_t> input) { run(input.data(), input.size()); }, [] { return lugh::fuzz::corpus("jws"); });
+
+}  // namespace

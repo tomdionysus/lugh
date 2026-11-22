@@ -393,19 +393,19 @@ class SlowStore : public lugh::store::Store {
 
 }  // namespace
 
-// A read past its deadline is a failure, never "no such user": a timeout must not pass for
+// A read past its deadline timed out, never "no such user": a timeout must not pass for
 // absence. A write past its deadline says it may yet be made.
-TEST_F(DirectoryTest, PastTheDeadlineIsAFailureNeverAbsence) {
+TEST_F(DirectoryTest, PastTheDeadlineIsATimeoutNeverAbsence) {
   auto slow = std::make_shared<lugh::directory::Directory>(rig.logger, std::make_shared<SlowStore>(rig.store), rig.wall, rig.audit);
   const auto read = wait_for<lugh::Outcome<std::optional<lugh::directory::User>>>(
       [&](lugh::Executor executor, auto done) { slow->user_by_name("alice", std::chrono::milliseconds(20), executor, done); });
-  EXPECT_EQ(read.fault, Fault::failed);
+  EXPECT_EQ(read.fault, Fault::timed_out);
   EXPECT_NE(read.message.find("deadline"), std::string::npos) << read.message;
 
   const auto made = wait_for<lugh::Outcome<lugh::directory::User>>([&](lugh::Executor executor, auto done) {
     slow->create_user(admin, {Kind::person, "alice", "", "", "", ""}, std::chrono::milliseconds(20), executor, done);
   });
-  EXPECT_EQ(made.fault, Fault::failed);
+  EXPECT_EQ(made.fault, Fault::timed_out);
   EXPECT_NE(made.message.find("may yet be made"), std::string::npos) << made.message;
 }
 

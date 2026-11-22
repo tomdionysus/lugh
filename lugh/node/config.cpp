@@ -171,9 +171,9 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
       return Result<Config>::failure("ldap.base_dn must be set for an LDAP listener: Lugh does not guess the top of the tree");
     }
     for (const auto& text : read.list("proxy.trusted_networks")) {
-      const auto cidr = network::Cidr::parse(text);
-      if (!cidr) return Result<Config>::failure(read.find("proxy.trusted_networks")->source + ": proxy.trusted_networks: not a network: " + text);
-      config.trusted_proxies.push_back(*cidr);
+      const auto prefix = network::prefix_of(text);
+      if (!prefix) return Result<Config>::failure(read.find("proxy.trusted_networks")->source + ": proxy.trusted_networks: not a network: " + text);
+      config.trusted_proxies.push_back(*prefix);
     }
 
     // No layer may leave these out when serving: there is nothing to fall back to.

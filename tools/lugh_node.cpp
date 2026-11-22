@@ -319,8 +319,8 @@ Task<Result<Services>> start(Ports ports, Config config) {
 
 int run(const cli::Options& options) {
   // What is said before the configuration is read goes to stderr at info; then the node's
-  // sink, at the configured level, takes over.
-  std::shared_ptr<dannan::status::LogSink> log = std::make_shared<dannan::status::ConsoleSink>();
+  // sink, at the configured level, takes over, under the same logger (Dannan's SwappableSink).
+  const auto log = std::make_shared<dannan::status::SwappableSink>(std::make_shared<dannan::status::ConsoleSink>());
   dannan::status::ScopedLogger logger(log, "node");
 
   // The node's clocks: Dannan's, one of each for the process.
@@ -340,8 +340,7 @@ int run(const cli::Options& options) {
   }
   const auto& config = loaded.value;
 
-  log = dannan::status::console_sink(config.log_format, config.log_level);
-  logger = dannan::status::ScopedLogger(log, "node");
+  log->set(dannan::status::console_sink(config.log_format, config.log_level));
   logger.info(config.path.empty() ? "No configuration file; defaults, environment and command line only" : "Configuration " + config.path);
 
   boost::asio::io_context io_context(static_cast<int>(config.threads));

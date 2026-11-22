@@ -253,9 +253,11 @@ TEST_F(OAuthTest, TheTokenEndpointsErrorIsARefusal) {
   EXPECT_EQ(refused.message, "invalid_grant: the code is not good");
 
   https.forget_answers();
-  EXPECT_EQ(redeem(oauth, request).fault, lugh::Fault::failed);
+  EXPECT_EQ(redeem(oauth, request).fault, lugh::Fault::unavailable);
   https.answer(token_url(), 200, {{"token_type", "Bearer"}});
-  EXPECT_EQ(redeem(oauth, request).message, "the token endpoint's answer has no access_token");
+  const auto unread = redeem(oauth, request);
+  EXPECT_EQ(unread.fault, lugh::Fault::invalid);
+  EXPECT_EQ(unread.message, "the token endpoint's answer has no access_token");
 }
 
 TEST_F(OAuthTest, PrivateKeyJwtSignsAFreshAssertionForTheTokenEndpoint) {
@@ -528,8 +530,10 @@ TEST_F(OAuthTest, IntrospectionSaysWhetherATokenIsActive) {
   const auto refused = wait<Introspection>([&](auto done) { oauth.introspect(token, std::chrono::seconds(5), io.get_executor(), done); });
   EXPECT_EQ(refused.fault, lugh::Fault::refused);
   EXPECT_EQ(refused.message.rfind("invalid_client:", 0), 0u);
+  // An answer that does not say whether the token is active could not be read: invalid, as
+  // Dannan's vocabulary names a reply it cannot read.
   https.answer(url, 200, {{"sub", "u1"}});
-  EXPECT_EQ(wait<Introspection>([&](auto done) { oauth.introspect(token, std::chrono::seconds(5), io.get_executor(), done); }).fault, lugh::Fault::failed);
+  EXPECT_EQ(wait<Introspection>([&](auto done) { oauth.introspect(token, std::chrono::seconds(5), io.get_executor(), done); }).fault, lugh::Fault::invalid);
 }
 
 // RFC 7009: the token sent; the issuer's 200 is the answer whether it knew the token or not.
@@ -548,7 +552,7 @@ TEST_F(OAuthTest, ATokenIsRevoked) {
   EXPECT_EQ(refused.fault, lugh::Fault::refused);
   EXPECT_EQ(refused.message, "invalid_client: no such client");
   https.forget_answers();
-  EXPECT_EQ(wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); }).fault, lugh::Fault::failed);
+  EXPECT_EQ(wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); }).fault, lugh::Fault::unavailable);
 }
 
 // An issuer that does not publish an endpoint is not sent the request that needs it: the caller
@@ -582,7 +586,8 @@ TEST_F(OAuthTest, TheDeviceEndpointsErrorIsARefusal) {
   EXPECT_EQ(refused.message, "invalid_scope: not for this client");
 }
 
-// An answer that is no OAuth error (a proxy's page, say) is a failure, not a refusal.
+// An answer that is no OAuth error (a proxy's page, say) is not a refusal: a 503 says the
+// issuer is unavailable, anything else that it failed.
 TEST_F(OAuthTest, ARevocationAnsweredWithSomethingElseFailed) {
   auto oauth = client(public_client());
   HttpsResponse busy;
@@ -592,8 +597,11 @@ TEST_F(OAuthTest, ARevocationAnsweredWithSomethingElseFailed) {
   https.answer(std::string(kIssuer) + "/oauth2/revoke", busy);
   const Secret token(lugh::byte_span("t"));
   const auto failed = wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); });
-  EXPECT_EQ(failed.fault, lugh::Fault::failed);
+  EXPECT_EQ(failed.fault, lugh::Fault::unavailable);
   EXPECT_EQ(failed.message, "the revocation endpoint answered 503");
+  busy.status = 502;
+  https.answer(std::string(kIssuer) + "/oauth2/revoke", busy);
+  EXPECT_EQ(wait<lugh::Nothing>([&](auto done) { oauth.revoke(token, std::chrono::seconds(5), io.get_executor(), done); }).fault, lugh::Fault::failed);
 }
 
 // RFC 6749 section 3.3: the granted scope is a space-separated list, read word by word.
