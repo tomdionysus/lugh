@@ -2,6 +2,17 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-22: 0.5.0's Debian package, built locally
+
+The maintainer's word: built now, published later. On node-b, in `debian:trixie` containers (so nothing went on the
+node): Dannan 0.10.2's debs from its tag, then Lugh's from the tag 0.5.0 with `nocheck`, then the install test in a
+fresh container. `nocheck` because Dagda's tags (0.3.2, 0.3.3) need `libdannan-dev (<< 0.10)`, so no Dagda deb exists
+to test against until Dagda releases on Dannan 0.10.x; the suite passed on this tree in 0.5.0's gate. lintian: no
+tags. Installed with `libdannan0.10` 0.10.2: `lugh-node --version` says 0.5.0; the binary, config, dashboard, unit,
+sysusers file and `/var/lib/lugh` present; the `lugh` user made; the unit disabled; an old flag (`--port`) refused,
+naming it, exit 1; remove keeps `/etc/lugh`, purge deletes it. The debs stay on node-b (`/home/tom/lugh/pkg-050/out`):
+`lugh_0.5.0_arm64.deb`, its dbgsym, and Dannan's two. Into the apt repository only on the maintainer's word.
+
 ## 2026-11-22: lir::mqtt 0.2.0
 
 The pin moved from 0.1.0 (Lir's word: the codec's API is unchanged). With installed dependencies, `find_package(lir)`
