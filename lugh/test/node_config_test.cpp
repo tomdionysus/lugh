@@ -119,7 +119,7 @@ TEST(Config, UnknownFlagsAndMissingValuesAreErrors) {
   const auto unknown = Loader().load(with_tls({"--prot", "80"}));
   EXPECT_FALSE(unknown.ok);
   EXPECT_NE(unknown.error.find("--prot"), std::string::npos);
-  EXPECT_FALSE(Loader().load(with_tls({"--port"})).ok);
+  EXPECT_FALSE(Loader().load(with_tls({"--server-port"})).ok);
 }
 
 TEST(Config, ReadsEverySettingFromTheFile) {
@@ -158,7 +158,7 @@ TEST(Config, TheLayersInOrder) {
   EXPECT_EQ(Loader().load({"--config", path.string()}).value.port, 8100);
 
   const auto from_environment =
-      Loader({{"LUGH_PORT", "8101"}, {"LUGH_LOG_LEVEL", "error"}, {"LUGH_TLS_KEY", "/env/key.pem"}, {"LUGH_STATE_DIRECTORY", "/env/lugh"}})
+      Loader({{"LUGH_SERVER_PORT", "8101"}, {"LUGH_LOG_LEVEL", "error"}, {"LUGH_TLS_KEY", "/env/key.pem"}, {"LUGH_STATE_DIRECTORY", "/env/lugh"}})
           .load({"--config", path.string()})
           .value;
   EXPECT_EQ(from_environment.port, 8101);
@@ -167,8 +167,8 @@ TEST(Config, TheLayersInOrder) {
   EXPECT_EQ(from_environment.tls_certificate, "/c.pem");
   EXPECT_EQ(from_environment.state_directory, "/env/lugh");
 
-  const auto from_cli = Loader({{"LUGH_PORT", "8101"}, {"LUGH_STATE_DIRECTORY", "/env/lugh"}})
-                            .load(with_config(path.string(), {"--port", "443", "--state-directory", "/cli/lugh"}))
+  const auto from_cli = Loader({{"LUGH_SERVER_PORT", "8101"}, {"LUGH_STATE_DIRECTORY", "/env/lugh"}})
+                            .load(with_config(path.string(), {"--server-port", "443", "--state-directory", "/cli/lugh"}))
                             .value;
   EXPECT_EQ(from_cli.port, 443);
   EXPECT_EQ(from_cli.tls_certificate, "/etc/lugh/cert.pem");
@@ -216,13 +216,13 @@ TEST(Config, BadValuesAreRefusedSayingWhereTheyCameFrom) {
   EXPECT_NE(file_result.error.find("log.level"), std::string::npos);
   EXPECT_NE(file_result.error.find(path.string()), std::string::npos);
 
-  const auto env_result = Loader({{"LUGH_PORT", "eighty"}}).load(with_tls());
+  const auto env_result = Loader({{"LUGH_SERVER_PORT", "eighty"}}).load(with_tls());
   EXPECT_FALSE(env_result.ok);
-  EXPECT_NE(env_result.error.find("LUGH_PORT"), std::string::npos);
+  EXPECT_NE(env_result.error.find("LUGH_SERVER_PORT"), std::string::npos);
 
-  const auto cli_result = Loader().load(with_tls({"--address", "id.blackraven.co.nz"}));
+  const auto cli_result = Loader().load(with_tls({"--server-address", "id.blackraven.co.nz"}));
   EXPECT_FALSE(cli_result.ok);
-  EXPECT_NE(cli_result.error.find("--address"), std::string::npos);
+  EXPECT_NE(cli_result.error.find("--server-address"), std::string::npos);
   EXPECT_NE(cli_result.error.find("an IP address"), std::string::npos);
 
   const auto format = Loader().load(with_tls({"--log-format", "xml"}));
@@ -231,7 +231,7 @@ TEST(Config, BadValuesAreRefusedSayingWhereTheyCameFrom) {
 }
 
 TEST(Config, RefusesValuesOutOfRange) {
-  for (const auto* port : {"65536", "-1", "80x", "99999999999"}) EXPECT_FALSE(Loader().load(with_tls({"--port", port})).ok) << port;
+  for (const auto* port : {"65536", "-1", "80x", "99999999999"}) EXPECT_FALSE(Loader().load(with_tls({"--server-port", port})).ok) << port;
 
   TempDirectory dir;
   EXPECT_FALSE(Loader().load(with_config(dir.write("c.yaml", "server: { threads: 0 }\n").string())).ok);
@@ -276,12 +276,12 @@ TEST(Config, TheIssuerAndClientSecrets) {
   const auto from_file = Loader().load(with_config(path.string())).value;
   EXPECT_EQ(from_file.issuer, "https://id.example.com");
   EXPECT_TRUE(from_file.allow_client_secrets);
-  EXPECT_EQ(Loader({{"LUGH_ISSUER", "https://lugh.example.org"}}).load(with_tls()).value.issuer, "https://lugh.example.org");
+  EXPECT_EQ(Loader({{"LUGH_OAUTH_ISSUER", "https://lugh.example.org"}}).load(with_tls()).value.issuer, "https://lugh.example.org");
 
   for (const auto* bad : {"http://id.example.com", "https://id.example.com/", "https://id.example.com?x"}) {
-    const auto refused = Loader().load(with_tls({"--issuer", bad}));
+    const auto refused = Loader().load(with_tls({"--oauth-issuer", bad}));
     EXPECT_FALSE(refused.ok) << bad;
-    EXPECT_NE(refused.error.find("--issuer"), std::string::npos) << refused.error;
+    EXPECT_NE(refused.error.find("--oauth-issuer"), std::string::npos) << refused.error;
   }
 }
 
@@ -344,5 +344,5 @@ TEST(Config, TheMtlsListener) {
   EXPECT_EQ(config.mtls_port, 8444);
   EXPECT_EQ(config.tls_client_ca, "/etc/lugh/clients.pem");
   EXPECT_EQ(config.outbound_ca, "/etc/lugh/outbound.pem");
-  EXPECT_FALSE(Loader().load(with_tls({"--mtls-port", "70000"})).ok);
+  EXPECT_FALSE(Loader().load(with_tls({"--oauth-mtls-port", "70000"})).ok);
 }

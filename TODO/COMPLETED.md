@@ -2,6 +2,17 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-22: Release 0.4.0
+
+The stack's config names (`--server-address`, `--server-port`, `--oauth-issuer`, `--oauth-mtls-port` and their
+variables; the old names gone, not aliased), repinned to Dannan 0.10.2 and lir::mqtt 0.1.0; Dagda stays at 0.3.2. Source
+only, as 0.3.0. Gate, in 2-core legs side by side (the maintainer: fine-grained jobs), at the branch's tree 169e191:
+- debug on node-b, ASan on node-c, TSan on node-a: 893 of 893 each, no sanitizer report; Dannan 0.10.2, Dagda 0.3.2 and
+  lir::mqtt 0.1.0 carry the sanitizer (ASan symbols 21, 20 and 20; TSan 5, 5 and 5).
+- fuzzing on node-a: all 13 targets, 300 s each, between 1.7 and 7.0 million runs each, nothing found.
+The tagged tree differs from 169e191 in Louhi's five TokenSource cases (below; 50 runs each in debug, and in that tree's
+own ASan and TSan builds), the changelog, README, the man page's date and TODO, checked by diff, so the gate stands.
+
 ## 2026-11-22: Five TokenSource cases, from Louhi
 
 Louhi moves its node token onto `TokenSource` and deletes its own copy; five of its cases tested behaviour Lugh's suite

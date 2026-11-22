@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.24)
 # The tag, `lugh-node --version`, the package and the README's Status carry this version. Bump
 # them together.
 project(lugh
-    VERSION 0.3.0
+    VERSION 0.4.0
     DESCRIPTION "Lugh"
     LANGUAGES CXX
 )
@@ -64,21 +64,21 @@ find_package(OpenSSL 3.0 REQUIRED)
 # Dannan, the network layer Lugh hosts on, at a release tag, or at a commit while Lugh needs
 # something not yet tagged: from the sibling checkout, cloned into the build tree, so
 # building Lugh never touches ../dannan. Linked as dannan::dannan, the name an installed
-# Dannan exports too (find_package(dannan 0.10.0 CONFIG)). Now: 0.10.0, which adds the contract
+# Dannan exports too (find_package(dannan 0.10.0 CONFIG)). Now: 0.10.2, on 0.10.0's ABI; 0.10.0 adds the contract
 # vocabulary (completion, ack levels), the encodings, the random ID and SHA-1 that Lugh moves onto
 # next, and DANNAN_SANITIZE (libdannan.so.0.10).
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_REF "0.10.0")
+set(LUGH_DANNAN_REF "0.10.2")
 # Dagda, the store P8 moves Lugh onto, the same way: a release tag of the sibling checkout,
 # cloned into the build tree. Only the node needs it; lugh_client never does. Now: 0.3.2, slice 1
 # (the change notice) and Space::covers.
 set(LUGH_DAGDA_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dagda" CACHE PATH "Dagda's repository")
 set(LUGH_DAGDA_REF "0.3.2")
 # Lir's MQTT codec, the stack's one, for lugh::client_topics: only lir::mqtt is built
-# (LIR_BUILD_SERVER off). A commit of Lir's develop until Lir tags it: the rewritten codec.
+# (LIR_BUILD_SERVER off). Now: 0.1.0, the rewritten codec's first release.
 set(LUGH_LIR_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../lir" CACHE STRING "Lir's repository, a path or a URL")
-set(LUGH_LIR_REF "d36356dd9ab19b2d15097147a55f3082182a8543")
+set(LUGH_LIR_REF "0.1.0")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)

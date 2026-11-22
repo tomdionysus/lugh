@@ -3,11 +3,44 @@
 What each release added, changed and fixed, and what a project of the stack can now take from Lugh in place of its own
 code. Newest first. The tags are on `main`.
 
-## Unreleased (0.4.0)
+## 0.4.0: the stack's config names (2026-11-22)
 
-Repin, with this release's gate: Dannan 0.10.0 to 0.10.1, a patch with 0.10.0's ABI. From its release notes nothing in
-Lugh changes: its fixes are to a node with a schedule, which Lugh does not run yet (P8), and to `tools/ci.sh
-install-debs`, which Lugh does not use, and `MemoryStore::each_held` is P8's to take.
+A release for source dependants, as 0.3.0 was: its Debian package follows Dagda's release on Dannan 0.10.x in the apt
+repository.
+
+Repin, with this release's gate: Dannan 0.10.0 to 0.10.2, two patches with 0.10.0's ABI. From their release notes
+nothing in Lugh changes:
+- 0.10.1's fixes are to a node with a schedule, which Lugh does not run yet (P8), and to `tools/ci.sh install-debs`,
+  which Lugh does not use; `MemoryStore::each_held` is P8's to take.
+- 0.10.2's fix, a worker's mark cleared however a request's run ends, is inside Dannan's scheduler, which Lugh does not
+  drive yet. `SteppedTime(poll)` is for a fixture that wrapped `SteppedTime` to coarsen its waits; Lugh's tests use it
+  unwrapped, at its default, and keep it unless TSan shows a stall.
+
+lir::mqtt moves from the commit d36356d to its first release, 0.1.0. The codec is the same; Lir's release adds its
+installed CMake package, fuzz targets and Debian packages, none of which Lugh's fetched build uses. Dagda stays at 0.3.2
+for the tests: 0.3.3 bounds repair's memory, which Lugh's tests do not exercise.
+
+### Changed (breaking)
+
+- Four flags and environment variables take the stack's config names (Dannan's `docs/config.md`: the flag and the
+  variable are made from the whole dotted key). The old names are gone, not aliased:
+
+  | Setting | Was | Now |
+  |---|---|---|
+  | `server.address` | `--address`, `LUGH_ADDRESS` | `--server-address`, `LUGH_SERVER_ADDRESS` |
+  | `server.port` | `--port`, `LUGH_PORT` | `--server-port`, `LUGH_SERVER_PORT` |
+  | `oauth.issuer` | `--issuer`, `LUGH_ISSUER` | `--oauth-issuer`, `LUGH_OAUTH_ISSUER` |
+  | `oauth.mtls_port` | `--mtls-port`, `LUGH_MTLS_PORT` | `--oauth-mtls-port`, `LUGH_OAUTH_MTLS_PORT` |
+
+  The YAML keys do not change. The packaged unit passes `--server-port 443`; a unit or script of your own that passes
+  an old flag must be changed, or the node refuses to start, naming the flag.
+
+### Tests
+
+- Five `TokenSource` cases moved here from Louhi, which now uses `TokenSource` in place of its own service token: never
+  fetched again sooner than `kLeastRefresh`, failed discovery retried on the back-off, no scopes sends no `scope`, a
+  pending refresh asks nothing after `stop()`, and a source let go is not kept alive by its timer. A relying party that
+  kept such tests of its own can drop them.
 
 ## 0.3.0: onto Dannan 0.10.0 (2026-11-20)
 

@@ -4,30 +4,15 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here (2026-11-22)
 
-**Releases.** 0.2.0 (packaged) and 0.3.0 (Dannan 0.10.0, source only) are tagged on `main`; `CHANGELOG.md` says what each
-holds. The cluster was stopped by the maintainer on 2026-11-21 with 0.4.0 half done; nothing has run since.
+**Releases.** 0.2.0 (packaged), 0.3.0 (Dannan 0.10.0) and 0.4.0 (the stack's config names, Dannan 0.10.2; source only)
+are tagged on `main`; `CHANGELOG.md` says what each holds. The merged `feature/*` branches were deleted, locally and on
+GitHub (the maintainer's word, 2026-11-22).
 
-**0.4.0, in hand: `feature/config-names` (9e8a735, on `develop` 4ef5f8a, pushed, not yet gated).**
-- Done on the branch:
-  - The four flags and variables take the stack's config names (Dannan's `docs/config.md`): `--server-address`,
-    `--server-port`, `--oauth-issuer` and `--oauth-mtls-port`, with `LUGH_SERVER_ADDRESS` and the rest. The old names
-    are gone, not aliased. The unit, the man page, `docs/oauth.md`, the tests and the dashboard's e2e helper follow.
-  - The changelog's 0.4.0 entry, which carries a table of the old and new names.
-  - Dannan is pinned at 0.10.1; the version is 0.4.0.
-- To do before the tag, in this order (the branch is rebased onto `develop` as of 2026-11-22):
-  1. Repin, each with a CHANGELOG line saying what its release notes change in Lugh:
-     - Dannan to 0.10.2, a patch (a scheduler leak fixed, and `SteppedTime(poll)` for tests that stall under TSan;
-       Lugh's rigs use the default unless TSan shows a stall).
-     - lir::mqtt from d36356d to the tag 0.1.0 (9074dcb, now on GitHub; the codec is unchanged since d36356d).
-     - Dagda stays at 0.3.2 for the tests: 0.3.3 is repair's memory bound on Dannan 0.9.2, which Lugh's tests do not
-       exercise.
-  2. Gate once each on a 16 GB node: debug, ASan and TSan (dependencies instrumented, checked with nm), and the fuzz
-     campaign (13 targets, 300 s each).
-  3. Squash-merge to `develop`, merge to `main`, tag 0.4.0, and tell the dependants (Louhi, Kvasir, Mimir, Lir's
-     plugin) that the flags were renamed.
-- The Debian package: none since 0.2.0. It waits for Dagda's release on Dannan 0.10.x in the apt repository, because
-  the package build runs the tests against Dagda's packages. Building it locally is fine; putting it in the apt
-  repository waits on the maintainer's word.
+**After 0.4.0's tag:** tell the dependants (Louhi, Kvasir, Mimir, Lir's plugin) that the four flags were renamed.
+
+**The Debian package:** none since 0.2.0. It waits for Dagda's release on Dannan 0.10.x in the apt repository, because
+the package build runs the tests against Dagda's packages. Building it locally is fine; putting it in the apt repository
+waits on the maintainer's word.
 
 **After 0.4.0: onto the rest of Dannan 0.10.x** (from its release notes; one step each, as each changes behaviour or
 public API):
@@ -87,17 +72,15 @@ no-duplication rule:
 - **Hashing on `sched::WorkerPool`**, at P8.1. Until then the hashing queue is unbounded, a known gap.
 - **Socket activation** for the listeners, deferred: `inherited_socket` checks LISTEN_PID, which a test cannot set.
 - **lugh_client as an installed package** (`find_package(lugh)`, asked by Kvasir), with a `lugh-dev` Debian package.
-- The eleven old `feature/*` branches already merged into `develop` (cbor-bound to webauthn) could be deleted, locally and
-  on GitHub; asked of the maintainer, as deleting remote branches is his call.
 - Small: whether the remaining synchronous `Result` returns (config loader, record codecs) should throw.
 
 ## Dependencies pinned (develop)
 
 | Dependency | Pin | Used by |
 |---|---|---|
-| Dannan | 0.10.0 (`LUGH_DANNAN_REF`) | everything; 0.10.1 on `feature/config-names`, 0.10.2 next |
+| Dannan | 0.10.2 (`LUGH_DANNAN_REF`) | everything |
 | Dagda | 0.3.2 (`LUGH_DAGDA_REF`) | the tests only; the node does not link it until P8 |
-| Lir | d36356d (`LUGH_LIR_REF`) | the tests and `lugh::client_topics` only; the tag 0.1.0 next |
+| Lir | 0.1.0 (`LUGH_LIR_REF`) | the tests and `lugh::client_topics` only |
 
 Each comes from the sibling checkout (`../dannan`, `../dagda`, `../lir`), cloned into the build tree. A relying party that
 fetches lugh_client alone (`LUGH_BUILD_NODE=OFF`) fetches Dannan and nothing else. The package build uses the installed
