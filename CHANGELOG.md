@@ -36,6 +36,12 @@ code. Newest first. The tags are on `main`.
 - `lugh-node` logs through Dannan's `status::SwappableSink`: stderr until the configuration is read, then the
   configured sink, under one logger. The tests capture with Dannan's `test::RecordingSink`; Lugh's copy is gone.
 
+### Fixed
+
+- A state directory the node makes (`lugh-node init`, a keyring's directory) is synced into its parent, by Dannan's
+  `identity::durable_create_directories`: before, a power cut just after `init` could lose the directory with the
+  keyring in it. A directory synced after a removal is Dannan's `durable_sync_directory`.
+
 ## 0.4.0: the stack's config names (2026-11-22)
 
 A release for source dependants, as 0.3.0 was: its Debian package follows Dagda's release on Dannan 0.10.x in the apt

@@ -93,11 +93,15 @@ std::string directory_of(const std::string& path) {
   return parent.empty() ? std::string(".") : parent;
 }
 
+// Dannan's (dannan/identity/durable_file.h): what was created, renamed or removed in it, made
+// durable. Its error names the directory.
 Status sync_directory(const std::string& directory) {
-  Descriptor fd(::open(directory.c_str(), O_RDONLY | O_CLOEXEC | O_DIRECTORY));
-  if (!fd.valid()) return Status::failure("cannot open " + directory + " to sync it: " + reason());
-  if (::fsync(fd.get()) != 0) return Status::failure("cannot sync " + directory + ": " + reason());
-  return Status::success();
+  try {
+    dannan::identity::durable_sync_directory(directory);
+    return Status::success();
+  } catch (const std::exception& e) {
+    return Status::failure(e.what());
+  }
 }
 
 bool exists_now(const std::string& path) {
@@ -154,16 +158,15 @@ Status remove_now(const std::string& path) {
   return sync_directory(directory_of(path));
 }
 
+// Dannan's: each directory made owner-only, then its parent synced, so a crash cannot leave a
+// state file in a directory that was never written down. Those already there are left as they are.
 Status make_directory_now(const std::string& path) {
-  std::error_code ec;
-  if (std::filesystem::is_directory(path, ec)) return Status::success();
-
-  const auto parent = std::filesystem::path(path).parent_path();
-  if (!parent.empty() && parent != path) {
-    if (const auto made = make_directory_now(parent.string()); !made.ok) return made;
+  try {
+    dannan::identity::durable_create_directories(path, 0700);
+  } catch (const std::exception& e) {
+    return Status::failure(e.what());
   }
-
-  if (::mkdir(path.c_str(), 0700) != 0 && errno != EEXIST) return Status::failure("cannot make " + path + ": " + reason());
+  std::error_code ec;
   if (!std::filesystem::is_directory(path, ec)) return Status::failure(path + " is not a directory");
   return Status::success();
 }
