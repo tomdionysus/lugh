@@ -2,6 +2,20 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-22: Release 0.5.0
+
+Onto the rest of Dannan 0.10.x: steps 1 to 7 (below), and two more in this release.
+- Step 8: the 13 fuzz targets register with Dannan's harness (`lugh/fuzz/target.h`); `lugh_tests` runs each through
+  `dannan::fuzz::smoke`, and each libFuzzer binary is its target and one driver. Findings throw, naming themselves.
+  The keyring, store log, envelope and record targets have seeds, made by the formats' own writers (the maintainer).
+- Step 9: a reply `lugh_client` cannot read answers `invalid`, not `failed` (the maintainer: before the release).
+  The gate's first debug run caught eight of its messages with their first space lost by an edit; restored
+  (f538da6), and ASan and TSan run again on the fix.
+900 to 903 tests (the three fuzz smoke tests). Gate at f538da6: debug on node-b, ASan on node-c, TSan on node-a, 903
+of 903 each, no sanitizer report, dependencies instrumented; the new and changed suites (30 tests) 20 times each in all
+three; fuzzing on node-a, all 13 targets 300 s each, between 1.2 and 8.2 million runs each, nothing found. The tagged
+tree differs from f538da6 only in TODO, checked by diff.
+
 ## 2026-11-22: Onto Dannan 0.10.x, steps 2 to 7
 
 Each step its own commit; `CHANGELOG.md` (Unreleased) says what each changes.

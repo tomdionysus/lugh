@@ -4,33 +4,21 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here (2026-11-22)
 
-**Releases.** 0.2.0 (packaged), 0.3.0 (Dannan 0.10.0) and 0.4.0 (the stack's config names, Dannan 0.10.2; source only)
-are tagged on `main`; `CHANGELOG.md` says what each holds. The merged `feature/*` branches were deleted, locally and on
-GitHub (the maintainer's word, 2026-11-22).
+**Releases.** 0.2.0 (packaged), 0.3.0 (Dannan 0.10.0), 0.4.0 (the stack's config names) and 0.5.0 (onto the rest of
+Dannan 0.10.x; source only) are tagged on `main`; `CHANGELOG.md` says what each holds. Main and release tags are pushed
+once a release's gate is green, without asking (the maintainer, 2026-11-22).
 
-The dependants (Louhi, Kvasir, Mimir, Lir's plugin) were told of the four renamed flags at the tag, and of the callback
-vocabulary before it landed; none needs a change now. 0.5.0 gathers the Dannan 0.10.x steps below.
+The dependants (Louhi, Kvasir, Mimir, Lir's plugin) were told of each change before it landed and at each tag; none
+needs a change now.
 
 **The Debian package:** none since 0.2.0. It waits for Dagda's release on Dannan 0.10.x in the apt repository, because
 the package build runs the tests against Dagda's packages. Building it locally is fine; putting it in the apt repository
 waits on the maintainer's word.
 
-**After 0.4.0: onto the rest of Dannan 0.10.x** (from its release notes; one step each, as each changes behaviour or
-public API):
-1. ~~The callback vocabulary~~: done (`COMPLETED.md`, 2026-11-22). Its follow-up: a reply `lugh_client` could not read
-   (not JSON, a field missing) answers `invalid`, not `failed`, as Dannan's vocabulary says.
-2. to 7. ~~The encodings, HMAC-SHA-1, RandomId, Prefix, the sinks, durable directories~~: done (`COMPLETED.md`,
-   2026-11-22).
-8. **The fuzz targets as smoke tests**, next: each of the 13 becomes a `dannan::fuzz::Registration` (a run function
-   and its seeds) in a library both the libFuzzer binaries and `lugh_tests` link, and `lugh_tests` runs
-   `dannan::fuzz::smoke` over each, so every gate and CI exercises them. Their `std::abort()` findings become throws, so
-   a finding fails a test, not the binary. Four targets (keyring, store log, records, envelope) have no corpus: their
-   seeds are made in code, by the code that writes each format (the maintainer, 2026-11-22).
-9. **Step 1's follow-up**, before the release (the maintainer, 2026-11-22): a reply `lugh_client` could not read (not
-   JSON, a field missing) answers `invalid`, not `failed`, so 0.5.0 carries the whole Fault change at once.
-Then 0.5.0: these steps, released together; main and the tag are pushed once its gate is green (the maintainer,
-2026-11-22: main and tags may be pushed without asking).
-Not taken: `agree::MemoryStore`, `each_held` and the agreement teardown fixes, which are P8's; the ack levels.
+**Onto Dannan 0.10.x: done in 0.5.0** (`COMPLETED.md`, 2026-11-22). Not taken: `agree::MemoryStore`, `each_held` and
+the agreement teardown fixes, which are P8's; the ack levels.
+
+**Next, not blocked:** `@lugh/admin-ui` (below), and coverage. P8 waits on Dannan and Dagda.
 
 **Also waiting to be done, not blocked:**
 - `@lugh/admin-ui`: the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`,
