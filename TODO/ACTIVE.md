@@ -19,16 +19,14 @@ waits on the maintainer's word.
 public API):
 1. ~~The callback vocabulary~~: done (`COMPLETED.md`, 2026-11-22). Its follow-up: a reply `lugh_client` could not read
    (not JSON, a field missing) answers `invalid`, not `failed`, as Dannan's vocabulary says.
-2. **The encodings.** `lugh/core/encoding.h` becomes `encoding/base.h`; its exact decoders write a secret straight
-   into a `SecureBuffer`.
-3. **TOTP's HMAC-SHA-1** becomes `identity::hmac_sha1`.
-4. **Random IDs** become `identity::RandomId<Tag>`.
-5. **`network::Cidr`** becomes `listen::Prefix`, which refuses host bits set past the length (`10.0.0.1/8` would then
-   stop the start; say so in the release notes).
-6. **The tests' `RecordingSink`** becomes `test::RecordingSink`, and lugh_node's late logger swap becomes
-   `status::SwappableSink`.
-7. Directories made and synced by hand use `identity::durable_create_directories` and `durable_sync_directory`.
-8. The fuzz targets also run as smoke tests in `lugh_tests` through `dannan::testing`, so CI exercises each corpus.
+2. to 7. ~~The encodings, HMAC-SHA-1, RandomId, Prefix, the sinks, durable directories~~: done (`COMPLETED.md`,
+   2026-11-22).
+8. **The fuzz targets as smoke tests**, next: each of the 13 becomes a `dannan::fuzz::Registration` (a run function
+   and its seeds) in a library both the libFuzzer binaries and `lugh_tests` link, and `lugh_tests` runs
+   `dannan::fuzz::smoke` over each, so every gate and CI exercises them. Their `std::abort()` findings become throws, so
+   a finding fails a test, not the binary. Four targets (keyring, store log, records, envelope) have no corpus: their
+   seeds are made in code, as `seeds.sh` makes them now.
+Then 0.5.0: these steps, released together.
 Not taken: `agree::MemoryStore`, `each_held` and the agreement teardown fixes, which are P8's; the ack levels.
 
 **Also waiting to be done, not blocked:**

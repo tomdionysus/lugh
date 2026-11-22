@@ -2,6 +2,24 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-22: Onto Dannan 0.10.x, steps 2 to 7
+
+Each step its own commit; `CHANGELOG.md` (Unreleased) says what each changes.
+- The encodings are Dannan's `encoding/base.h`, behind Lugh's names; a refresh token's secret decodes into secure memory.
+- TOTP's HMAC-SHA-1 is Dannan's `identity::hmac_sha1`; Lugh's own is gone.
+- A user's and group's id is Dannan's `RandomId`, spelled as before. Client ids, kids and jtis keep their own spellings,
+  which relying parties see; factor keys are not ids of that kind. The "no randomness" branches went with it:
+  `random_bytes` throws, so they could never run.
+- Address ranges are Dannan's `listen::Prefix`; Lugh's `Cidr` is gone, and `lugh::network::prefix_of` is the one helper
+  left (nothing, not a throw, for a value a person typed). Lugh's eleven range tests are kept, renamed, as Dannan's
+  suite does not cover lengths that split a byte or the families never meeting.
+- The node's late sink swap is Dannan's `SwappableSink`; the tests' capture sink is Dannan's `RecordingSink`.
+- A directory the node makes is synced into its parent (`durable_create_directories`), a fix: a power cut just after
+  `init` could lose the keyring's directory.
+897 to 900 tests (three of the encodings: secrets into secure memory, base64's exactness, printable within its bound).
+Gate at 0fcc559: debug on node-d, ASan on node-b, TSan on node-a, 900 of 900 each, no sanitizer report, dependencies
+instrumented; the new and changed suites (122 tests) 20 times each in all three, all passed.
+
 ## 2026-11-22: The callback vocabulary is Dannan's
 
 The first step onto the rest of Dannan 0.10.x. `lugh::Fault`, `Outcome`, `Nothing`, `Completion`, `Done`, `Executor`,
