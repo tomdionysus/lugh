@@ -8,7 +8,8 @@ What is being worked on now and what comes next. When an item ships, move it to 
 are tagged on `main`; `CHANGELOG.md` says what each holds. The merged `feature/*` branches were deleted, locally and on
 GitHub (the maintainer's word, 2026-11-22).
 
-**After 0.4.0's tag:** tell the dependants (Louhi, Kvasir, Mimir, Lir's plugin) that the four flags were renamed.
+The dependants (Louhi, Kvasir, Mimir, Lir's plugin) were told of the four renamed flags at the tag, and that the
+callback vocabulary (below) comes next.
 
 **The Debian package:** none since 0.2.0. It waits for Dagda's release on Dannan 0.10.x in the apt repository, because
 the package build runs the tests against Dagda's packages. Building it locally is fine; putting it in the apt repository
