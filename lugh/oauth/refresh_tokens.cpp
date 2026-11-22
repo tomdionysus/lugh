@@ -105,7 +105,7 @@ std::optional<RefreshTokens::Parsed> RefreshTokens::_parse(std::string_view toke
   const auto family = rest.substr(0, dot);
   const auto secret = rest.substr(dot + 1);
   const auto family_bytes = encoding::base64url_decode(family);
-  const auto secret_bytes = encoding::base64url_decode(secret);
+  const auto secret_bytes = encoding::base64url_decode_secret(secret);
   if (!family_bytes || family_bytes->size() != kFamilyBytes || !secret_bytes || secret_bytes->size() != kSecretBytes) return std::nullopt;
   return Parsed{std::string(family), std::string(secret)};
 }

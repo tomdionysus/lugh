@@ -7,6 +7,10 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
+#include <string>
+#include <type_traits>
+
 #include "lugh/core/encoding.h"
 #include "lugh/test/fixtures/hex.h"
 
@@ -105,6 +109,39 @@ TEST(Encoding, Base64KnownAnswers) {
     for (std::size_t i = 0; i < size; ++i) bytes.push_back(static_cast<unsigned char>(i * 41 + 3));
     EXPECT_EQ(*base64_decode(base64(bytes)), bytes) << size;
   }
+}
+
+// A secret decodes straight into secure memory, never through Bytes: a TOTP key and a token's
+// secret part.
+TEST(Encoding, SecretsDecodeIntoSecureMemory) {
+  static_assert(std::is_same_v<decltype(base32_decode("")), std::optional<lugh::SecureBuffer>>);
+  static_assert(std::is_same_v<decltype(base64url_decode_secret("")), std::optional<lugh::SecureBuffer>>);
+  const auto secret = base64url_decode_secret("Zm9vYmFy");
+  ASSERT_TRUE(secret);
+  EXPECT_EQ(std::string(secret->begin(), secret->end()), "foobar");
+  EXPECT_FALSE(base64url_decode_secret("Zm9vYmFy=")) << "as exact as base64url_decode";
+}
+
+// RFC 4648 section 4: padding only as an encoder writes it.
+TEST(Encoding, Base64RefusesWhatIsNotExactly) {
+  EXPECT_FALSE(base64_decode("Zg="));
+  EXPECT_FALSE(base64_decode("Zg"));
+  EXPECT_FALSE(base64_decode("Zg==="));
+  EXPECT_FALSE(base64_decode("Zh=="));
+  EXPECT_FALSE(base64_decode("Zm9v_-=="));
+  EXPECT_TRUE(base64_decode("Zg=="));
+}
+
+// Printable, within its bound: UTF-8 with no C0, DEL or C1 control.
+TEST(Encoding, PrintableWithinItsBound) {
+  EXPECT_TRUE(printable("Alice M\xc3\xbcller", 64));
+  EXPECT_TRUE(printable("", 0));
+  EXPECT_FALSE(printable("abcd", 3));
+  EXPECT_TRUE(printable("abcd", 4));
+  EXPECT_FALSE(printable("a\tb", 64));
+  EXPECT_FALSE(printable("a\x7f", 64));
+  EXPECT_FALSE(printable("a\xc2\x85", 64)) << "C1";
+  EXPECT_FALSE(printable("\xc0\x80", 64)) << "not UTF-8";
 }
 
 // RFC 3629: what is UTF-8 and what only looks like it.

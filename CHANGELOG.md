@@ -20,6 +20,12 @@ code. Newest first. The tags are on `main`.
 - The API answers `503 unavailable` and `503 timed_out` for the two (`docs/api.md`); `500 failed` keeps the store, the
   keys and the randomness.
 
+### Changed
+
+- Lugh's encodings (hex, base32, base64, base64url, the UTF-8 checks) are Dannan's `encoding/base.h`, which was taken
+  from Lugh's; the spellings each accepts are unchanged. A refresh token's secret part decodes straight into secure
+  memory.
+
 ## 0.4.0: the stack's config names (2026-11-22)
 
 A release for source dependants, as 0.3.0 was: its Debian package follows Dagda's release on Dannan 0.10.x in the apt
