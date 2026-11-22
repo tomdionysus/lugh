@@ -8,14 +8,21 @@
 
 export { ApiClient, ApiError, errorOf, type Versioned } from "./lib/api";
 export { when } from "./lib/format";
+export { challengeOf, finishLughSignIn, lughSignInUrl, type LughCode, type LughSignInConfig } from "./lib/lughSignIn";
 export { visible, type Section } from "./lib/sections";
 
 export { ApiContext, useApi } from "./hooks/useApi";
 export { useAct } from "./hooks/useAct";
+export { useCursorPages, type Page } from "./hooks/useCursorPages";
+export { useEvents, type EventsOptions } from "./hooks/useEvents";
 export { useLoad } from "./hooks/useLoad";
 
 export { Confirm, useConfirm } from "./components/Confirm";
+export { DataTable, type Column, type Paging } from "./components/DataTable";
+export { DetailPanel, type Detail } from "./components/DetailPanel";
 export { Messages } from "./components/Messages";
 export { NavBar } from "./components/NavBar";
+export { StatusPill, type Tone } from "./components/StatusPill";
 
 export { AdminShell, type AdminShellProps } from "./layout/AdminShell";
+export { SignIn } from "./screens/SignIn";
