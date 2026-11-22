@@ -12,14 +12,22 @@
 #include <cstdlib>
 #include <string_view>
 
+#include "lugh/fuzz/target.h"
 #include "lugh/ldap/dn.h"
 
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
+namespace {
+
+int run(const std::uint8_t* data, std::size_t size) {
   using namespace lugh::ldap;
   const auto parsed = parse_dn(std::string_view(reinterpret_cast<const char*>(data), size));
   if (!parsed) return 0;
   const auto again = parse_dn(to_string(*parsed));
-  if (!again || *again != *parsed) std::abort();
+  if (!again || *again != *parsed) lugh::fuzz::finding("a DN that does not read back as itself");
   (void)within(normalised(*parsed), normalised(*again));
   return 0;
 }
+
+const dannan::fuzz::Registration registered(
+    "dn", [](std::span<const std::uint8_t> input) { run(input.data(), input.size()); }, [] { return lugh::fuzz::corpus("dn"); });
+
+}  // namespace

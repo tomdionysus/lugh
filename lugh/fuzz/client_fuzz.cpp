@@ -19,6 +19,7 @@
 #include "lugh/client/oauth_client.h"
 #include "lugh/client/testing.h"
 #include "lugh/client/verifier.h"
+#include "lugh/fuzz/target.h"
 
 namespace {
 
@@ -29,16 +30,16 @@ class FixedWall final : public dannan::contract::WallClock {
   std::uint64_t unix_ms() const noexcept override { return 1'800'000'000'000ull; }
 };
 
-}  // namespace
-
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
+int run(const std::uint8_t* data, std::size_t size) {
   using namespace lugh::client;
+  // Named in full: in lugh_tests, gtest's ::testing is in scope too.
+  namespace fake = lugh::client::testing;
   if (size == 0) return 0;
   const std::string_view text(reinterpret_cast<const char*>(data + 1), size - 1);
   static const FixedWall wall;
   static const auto key = dannan::identity::SigningKey::generate(dannan::identity::SigningAlgorithm::es256);
   static Verifier verifier({kIssuer}, wall);
-  static const bool keyed = (verifier.set_keys(kIssuer, testing::jwks(key, "k1")), true);
+  static const bool keyed = (verifier.set_keys(kIssuer, fake::jwks(key, "k1")), true);
   (void)keyed;
 
   switch (data[0] % 3) {
@@ -53,8 +54,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
       }
       // Keys from the fuzzed document, or the real one, then a token under the real key.
       (void)verifier.verify_access(
-          testing::sign_access_token(key, "k1", {{"iss", kIssuer}, {"sub", "u"}, {"client_id", "c"}, {"jti", "j"}, {"exp", 1'800'000'060}}));
-      verifier.set_keys(kIssuer, testing::jwks(key, "k1"));
+          fake::sign_access_token(key, "k1", {{"iss", kIssuer}, {"sub", "u"}, {"client_id", "c"}, {"jti", "j"}, {"exp", 1'800'000'060}}));
+      verifier.set_keys(kIssuer, fake::jwks(key, "k1"));
       return 0;
     }
     case 1:
@@ -70,3 +71,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     }
   }
 }
+
+const dannan::fuzz::Registration registered(
+    "client", [](std::span<const std::uint8_t> input) { run(input.data(), input.size()); }, [] { return lugh::fuzz::corpus("client"); });
+
+}  // namespace

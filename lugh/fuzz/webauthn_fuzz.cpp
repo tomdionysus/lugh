@@ -16,31 +16,40 @@
 #include <cstdlib>
 #include <span>
 
+#include "lugh/fuzz/target.h"
 #include "lugh/webauthn/cbor.h"
 #include "lugh/webauthn/ceremony.h"
 #include "lugh/webauthn/cose.h"
 
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
+namespace {
+
+int run(const std::uint8_t* data, std::size_t size) {
   using namespace lugh::webauthn;
+  using lugh::fuzz::finding;
   const std::span<const std::uint8_t> input(data, size);
 
   std::size_t used = 0;
   const auto front = cbor::decode(input, &used);
   if (front) {
-    if (used == 0 || used > size) std::abort();
+    if (used == 0 || used > size) finding("a CBOR item that used none of its input, or more than all of it");
     const auto alone = cbor::decode(input.first(used));
-    if (!alone) std::abort();
+    if (!alone) finding("a CBOR item that does not read alone from the bytes it used");
     (void)public_key(*front);
   }
 
   const auto whole = cbor::decode(input);
-  if (whole && (!front || used != size)) std::abort();
+  if (whole && (!front || used != size)) finding("a whole CBOR input that disagrees with its front item");
 
   if (const auto authenticator = parse_authenticator_data(input)) {
-    if (authenticator->credential.has_value() != bool(authenticator->flags & kAttestedData)) std::abort();
-    if (authenticator->backed_up() && !authenticator->backup_eligible()) std::abort();
-    if (size < 37) std::abort();
+    if (authenticator->credential.has_value() != bool(authenticator->flags & kAttestedData)) finding("attested credential data that disagrees with its flag");
+    if (authenticator->backed_up() && !authenticator->backup_eligible()) finding("a credential backed up that may not be");
+    if (size < 37) finding("authenticator data shorter than its fixed part");
   }
-  if (es256_raw_signature(input) && size > 72) std::abort();
+  if (es256_raw_signature(input) && size > 72) finding("a DER signature longer than 72 bytes converted");
   return 0;
 }
+
+const dannan::fuzz::Registration registered(
+    "webauthn", [](std::span<const std::uint8_t> input) { run(input.data(), input.size()); }, [] { return lugh::fuzz::corpus("webauthn"); });
+
+}  // namespace

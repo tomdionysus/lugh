@@ -137,6 +137,18 @@ target_compile_definitions(lugh_tests PRIVATE LUGH_NODE_BINARY="$<TARGET_FILE:lu
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(lugh_tests PRIVATE util)
 endif()
+# Every fuzz target, registered with Dannan's harness and run by fuzz_smoke_test.cpp over its seeds
+# and thousands of mutations of them, on every gate and in CI: a crash or a finding fails a test
+# here before any campaign. Compiled as the fuzz binaries compile them, without the tests' header.
+set(LUGH_FUZZ_SOURCES
+    ../fuzz/api_request_fuzz.cpp ../fuzz/ber_fuzz.cpp ../fuzz/client_fuzz.cpp ../fuzz/dn_fuzz.cpp ../fuzz/envelope_fuzz.cpp
+    ../fuzz/filter_fuzz.cpp ../fuzz/form_fuzz.cpp ../fuzz/jws_fuzz.cpp ../fuzz/keyring_fuzz.cpp ../fuzz/records_fuzz.cpp
+    ../fuzz/scope_fuzz.cpp ../fuzz/store_log_fuzz.cpp ../fuzz/webauthn_fuzz.cpp ../fuzz/target.cpp)
+target_sources(lugh_tests PRIVATE ${LUGH_FUZZ_SOURCES} fuzz_smoke_test.cpp)
+set_source_files_properties(${LUGH_FUZZ_SOURCES} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+target_link_libraries(lugh_tests PRIVATE dannan::testing)
+target_compile_definitions(lugh_tests PRIVATE LUGH_FUZZ_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/../fuzz/corpus")
+
 target_precompile_headers(lugh_tests
     PRIVATE
         <boost/asio.hpp>

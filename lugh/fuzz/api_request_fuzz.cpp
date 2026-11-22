@@ -18,6 +18,7 @@
 
 #include "dannan/contract/time_source.h"
 #include "lugh/api/api_support.h"
+#include "lugh/fuzz/target.h"
 #include "lugh/http/router.h"
 
 namespace {
@@ -64,9 +65,7 @@ std::shared_ptr<lugh::http::Router> make_router() {
   return router;
 }
 
-}  // namespace
-
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
+int run(const std::uint8_t* data, std::size_t size) {
   using namespace lugh;
   static const auto router = make_router();
   static const auto middleware = router->middleware("/api");
@@ -95,6 +94,11 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
   middleware(request, "192.0.2.1", response, [&answered](bool) { answered = true; });
   io.restart();
   io.run();
-  if (!answered) std::abort();
+  if (!answered) lugh::fuzz::finding("a request the API never answered");
   return 0;
 }
+
+const dannan::fuzz::Registration registered(
+    "api_request", [](std::span<const std::uint8_t> input) { run(input.data(), input.size()); }, [] { return lugh::fuzz::corpus("api_request"); });
+
+}  // namespace

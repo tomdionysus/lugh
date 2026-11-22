@@ -35,6 +35,10 @@ code. Newest first. The tags are on `main`.
   the IPv4 one it means.
 - `lugh-node` logs through Dannan's `status::SwappableSink`: stderr until the configuration is read, then the
   configured sink, under one logger. The tests capture with Dannan's `test::RecordingSink`; Lugh's copy is gone.
+- The 13 fuzz targets are registered with Dannan's harness (`dannan::testing`) and `lugh_tests` runs each through
+  `dannan::fuzz::smoke` (its seeds, thousands of mutations, random inputs), so every gate and CI exercises them, not
+  only a campaign. A finding is a throw that names it, not `std::abort()`. The keyring, store log, envelope and record
+  targets have seeds now, made by the formats' own writers.
 
 ### Fixed
 
