@@ -155,13 +155,13 @@ void OAuthClient::pushed_authorization(const std::string& redirect_uri, const st
                 if (!answered.ok()) return done(Answer::from(answered));
                 boost::system::error_code ec;
                 const auto body = boost::json::parse(answered.value.body, ec);
-                if (ec || !body.is_object()) return done(Answer::failure(Fault::invalid, "thepushed request's answer is not JSON"));
+                if (ec || !body.is_object()) return done(Answer::failure(Fault::invalid, "the pushed request's answer is not JSON"));
                 if (answered.value.status != 201 && answered.value.status != 200) {
                   return done(Answer::failure(Fault::refused, string_claim(body.as_object(), "error").value_or("refused") + ": " +
                                                                   string_claim(body.as_object(), "error_description").value_or("")));
                 }
                 const auto uri = string_claim(body.as_object(), "request_uri");
-                if (!uri) return done(Answer::failure(Fault::invalid, "thepushed request's answer has no request_uri"));
+                if (!uri) return done(Answer::failure(Fault::invalid, "the pushed request's answer has no request_uri"));
                 request.url = authorization_endpoint + "?" + form_body({{"client_id", client_id}, {"request_uri", *uri}});
                 done(Answer::success(std::move(request)));
               });
@@ -226,7 +226,7 @@ void OAuthClient::device_authorization(const std::vector<std::string>& scopes, D
     if (!answered.ok()) return done(Answer::from(answered));
     boost::system::error_code ec;
     const auto parsed = boost::json::parse(answered.value.body, ec);
-    if (ec || !parsed.is_object()) return done(Answer::failure(Fault::invalid, "thedevice endpoint's answer is not JSON"));
+    if (ec || !parsed.is_object()) return done(Answer::failure(Fault::invalid, "the device endpoint's answer is not JSON"));
     const auto& body = parsed.as_object();
     if (answered.value.status != 200) {
       return done(
@@ -236,7 +236,7 @@ void OAuthClient::device_authorization(const std::vector<std::string>& scopes, D
     const auto user_code = string_claim(body, "user_code");
     const auto uri = string_claim(body, "verification_uri");
     const auto expires = seconds_claim(body, "expires_in");
-    if (!code || code->empty() || !user_code || !uri || !expires) return done(Answer::failure(Fault::invalid, "thedevice endpoint's answer is incomplete"));
+    if (!code || code->empty() || !user_code || !uri || !expires) return done(Answer::failure(Fault::invalid, "the device endpoint's answer is incomplete"));
     DeviceAuthorization started;
     started.device_code = std::make_shared<const Secret>(byte_span(*code));
     started.user_code = *user_code;
@@ -333,14 +333,14 @@ void OAuthClient::introspect(const Secret& token, Deadline deadline, Executor ex
           if (!answered.ok()) return done(Answer::from(answered));
           boost::system::error_code ec;
           const auto parsed = boost::json::parse(answered.value.body, ec);
-          if (ec || !parsed.is_object()) return done(Answer::failure(Fault::invalid, "theintrospection answer is not JSON"));
+          if (ec || !parsed.is_object()) return done(Answer::failure(Fault::invalid, "the introspection answer is not JSON"));
           const auto& body = parsed.as_object();
           if (answered.value.status != 200) {
             return done(
                 Answer::failure(Fault::refused, string_claim(body, "error").value_or("refused") + ": " + string_claim(body, "error_description").value_or("")));
           }
           const auto active = body.if_contains("active");
-          if (!active || !active->is_bool()) return done(Answer::failure(Fault::invalid, "theintrospection answer says nothing of active"));
+          if (!active || !active->is_bool()) return done(Answer::failure(Fault::invalid, "the introspection answer says nothing of active"));
           Introspection out;
           out.claims = body;
           out.active = active->as_bool();
@@ -425,7 +425,7 @@ void OAuthClient::_token(Form form, std::optional<std::string> nonce, Deadline d
     if (!answered.ok()) return done(Answer::from(answered));
     boost::system::error_code ec;
     const auto parsed = boost::json::parse(answered.value.body, ec);
-    if (ec || !parsed.is_object()) return done(Answer::failure(Fault::invalid, "thetoken endpoint's answer is not JSON"));
+    if (ec || !parsed.is_object()) return done(Answer::failure(Fault::invalid, "the token endpoint's answer is not JSON"));
     const auto& body = parsed.as_object();
     if (answered.value.status != 200) {
       return done(
@@ -433,7 +433,7 @@ void OAuthClient::_token(Form form, std::optional<std::string> nonce, Deadline d
     }
     const auto access = string_claim(body, "access_token");
     const auto type = string_claim(body, "token_type");
-    if (!access || access->empty() || !type) return done(Answer::failure(Fault::invalid, "thetoken endpoint's answer has no access_token"));
+    if (!access || access->empty() || !type) return done(Answer::failure(Fault::invalid, "the token endpoint's answer has no access_token"));
     TokenSet tokens;
     tokens.access_token = std::make_shared<const Secret>(byte_span(*access));
     tokens.token_type = *type;
