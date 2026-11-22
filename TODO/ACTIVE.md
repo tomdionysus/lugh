@@ -20,6 +20,11 @@ the agreement teardown fixes, which are P8's; the ack levels.
 
 **Next, not blocked:** `@lugh/admin-ui` (below), and coverage. P8 waits on Dannan and Dagda.
 
+**At the move to Dannan 0.11.0** (Lir, 2026-11-22): Dannan carries Boost.JSON's compiled part in libdannan (its
+`json.cpp`, `boost/json/src.hpp`), so `lugh/client/boost_json.cpp` goes and lugh_client takes Dannan's, or a process
+linking both carries it twice. Lir's plugin (it links `lugh::client_topics`, fetched with `LUGH_BUILD_NODE=OFF`) needs
+that Lugh release before Lir moves its own pin to 0.11.0, so that release goes out soon after Dannan's tag.
+
 **Also waiting to be done, not blocked:**
 - `@lugh/admin-ui`: the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`,
   "The shared admin UI"). npm, tested in GitHub CI, so no cluster time. The dashboard's 5 Playwright tests move into
