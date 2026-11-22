@@ -2,198 +2,182 @@
 
 What is being worked on now and what comes next. When an item ships, move it to `COMPLETED.md` with the date and the outcome.
 
-## Resume here (2026-11-20)
+## Resume here (2026-11-22)
 
-**0.2.0 is released** (tag on `main`; `COMPLETED.md`), against Dannan 0.9.2, Dagda 0.3.2 and lir::mqtt d36356d (Lir's 0.1.0
-was not yet on GitHub). Its .deb is built and tested but not in the apt repository: the maintainer said not yet. Next release:
-repin lir::mqtt to Lir's tag, then Dannan 0.10.0 and Dagda's next.
+**Releases.** 0.2.0 (packaged) and 0.3.0 (Dannan 0.10.0, source only) are tagged on `main`; `CHANGELOG.md` says what each
+holds. The cluster was stopped by the maintainer on 2026-11-21 with 0.4.0 half done; nothing has run since.
 
-**P8.0 is done and merged into `develop`** (2026-11-20, the maintainer's word "Start P8.0 now"; `COMPLETED.md`). Dagda 0.3.2 is fetched
-beside Dannan 0.9.2, and `ClusterRig` (`lugh/test/fixtures/cluster_rig.h`) runs Lugh's spaces on Dagda's in-process cluster.
+**0.4.0, in hand: `feature/config-names` (436f8f1, pushed, not yet gated).**
+- Done on the branch:
+  - The four flags and variables take the stack's config names (Dannan's `docs/config.md`): `--server-address`,
+    `--server-port`, `--oauth-issuer` and `--oauth-mtls-port`, with `LUGH_SERVER_ADDRESS` and the rest. The old names
+    are gone, not aliased. The unit, the man page, `docs/oauth.md`, the tests and the dashboard's e2e helper follow.
+  - The changelog's 0.4.0 entry, which carries a table of the old and new names.
+  - Dannan is pinned at 0.10.1; the version is 0.4.0.
+- To do before the tag, in this order:
+  1. Rebase the branch onto `develop`.
+  2. Repin, each with a CHANGELOG line saying what its release notes change in Lugh:
+     - Dannan to 0.10.2, a patch (a scheduler leak fixed, and `SteppedTime(poll)` for tests that stall under TSan;
+       Lugh's rigs use the default unless TSan shows a stall).
+     - lir::mqtt from d36356d to the tag 0.1.0 (9074dcb, now on GitHub; the codec is unchanged since d36356d).
+     - Dagda stays at 0.3.2 for the tests: 0.3.3 is repair's memory bound on Dannan 0.9.2, which Lugh's tests do not
+       exercise.
+  3. Gate once each on a 16 GB node: debug, ASan and TSan (dependencies instrumented, checked with nm), and the fuzz
+     campaign (13 targets, 300 s each).
+  4. Squash-merge to `develop`, merge to `main`, tag 0.4.0, and tell the dependants (Louhi, Kvasir, Mimir, Lir's
+     plugin) that the flags were renamed.
+- The Debian package: none since 0.2.0. It waits for Dagda's release on Dannan 0.10.x in the apt repository, because
+  the package build runs the tests against Dagda's packages. Building it locally is fine; putting it in the apt
+  repository waits on the maintainer's word.
 
-**What comes next, and what it waits on.** The rest of P8 is held by its dependencies, by the no-duplication rule:
-- P8.1 (lugh-node a Dannan node) waits on Dannan's node-program helper and founding act (Dannan's plan, items 4 and 14), so
-  Lugh writes no wiring of its own that they would replace. Dannan 0.10.0 is under way; its tag needs the maintainer's word.
-- P8.2 to P8.4 wait on Dagda's register map (D6, being built test-first), which replaces Lugh's own merge and codec.
-- P8.5 waits on Dagda's slice 2; P8.6 on the durable AcceptorStore and Dannan's register layer; P8.7 on D9.
-Meanwhile, not waiting (`lugh::client_topics` is done):
-`@lugh/admin-ui`, the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`).
-**Dannan 0.10.0, reviewed against its CHANGELOG** (`feature/dannan-0.10`; gated once its tag, and Dagda 0.4.0's, are out).
-With the pin:
-- `LUGH_SANITIZE` is passed through as `DANNAN_SANITIZE`, beside Lugh's global flags.
-- `TokenSource`'s retry policy is Dannan's `RetryPolicy::unbounded(5s, 5min)`, the same policy Lugh wrote by hand.
-- The rest of the diff is source-compatible: `identity::hex` and `unhex` forward to `encoding/base.h`, and the durable-file
-  calls gain a defaulted mode.
-
-Each next item is its own step, because each changes behaviour or public API, in this order:
+**After 0.4.0: onto the rest of Dannan 0.10.x** (from its release notes; one step each, as each changes behaviour or
+public API):
 1. **The callback vocabulary.** lugh_client's and the node's `Outcome`, `Fault` and `Completion` become Dannan's
-   `contract/completion.h` (one Fault kind for the stack, with `unavailable` and `timed_out` mapped to 503). This changes
-   lugh_client's public types, so it is told to Louhi, Kvasir, Mimir and Lir first.
-2. **The encodings.** `lugh/core/encoding.h` (base64url, base32, `printable`, UTF-8) becomes `encoding/base.h`; Dannan's
-   exact decoders write a secret straight into a `SecureBuffer`.
+   `contract/completion.h` (one Fault kind for the stack; `unavailable` and `timed_out` answer 503). This changes
+   lugh_client's public types, so tell Louhi, Kvasir, Mimir and Lir first.
+2. **The encodings.** `lugh/core/encoding.h` becomes `encoding/base.h`; its exact decoders write a secret straight
+   into a `SecureBuffer`.
 3. **TOTP's HMAC-SHA-1** becomes `identity::hmac_sha1`.
-4. **Lugh's random IDs** become `identity::RandomId<Tag>`, one type per kind.
-5. **`network::Cidr`** becomes `listen::Prefix`, which now refuses host bits set past the length. A configured
-   `proxy.trusted_networks: 10.0.0.1/8`, read today as 10.0.0.0/8, would stop the start; the release notes say so.
+4. **Random IDs** become `identity::RandomId<Tag>`.
+5. **`network::Cidr`** becomes `listen::Prefix`, which refuses host bits set past the length (`10.0.0.1/8` would then
+   stop the start; say so in the release notes).
 6. **The tests' `RecordingSink`** becomes `test::RecordingSink`, and lugh_node's late logger swap becomes
    `status::SwappableSink`.
-7. Any directory Lugh makes and syncs by hand (the keyring's and state files') uses `identity::durable_create_directories`
-   and `durable_sync_directory`.
-8. Lugh's fuzz targets also run as smoke tests inside `lugh_tests`, through `dannan::testing` (`fuzz::smoke`), so every
-   CI run exercises each parser's corpus; `lugh/fuzz/campaign.sh` keeps the long campaigns.
-Not taken: `agree::MemoryStore` and the agreement teardown fixes, which are P8's (Lugh hosts no agreement yet); the ack
-levels, which Lugh does not name.
+7. Directories made and synced by hand use `identity::durable_create_directories` and `durable_sync_directory`.
+8. The fuzz targets also run as smoke tests in `lugh_tests` through `dannan::testing`, so CI exercises each corpus.
+Not taken: `agree::MemoryStore`, `each_held` and the agreement teardown fixes, which are P8's; the ack levels.
 
-**Dannan 0.10.1** (a patch, 0.10.0's ABI): repin with 0.4.0's gate. Its notes change nothing in Lugh now. The stop
-that waits for a scheduled step and `MemoryStore::each_held` matter from P8, when lugh-node is a Dannan node.
+**Also waiting to be done, not blocked:**
+- `@lugh/admin-ui`: the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`,
+  "The shared admin UI"). npm, tested in GitHub CI, so no cluster time. Whether the dashboard's 5 Playwright tests move
+  into Vitest's browser mode is asked of the maintainer.
+- Coverage: the rest of the gap, file by file (`COMPLETED.md`, "Coverage closer to whole", lists what is left and why).
 
-**The stack's config names** (Dannan's `docs/config.md`). The layer order and the log keys already conform. Four flags
-and variables do not: each is to be made from its full dotted key.
-- `server.address`: `--address` and `LUGH_ADDRESS` become `--server-address` and `LUGH_SERVER_ADDRESS`.
-- `server.port`: `--port` and `LUGH_PORT` become `--server-port` and `LUGH_SERVER_PORT`.
-- `oauth.issuer`: `--issuer` and `LUGH_ISSUER` become `--oauth-issuer` and `LUGH_OAUTH_ISSUER`.
-- `oauth.mtls_port`: `--mtls-port` and `LUGH_MTLS_PORT` become `--oauth-mtls-port` and `LUGH_OAUTH_MTLS_PORT`.
-
-A flag is part of the interface, so the renames go in the next minor, 0.3.0, with the unit file, the README, the tests
-and the changelog, never mid-release. The prefix stays `LUGH`: it is the project's name in upper case, not
-the binary's (the coordinating session, 2026-11-20; Kvasir uses `KVASIR` for kvasir-node the same way).
-
-What each dependant needs of Lugh, and what Lugh needs of Dannan and Dagda, is in `2026-11-20-dependants.md`.
-
-Until Dagda has a switch for its tools (agreed, in its next release), the node build compiles `dagda-migrate` and
-`dagda-bench`, and an install carries `dagda-migrate`, its man page and Dagda's library and headers.
-
-Lugh runs as a single-node test service on all four build nodes, each its own genesis; root's password for each is in
-`/root/lugh-root-password` there. The service survived the cluster's wipe (2026-11-18; health 200 on all four, checked).
-It also rode through node-a's and node-d's unclean power loss (2026-11-20, about 10:20Z): after the restart the service was
-active with health 200 on both, its sealed store opened with all its records (1 user, 1 group, 9 audit entries), and the
-binary and the dashboard's 32 files checksummed the same as node-b's.
-
-Before Lugh's first release: the fuzz campaigns again, on the instrumented build (P12 plan, "Left for the first release").
-Its packaging follows the stack's deb convention (coordinator, 2026-11-20; read Dannan's and Dagda's `debian/` and
-`../manannan/docs/packaging.md` first). It uses debhelper (compat 13) from `debian/` driving CMake's install rules, with
-`dh_installsystemd` and `dh_installsysusers`, and `tools/build-deb.sh` (Dannan's is the reference layout), built natively on a claimed build node and in CI, lintian clean.
-Shared libraries are never bundled: the node links Dannan alone, so the package depends on Dannan's runtime library through
-`${shlibs:Depends}`; Dagda (`libdagda-dev`) and Lir (`liblir-dev`, or Lir cloned from the sibling checkout) are build
-dependencies of the tests only. A `-dev` range is `>= x.y.z, << next minor~`, its lower bound a full version. The layout:
-- `/usr/bin/lugh-node`;
-- `/etc/lugh/config.yaml` as a conffile; the secrets in `/etc/lugh/secrets.yaml`, mode 0600, made by postinst and never shipped;
-- `/var/lib/lugh` for state;
-- `lugh.service` running as the `lugh` user, installed disabled and not started;
-- the dashboard at `/usr/share/lugh/dashboard`.
-
-The version comes from `git describe` and must match `project(VERSION)`; an untagged build is `<tree version>+git.g<hash>`, as Dannan's script makes it. A CI job with sanitizers or libFuzzer installs `libclang-rt-19-dev` explicitly, because trixie's clang leaves it out. Packages are `lugh`, plus `lugh-dev` for lugh_client's
-headers. The packaging is described in `docs/packaging.md`, while the README covers installation and use.
-
-**The stack's placement plan** (2026-11-20, the maintainer's audits: no duplicated functionality, no special node; agreed by every
-session through the coordinator, the coordinator, `../lir-develop-cluster/TODO/2026-11-20-cluster-stack-placement.md`,
-"Lugh"). After P8.0: the relying-party work in `lugh_client` (`2026-11-20-client-relying-party.md`, with Lir's and Louhi's calls),
-then Lugh's moves onto Dannan's pieces as each lands. Special roles: founding through Dannan's explicit act, POSIX numbers
-through an agreement register, the audit exported continuously, single-use OAuth state node-local (the stated exception), and
-the readers of `lugh/secrets` from Dagda's catalogue (slice 5). For the maintainer: Q1, an HTTP core in Dannan seeded from Lugh's.
-
-## Open, not scheduled
-
-- **Socket activation** for the listeners. Deferred, since `inherited_socket` checks LISTEN_PID and a test cannot set it
-  (`2026-11-15-dannan-0.8.md`).
-- **Principal events over Lir**, and the narrow status read `lugh:principals.status` (the maintainer, 2026-11-15, asked by Mimir and Louhi):
-  `2026-11-15-principal-events.md`. Recommended after P8.1. The MQTT client is Lir's `lir::client`.
-- **Hashing on `sched::WorkerPool`**, at P8.1. Until then the hashing queue is unbounded, a known gap.
-- Small, left to decide: whether the remaining synchronous `Result` returns (config loader, record codecs) should throw.
+**P8, the cluster on the stack** (`2026-11-13-p8-plan.md`). P8.0 is done. The rest waits on its dependencies, by the
+no-duplication rule:
+- P8.1 (lugh-node a Dannan node) waits on Dannan's node-program helper and founding act (Dannan's plan, items 4 and 14).
+- P8.2 to P8.4 wait on Dagda's register map (D6), which replaces Lugh's own merge and codec.
+- P8.5 waits on Dagda's slice 2; P8.6 on the durable AcceptorStore and Dannan's register layer; P8.7 on D9.
 
 ## Waiting on others
 
-- **Dagda**: see "Resume here". Dagda checked (2026-11-16) that no path moves a head value into a DATA object at any size; not
-  checked: how a 256 KiB value affects a tree node's size and splitting, a test at P8.0. P8.5 also waits on the follower-lag fix
-  (slice 2): a disable seen on another build node within about a second (the maintainer, 2026-11-14). Dagda will tell Lugh when `Space::covers()` is
-  the way to compare a view with what Lugh wrote (its Next 3).
-- **Dagda's register map, D6** (`../dagda/TODO/2026-11-20-register-map.md`, being built test-first in Dagda's next release):
-  `lugh/scope` and `lugh/secrets` become register-map spaces, and `merge::winner` and `merge()` go (`UniqueIndex` stays). Lugh's
-  review was taken whole (2026-11-20): tombstone-wins with "never" (the maintainer's "removal over edit, never resurrected"), a put onto a
-  tombstone refused, `get_register` for a 410, `changed()` answering each key's before and after for the indexes, and a 64 KiB
-  value bound refused at put. Lugh's own bound (`merge::kMostValueBytes`, 256 KiB) drops to 64 KiB at P8.3; the 256 KiB
-  tree-node test is no longer needed.
-- **Dagda's caught-up signal** (asked by Dagda 2026-11-20 for Louhi; design `../dagda/TODO/2026-11-20-louhi-reads.md`, section 2).
-  Lugh answered that it needs it for `lugh/scope`, `lugh/secrets` and the back-off space, per space, as a query and a notice:
+- **Dagda's register map, D6** (`../dagda/TODO/2026-11-20-register-map.md`). `lugh/scope` and `lugh/secrets` become
+  register-map spaces, and `merge::winner` and `merge()` go (`UniqueIndex` stays). Lugh's review was taken whole
+  (2026-11-20):
+  - tombstone-wins with "never" (the maintainer's "removal over edit, never resurrected");
+  - a put onto a tombstone refused, and `get_register` for a 410;
+  - `changed()` answering each key's before and after, for the indexes;
+  - a 64 KiB value bound refused at put. Lugh's own bound (`merge::kMostValueBytes`, 256 KiB) drops to 64 KiB at P8.3.
+- **Dagda's caught-up signal** (`../dagda/TODO/2026-11-20-louhi-reads.md`, section 2), per space (`lugh/scope`,
+  `lugh/secrets`, the back-off space), as a query and a notice:
   - The notice drives `/ready`.
-  - The query goes before genesis and before POSIX number allocation or a unique-name write, which are refused until caught up.
+  - The query goes before genesis, POSIX number allocation and unique-name writes, which are refused until caught up.
   - Sign-in, token and bind decisions answer 503 rather than read a lagging view.
-  - Asked of Dagda: compare only with peers that open the space (a Macha-only node never holds back `lugh/secrets`), keep "no
-    active peers" distinct from caught up, and recompute it when the active set changes.
-  - The 40-byte head-identity advert serves Lugh.
-  Belongs to P8.1 and P8.3.
+  - It compares only with peers that open the space, and keeps "no active peers" distinct from caught up.
+  It belongs to P8.1 and P8.3.
+- **Dagda's follower-lag fix** (slice 2) for P8.5: a disable seen on another node within about a second (the maintainer,
+  2026-11-14).
+- **Dagda's switch for its tools** (agreed, its next release). Until then the fetched node build compiles `dagda-migrate`
+  and `dagda-bench`, and a local install carries `dagda-migrate`.
 - **The maintainer, at P13**: `docs/architecture.md` question 10 (TLS for T.O.M.S sites, or sign-in only at the hub).
 
-## Dependencies pinned
+## Open, not scheduled
 
-- Dannan **0.9.2** (`LUGH_DANNAN_REF`, a tag in `../dannan`, ABI `libdannan.so.0.9`): agreement with `Outcome::unknown` for P8's
-  registers, the listener and connector, `verify_rs256`, the worker pool, the sign-in back-off; 0.9.2 is what Dagda 0.3.x builds
-  on. Move the pin when a tag Lugh wants is cut.
-- Dagda **0.3.2** (`LUGH_DAGDA_REF`, a tag in `../dagda`, SONAME the whole version), node builds only: slice 1 and
-  `Space::covers`. The build nodes need `../dagda/.git/` at `/srv/build/lugh/dagda` beside Dannan's.
-- Lir's Lugh plugin pins a `develop` commit of Lugh, and repins at Lugh's first release.
+- **Principal events over Lir**, and the status read `lugh:principals.status` (`2026-11-15-principal-events.md`; asked by
+  Mimir and Louhi). Recommended after P8.1, on Lir's `lir::client`.
+- **Hashing on `sched::WorkerPool`**, at P8.1. Until then the hashing queue is unbounded, a known gap.
+- **Socket activation** for the listeners, deferred: `inherited_socket` checks LISTEN_PID, which a test cannot set.
+- **lugh_client as an installed package** (`find_package(lugh)`, asked by Kvasir), with a `lugh-dev` Debian package.
+- The eleven old `feature/*` branches already merged into `develop` (cbor-bound to webauthn) could be deleted, locally and
+  on GitHub; asked of the maintainer, as deleting remote branches is his call.
+- Small: whether the remaining synchronous `Result` returns (config loader, record codecs) should throw.
+
+## Dependencies pinned (develop)
+
+| Dependency | Pin | Used by |
+|---|---|---|
+| Dannan | 0.10.0 (`LUGH_DANNAN_REF`) | everything; 0.10.1 on `feature/config-names`, 0.10.2 next |
+| Dagda | 0.3.2 (`LUGH_DAGDA_REF`) | the tests only; the node does not link it until P8 |
+| Lir | d36356d (`LUGH_LIR_REF`) | the tests and `lugh::client_topics` only; the tag 0.1.0 next |
+
+Each comes from the sibling checkout (`../dannan`, `../dagda`, `../lir`), cloned into the build tree. A relying party that
+fetches lugh_client alone (`LUGH_BUILD_NODE=OFF`) fetches Dannan and nothing else. The package build uses the installed
+Dannan (`LUGH_SYSTEM_DEPENDENCIES`).
 
 ## Builds and tests
 
-No builds or tests on the development workstation, only on the shared arm64 build nodes (the maintainer, 2026-11-14), and no clangd
-indexer either (kill this session's after a C++ edit). How to reach the nodes and their claim board is in the gitignored
-`CLAUDE.local.md`; real host names and addresses never go in the repository. A job claims only the cores it uses, runs at
-`nice -n 19`, and releases its claim when it ends or fails; the tests run only if the build succeeded.
+No builds or tests on the development workstation, only on the shared arm64 build nodes (the maintainer, 2026-11-14), and
+no clangd indexer either (kill this session's after a C++ edit). How to reach the nodes and their claim board is in the
+gitignored `CLAUDE.local.md`; real host names and addresses never go in the repository. A job claims only the cores it uses,
+runs at `nice -n 19`, and releases its claim when it ends or fails.
 
-Sanitizers only at a phase's end, for a release, or to hunt a named bug; never for a pin move or another step's gate (the maintainer's rule,
-restated 2026-11-17; Lugh's phase-end exception is `CLAUDE.md`'s).
+Each feature or milestone ends green once each in debug, ASan with UBSan and TSan, on the same code, before it merges into
+`develop`, with Dannan, Dagda and Lir built instrumented. Sanitizers run then, for a release, or to diagnose a named bug.
+Test once: no repeated runs; a test that fails at random is investigated, never tolerated (the maintainer, 2026-11-20). A
+release adds the fuzz campaigns and, while packaged, the package build with its tests. A gate carries across a version
+bump only when a diff shows the code is the same.
+
+GitHub CI runs on pushes to `develop` and `main` and on pull requests, not for TODO, docs or Markdown changes; CodeQL on
+`main` and weekly. All green: CI on `develop` and `main`, CodeQL on `main` since 0.3.0.
+
+Lugh runs as a single-node test service on all four build nodes, each its own genesis (root's password in
+`/root/lugh-root-password` there). It came through the cluster's wipe (2026-11-18) and two nodes' unclean power loss
+(2026-11-20) with its store intact.
 
 ## Documents
 
 Live:
-- `2026-11-13-p8-plan.md`: P8, the rewrite against Dagda's spaces, steps P8.0 to P8.9, the maintainer's rulings (TOTP on agreement registers,
-  the named acknowledgement levels).
+- `2026-11-13-p8-plan.md`: P8, steps P8.0 to P8.9, the maintainer's rulings (TOTP on agreement registers, the named
+  acknowledgement levels).
 - `2026-11-13-lugh-needs-of-the-stack.md`: what Lugh needs of Dannan (N1 to N10) and Dagda (G1 to G15), with the answers.
+- `2026-11-20-dependants.md`: what each dependant needs of Lugh, and the shared admin UI.
 - `2026-11-15-principal-events.md`: principal changes over Lir, and the status read. A design.
 - `../dagda/TODO/2026-11-03-stack.md`: what each project of the stack owns.
 
-Done, kept as the design record: `2026-11-16-p12-hardening.md` (P12), `2026-11-16-p7-dashboard.md` (P7),
-`2026-11-15-self-factors.md`, `2026-11-15-p11-webauthn.md` (P11), `2026-11-15-dannan-0.8.md`, `2026-11-14-p10-plan.md` (P10),
-`2026-11-04-oauth.md` (P6), `2026-11-04-ldap.md` (P9).
+Done, kept as the design record (source comments cite them by path): `2026-11-20-client-relying-party.md`,
+`2026-11-16-p12-hardening.md` (P12), `2026-11-16-p7-dashboard.md` (P7), `2026-11-15-self-factors.md`,
+`2026-11-15-p11-webauthn.md` (P11), `2026-11-15-dannan-0.8.md`, `2026-11-14-p10-plan.md` (P10), `2026-11-04-oauth.md`
+(P6), `2026-11-04-ldap.md` (P9).
+
+Other repository documents: `docs/packaging.md` (the Debian package), `docs/client.md` (lugh_client), and the
+architecture, API, OAuth, LDAP and threat-model documents in `docs/`.
 
 ## Standing decisions
 
 The ones that shape the next work; the rest are in the plans and `COMPLETED.md`.
 
-- No special-case code for a single node: every project is a leaderless, multi-master soft cluster (the maintainer to the stack,
+- No special-case code for a single node: every project is a leaderless, multi-master soft cluster (the maintainer,
   2026-11-20).
-- Every service's configuration is YAML through `dannan::config` (the maintainer, 2026-11-20); Lugh's is.
-- About 100% code coverage on all code (the maintainer, 2026-11-20): measured by `LUGH_COVERAGE` and CI's coverage job to Codecov.
-- GoogleTest for all C++ tests; the admin React uses Vitest (the maintainer, 2026-11-20).
-- Passwords follow the usual standards: no promise about their characters, ever (the maintainer, 2026-11-20).
-- Features and milestones are developed on branches and merged into `develop` when complete, preferably as one squash
-  commit for the whole feature or milestone (the maintainer to the stack, 2026-11-20, relayed by the coordinator).
-
-- The sealed store, keyring, `Files`, `Console` and the node's start-up stay coroutines and frozen until Dagda carries Lugh's spaces,
-  then are deleted ("Keep the store until Dagda").
-- Lugh's domains are `lugh/scope` (every node a member) and `lugh/secrets` (Lugh nodes). Credential changes and revocations are
-  Replicated, answering "applied, n nodes pending".
-- TOTP and recovery codes become agreement registers, failing closed on a minority side, with no interim lease (the maintainer, 2026-11-15).
-- Logs, Status and docs name acknowledgement levels as the stack's standard does (`ephemeral`, `persisted`, `decided`,
-  `replicated`; setting `ack_level`).
-- Lugh installs Dannan's `ScopeSource`; message types from 512; one `lugh-node` per node; HTTP stays Lugh's.
-- `lugh_client` links Dannan and knows nothing of Lir; Lir's MQTT permissions are Lugh topic scopes.
+- No duplicated functionality: the deepest shared dependency owns a piece, and of two projects that depend on each
+  other the lower keeps it. When a dependency's release adds what Lugh wrote itself, Lugh moves onto it.
+- Every service's configuration is YAML through `dannan::config`, with flags and environment variables as overrides,
+  named from the YAML key (Dannan's `docs/config.md`); the variable prefix is `LUGH`.
+- About 100% code coverage (the maintainer, 2026-11-20), measured by `LUGH_COVERAGE` and CI's coverage job to Codecov.
+- GoogleTest for all C++ tests; the admin React uses Vitest.
+- Passwords follow the usual standards: no promise about their characters, ever.
+- Features and milestones are developed on branches and squash-merged into `develop` when complete.
+- Versions are written in full, `x.y.z`, in pins, requests, docs and messages; a Debian range is the one range.
+- Releases: the README is about installing and using Lugh; `CHANGELOG.md` gets each release's entry before its tag,
+  with a line for each dependency repin; minor or patch bumps only; a release badge.
+- Nothing identifying in tracked files or commit messages: no host names, addresses, user paths, session names, or the
+  maintainer's name outside copyright notices (the history was scrubbed 2026-11-20).
+- The sealed store, keyring, `Files`, `Console` and the node's start-up stay coroutines and frozen until Dagda carries
+  Lugh's spaces, then are deleted.
+- Lugh's domains are `lugh/scope` (every node a member) and `lugh/secrets` (Lugh nodes). TOTP and recovery codes
+  become agreement registers, failing closed on a minority side (the maintainer, 2026-11-15).
+- `lugh_client` links Dannan and knows nothing of Lir; Lir's MQTT permissions are Lugh topic scopes, checked by
+  `lugh::client_topics` on Lir's codec.
 - WebAuthn is offered only when `oauth.issuer` is set, whose host is the RP ID.
 
 ## Plan
 
-Each feature or milestone ends green in debug, ASan with leak detection and TSan, one full run each, on the same code, before
-it merges into `develop`. Sanitizers run at that point only, or to diagnose a bug that other methods have not found. Test once:
-no repeated runs and no mutation runs unless a change is small or high-risk, and a test that fails at random is investigated,
-never tolerated (the maintainer to the stack, 2026-11-20, replacing the 20 repeats of 2026-11-14).
-
 | ID | Phase | State |
 |---|---|---|
 | P1 to P6 | Skeleton, keys, sealed store, directory and sign-in, the API, OAuth and OIDC | done (P3 frozen until P8) |
-| P7 | Dashboard, the React SPA in T.O.M.S's styling; administering through a session needs `phr` | done |
+| P7 | Dashboard; administering through a session needs `phr` | done |
 | P8 | The cluster on the stack: Dannan's `Context`, Dagda's spaces, replacing the sealed store and keyring | P8.0 done; the rest waits on Dannan and Dagda |
 | P9 | Writable LDAP | done |
-| P10 | `lugh_client` | done |
+| P10 | `lugh_client` | done; relying-party pieces and topic checks added 2026-11-20 |
 | P11 | WebAuthn, passkeys and `phr` | done |
-| P12 | Hardening: fuzzing, the sandbox on real hosts, key rotation drills, the threat model | done; campaigns again before release |
+| P12 | Hardening: fuzzing, the sandbox, key rotation drills, the threat model | done |
 | P13 | SSO rollout: blackraven-admin, T.O.M.S, AthenaSIP admin, Macha; one break-glass account each | not started |

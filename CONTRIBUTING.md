@@ -55,25 +55,34 @@ Lugh keeps CMake presets, the stack's one exception (the maintainer, 2026-11-04:
 of auth"): `debug` (into `build/`), `release`, `asan`, `tsan` and `fuzz`, each into
 `build-<preset>/` except `debug`. They carry the MacPorts paths.
 
-Dannan is fetched from `../dannan` at `LUGH_DANNAN_REF` (a release tag, or a
-commit while Lugh needs something not yet tagged), into the build tree, and
-linked as `dannan::dannan`; building Lugh never touches the sibling checkout.
+Dannan, Dagda and Lir are fetched from the sibling checkouts (`../dannan`,
+`../dagda`, `../lir`) at `LUGH_DANNAN_REF`, `LUGH_DAGDA_REF` and `LUGH_LIR_REF`
+(a release tag in full `x.y.z`, or a commit while Lugh needs something not yet
+tagged), into the build tree; building Lugh never touches a sibling checkout.
+The node links Dannan; Dagda and Lir's MQTT codec are linked by the tests (and
+`lugh::client_topics`) only. `LUGH_SYSTEM_DEPENDENCIES=ON` builds against the
+installed packages instead, as the Debian package does.
 
 Run `lugh_tests`: every test is in it, the units, the IoC check, and what only
 a whole process shows, the shutdown, `init` and API tests that drive the real
 `lugh-node` (`node_process_*`, through Dannan's `ChildProcess`). `ctest` runs
 the same binary, as the install's gate. There is no Python in Lugh, as in the
-rest of the stack (the maintainer, 2026-11-04). Everything runs on a
-developer machine (MacPorts for every dependency on the laptop); there is no
-hosted CI. `-DLUGH_BUILD_FUZZING=ON` builds the fuzz targets under a clang that
-has libFuzzer.
+rest of the stack (the maintainer, 2026-11-04). Builds and tests run on the
+stack's shared build nodes, not on a development workstation, and on GitHub CI
+(GCC on x86-64 and arm64, clang, coverage to Codecov, clang-tidy's
+use-after-move check, and CodeQL). `-DLUGH_BUILD_FUZZING=ON` builds the fuzz
+targets under a clang that has libFuzzer; `lugh/fuzz/campaign.sh` runs a
+campaign.
 
-Sanitizers run routinely in Lugh: every phase ends with `lugh_tests` and
-`ctest` passing under AddressSanitizer with UndefinedBehaviorSanitizer
-(`--preset asan`) and ThreadSanitizer (`--preset tsan`), both of which
-instrument Dannan too.
-This is Lugh's one stated exception to the stack's rule of sanitizers before a
-release: Lugh holds every credential (the maintainer, 2026-11-04). Under ASan the test
+Every feature or milestone ends, once each, with `lugh_tests` passing in debug,
+under AddressSanitizer with UndefinedBehaviorSanitizer (`--preset asan`) and
+under ThreadSanitizer (`--preset tsan`), before it merges into `develop`. A
+sanitizer build instruments Dannan, Dagda and Lir too (they are built from
+source with the same flags, never linked from a package), checked with `nm` for
+the sanitizer's symbols. A release adds the fuzz campaigns. This is Lugh's one
+stated exception to the stack's rule of sanitizers before a release: Lugh holds
+every credential (the maintainer, 2026-11-04). Tests run once; a test that fails
+at random is a bug to find, never noise. Under ASan the test
 binary turns off container-overflow detection (`lugh/test/sanitizer_options.cpp`):
 GoogleTest from MacPorts is not instrumented, and where its copy of libc++'s
 container code meets the instrumented one ASan reports an overflow that is not
@@ -90,7 +99,8 @@ current behaviour.
 ## Dependencies
 
 Dannan, Boost (Asio, Beast, JSON), OpenSSL 3 (the one Dannan links: one process,
-one OpenSSL) and yaml-cpp, plus GoogleTest for the test build. Prefer writing
+one OpenSSL) and yaml-cpp; for the tests GoogleTest, libldap, Dagda and Lir's MQTT
+codec; Node 20 and npm for the dashboard. Prefer writing
 something by hand over adding a library, and say so if a dependency really is
 the right call.
 
@@ -123,7 +133,10 @@ CLAUDE.md, CONTRIBUTING.md   the rules (CLAUDE.md is gitignored globally)
 ```
 
 Lugh's own beside these: `config/`, the shipped configuration; `deploy/`, the systemd unit
-and host preparation; and `CMakePresets.json`, which Dannan and Dagda do not have.
+template and host preparation for a local install; `debian/` and `tools/build-deb.sh`,
+the Debian package (`docs/packaging.md`); `man/`, `lugh-node(8)`; `dashboard/`, the React
+dashboard (Vitest for its tests); `CHANGELOG.md`; and `CMakePresets.json`, which Dannan and
+Dagda do not have.
 
 A file pair holds one component: a class and what serves only it. Names are
 `snake_case` files, `PascalCase` types, `_member`s, namespaces
