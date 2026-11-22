@@ -29,6 +29,10 @@ code. Newest first. The tags are on `main`.
   and RFC 6238's vectors).
 - A user's or group's id is Dannan's `identity::RandomId`, spelled as before: thirty-two lower-case hex digits. Client
   ids, key ids and token ids keep their own spellings, which relying parties see.
+- Address ranges (`proxy.trusted_networks`, an app password's networks) are Dannan's `listen::Prefix`; Lugh's `Cidr` is
+  gone. What is accepted is unchanged: host bits set past the length were refused before and still are
+  (`10.0.0.1/8` stops the start, naming the setting). New: an IPv4-mapped range (`::ffff:10.0.0.0/104`) is read as
+  the IPv4 one it means.
 
 ## 0.4.0: the stack's config names (2026-11-22)
 

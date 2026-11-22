@@ -118,7 +118,6 @@ add_library(lugh STATIC
     keys/keyring.cpp
     keys/keyring_format.cpp
     keys/keyring_manager.cpp
-    network/cidr.cpp
     scopes/grants.cpp
     scopes/scope.cpp
     node/config.cpp

@@ -13,7 +13,7 @@
 
 #include "dannan/listen/limits.h"
 #include "lugh/http/http_types.h"
-#include "lugh/network/cidr.h"
+#include "lugh/network/prefix.h"
 
 namespace lugh::http {
 
@@ -28,7 +28,7 @@ namespace lugh::http {
 // write one.
 class ClientAddress {
  public:
-  explicit ClientAddress(std::vector<network::Cidr> trusted_proxies);
+  explicit ClientAddress(std::vector<network::Prefix> trusted_proxies);
 
   std::string resolve(const boost::asio::ip::address& peer, const HttpRequest& request) const;
 

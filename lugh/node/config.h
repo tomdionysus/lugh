@@ -17,7 +17,7 @@
 #include "dannan/config/config.h"
 #include "dannan/status/log.h"
 #include "lugh/core/status.h"
-#include "lugh/network/cidr.h"
+#include "lugh/network/prefix.h"
 #include "lugh/node/cli.h"
 #include "lugh/system/environment.h"
 #include "lugh/version.h"
@@ -96,7 +96,7 @@ struct Config {
 
   // A request from one of these is taken at the last X-Forwarded-For entry not in them;
   // everything else at its socket's address. Empty by default: no proxy is trusted until named.
-  std::vector<network::Cidr> trusted_proxies;
+  std::vector<network::Prefix> trusted_proxies;
 };
 
 // Lugh's settings, read by Dannan's settings reader (dannan/config/config.h, the one reader

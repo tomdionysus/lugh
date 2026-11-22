@@ -11,7 +11,7 @@
 
 using lugh::http::ClientAddress;
 using lugh::http::HttpRequest;
-using lugh::network::Cidr;
+using lugh::network::Prefix;
 namespace http = lugh::http;
 
 namespace {
@@ -19,7 +19,7 @@ namespace {
 boost::asio::ip::address ip(const std::string& text) { return boost::asio::ip::make_address(text); }
 
 // A node with one proxy in front of it, on 10.0.0.0/8.
-ClientAddress behind_proxy() { return ClientAddress({*Cidr::parse("10.0.0.0/8")}); }
+ClientAddress behind_proxy() { return ClientAddress({Prefix::parse("10.0.0.0/8")}); }
 
 // The default: no proxy is trusted.
 ClientAddress direct() { return ClientAddress({}); }

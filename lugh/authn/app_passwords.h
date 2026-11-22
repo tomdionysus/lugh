@@ -23,7 +23,7 @@
 #include "lugh/core/secret.h"
 #include "lugh/crypto/argon2.h"
 #include "lugh/directory/directory.h"
-#include "lugh/network/cidr.h"
+#include "lugh/network/prefix.h"
 #include "lugh/store/store.h"
 #include "lugh/store/store_calls.h"
 
