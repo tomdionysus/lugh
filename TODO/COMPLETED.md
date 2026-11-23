@@ -13,7 +13,10 @@ virtual authenticator (no other way in, by design): an `api` with the prefix `lo
 root-only file on that node. A token by client credentials checked: Bearer, 300 s, both scopes, the audience and issuer
 right. A second pass (the maintainer's word again): `louhi:louhi:register` added to the trial client, and an admin client
 (`louhi:admin` alone, audience `louhi`) for making the trial's project once, root signing in with the kept passkey;
-both tokens checked. Both clients go when the trial ends (Louhi says when). On the way: a first run registered nothing (client secrets were not yet on), so the node's state went back to
+both tokens checked. The trial worked (Louhi: both clients signed in, the task ran under the trial client's token), and
+on its end both clients and the `louhi` api were removed and their secret files shredded; the old secret now gets
+`invalid_client`. Root's kept passkey needed its signature counter moved past its last use to sign in again (Lugh
+refuses a counter it has seen, as it should); the script now saves it back after each use. On the way: a first run registered nothing (client secrets were not yet on), so the node's state went back to
 its pre-upgrade copy and root's first sign-in was made again; root's passkey (the virtual authenticator's credential)
 and recovery codes are kept root-only on node-b.
 
