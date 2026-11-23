@@ -87,6 +87,14 @@ answers are recorded here, then reconciled into Lugh's items, which go back to e
   at the next one.
 - C: verification from memory on the connection's strand; key fetches ahead of time, off it.
 
+### Manannan (2026-11-23; ../manannan/TODO/2026-11-23-clustered-dns-spec.md, step 6, on the maintainer's go)
+
+Manannan 0.5.0, a clustered DNS server with a REST API and a dashboard, takes from Lugh 0.6.0: `lugh_client`'s
+RelyingParty (its API's bearer tokens) and OAuthClient (its back end's code exchange for the dashboard's sign-in), a
+user's groups (the `groups` scope; or `GET /api/v1/users/{id}/groups` with `lugh:directory.read`, by a service client of
+its own), an app's role mappings (in the ID token and userinfo, not access tokens), and `@lugh/admin-ui` by file path at
+a tag. Nothing new of Lugh. Lugh asks nothing of Manannan: names resolve by the system's resolver (the maintainer).
+
 ### Confirmations
 
 - Mimir (2026-11-20): all five shapes; yes to the principal's version in tokens; a gap or a missed heartbeat makes it recheck
