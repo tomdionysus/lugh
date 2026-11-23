@@ -89,6 +89,13 @@ no clangd indexer either (kill this session's after a C++ edit). How to reach th
 gitignored `CLAUDE.local.md`; real host names and addresses never go in the repository. A job claims only the cores it uses,
 runs at `nice -n 19`, and releases its claim when it ends or fails.
 
+No node is preferred (the maintainer, 2026-11-23): a job takes whichever node has the cores free now, never queues for one
+because it holds a warm build tree, an earlier build or a habit, and on a node that lacks a tool or a `-dev` package
+installs it (1 core claimed, `nice -n 19 apt-get install -y`, a board note naming the package and the node). The trees are
+synced there and built from scratch. A job waits only when no node has the cores, and then names every node it can run on
+(`--any`). The exceptions are jobs that genuinely need one node, said in the claim's job text: a service that lives on it
+(a node's Lugh test service), or memory (the 4 GB node takes no sanitizer, fuzz or coverage build).
+
 Each feature or milestone ends green once each in debug, ASan with UBSan and TSan, on the same code, before it merges into
 `develop`, with Dannan, Dagda and Lir built instrumented. Sanitizers run then, for a release, or to diagnose a named bug.
 Test once: no repeated runs; a test that fails at random is investigated, never tolerated (the maintainer, 2026-11-20). A
