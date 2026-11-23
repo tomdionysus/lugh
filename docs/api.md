@@ -62,6 +62,7 @@ secret.
 | 503 | `busy` | Every work thread is taken and the queue is full; see `Retry-After` |
 | 503 | `unavailable` | A part of the directory could not be reached; nothing was changed |
 | 503 | `timed_out` | No answer within the deadline; a change may yet land, so read before writing again |
+| 503 | `cancelled` | The request was cancelled before it was answered; as `timed_out`, a change may yet land |
 | 500 | `failed` | The store, the keys or the randomness failed; nothing was changed |
 
 The codes are the stack's one Fault (Dannan's `contract/completion.h`), which `lugh_client` hands

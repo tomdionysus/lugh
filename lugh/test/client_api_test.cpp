@@ -118,6 +118,7 @@ TEST_F(ApiTest, TheApisErrorsAreLughsFaults) {
   EXPECT_EQ(fault_for(500, error("failed", "the request could not be completed")).fault, lugh::Fault::failed);
   EXPECT_EQ(fault_for(503, error("unavailable", "a part of the directory could not be reached")).fault, lugh::Fault::unavailable);
   EXPECT_EQ(fault_for(503, error("timed_out", "no answer within the deadline")).fault, lugh::Fault::timed_out);
+  EXPECT_EQ(fault_for(503, error("cancelled", "the request was cancelled")).fault, lugh::Fault::cancelled);
   EXPECT_EQ(fault_for(503, error("busy", "every work thread is taken")).fault, lugh::Fault::unavailable);
   const auto bare = fault_for(403, boost::json::value());
   EXPECT_EQ(bare.fault, lugh::Fault::refused);

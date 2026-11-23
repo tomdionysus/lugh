@@ -52,7 +52,7 @@ include(CheckPIESupported)
 
 # Boost 1.83 is Dannan's floor (Debian's, so the build nodes build with it), and Lugh's must be the one
 # Dannan is built with; Asio, Beast and JSON are all used header-only, and Boost.JSON's definitions
-# are compiled once, in lugh/client/boost_json.cpp.
+# are Dannan's, compiled once in libdannan (dannan/json/json.h).
 find_package(Boost 1.83 REQUIRED CONFIG)
 find_package(Threads REQUIRED)
 
@@ -64,12 +64,12 @@ find_package(OpenSSL 3.0 REQUIRED)
 # Dannan, the network layer Lugh hosts on, at a release tag, or at a commit while Lugh needs
 # something not yet tagged: from the sibling checkout, cloned into the build tree, so
 # building Lugh never touches ../dannan. Linked as dannan::dannan, the name an installed
-# Dannan exports too (find_package(dannan 0.10.0 CONFIG)). Now: 0.10.2, on 0.10.0's ABI; 0.10.0 adds the contract
-# vocabulary (completion, ack levels), the encodings, the random ID and SHA-1 that Lugh moves onto
-# next, and DANNAN_SANITIZE (libdannan.so.0.10).
+# Dannan exports too (find_package(dannan CONFIG)). Now: 0.11.0 (libdannan.so.0.11), which
+# carries Boost.JSON's compiled part (dannan/json/json.h: lugh_client no longer compiles its own) and
+# the stack's one TSan suppressions list (DANNAN_TSAN_SUPPRESSIONS).
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_REF "0.10.2")
+set(LUGH_DANNAN_REF "0.11.0")
 # Dagda, the store P8 moves Lugh onto, the same way: a release tag of the sibling checkout,
 # cloned into the build tree. Only the node needs it; lugh_client never does. Now: 0.3.2, slice 1
 # (the change notice) and Space::covers.

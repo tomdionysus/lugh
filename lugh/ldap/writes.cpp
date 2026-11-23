@@ -43,6 +43,7 @@ Result result_of(const Outcome<T>& outcome) {
     case Fault::failed:
     case Fault::unavailable:
     case Fault::timed_out:
+    case Fault::cancelled:
       break;
   }
   return refused(ResultCode::unavailable, "the request could not be completed, and may yet be made");

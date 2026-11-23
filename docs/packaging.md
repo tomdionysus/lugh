@@ -23,8 +23,8 @@ the tests run inside it too, and `DEB_BUILD_OPTIONS=nocheck` skips them.
 
 ## Dependencies
 
-Lugh links Dannan's shared library from `libdannan0.10`, found by `${shlibs:Depends}`; nothing is
-bundled. It is built against `libdannan-dev` (>= 0.10.0, << 0.11). The tests also need Dagda
+Lugh links Dannan's shared library from `libdannan0.11`, found by `${shlibs:Depends}`; nothing is
+bundled. It is built against `libdannan-dev` (>= 0.11.0, << 0.12). The tests also need Dagda
 (`libdagda-dev`) and Lir's MQTT codec: Lir's installed package when there is one, otherwise Lir
 fetched for the tests alone and never installed.
 

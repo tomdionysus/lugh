@@ -41,8 +41,9 @@ TEST(ApiFaults, EachFaultHasItsStatusAndCode) {
     unsigned status;
     const char* code;
   } expected[] = {
-      {Fault::not_found, 404, "not_found"}, {Fault::conflict, 412, "changed"},        {Fault::duplicate, 409, "duplicate"}, {Fault::invalid, 400, "invalid"},
-      {Fault::refused, 409, "refused"},     {Fault::unavailable, 503, "unavailable"}, {Fault::timed_out, 503, "timed_out"}, {Fault::failed, 500, "failed"},
+      {Fault::not_found, 404, "not_found"}, {Fault::conflict, 412, "changed"}, {Fault::duplicate, 409, "duplicate"},
+      {Fault::invalid, 400, "invalid"},     {Fault::refused, 409, "refused"},  {Fault::unavailable, 503, "unavailable"},
+      {Fault::timed_out, 503, "timed_out"}, {Fault::failed, 500, "failed"},    {Fault::cancelled, 503, "cancelled"},
   };
   for (const auto& each : expected) {
     const auto written = write(each.fault, "the caller's message");
@@ -55,7 +56,8 @@ TEST(ApiFaults, EachFaultHasItsStatusAndCode) {
 TEST(ApiFaults, WhatFailedInsideIsNotSaid) {
   using lugh::Fault;
   EXPECT_EQ(write(Fault::refused, "the last factor").message, "the last factor");
-  for (const auto fault : {Fault::failed, Fault::unavailable, Fault::timed_out})
+  for (const auto fault : {Fault::failed, Fault::unavailable, Fault::timed_out, Fault::cancelled})
     EXPECT_EQ(write(fault, "the store: /var/lib/lugh/store").message.find("/var/lib"), std::string::npos) << lugh::fault_name(fault);
   EXPECT_NE(write(Fault::timed_out, "x").message.find("may yet land"), std::string::npos) << "a write past its deadline may still be made";
+  EXPECT_NE(write(Fault::cancelled, "x").message.find("may yet land"), std::string::npos) << "a cancelled write may still be made";
 }

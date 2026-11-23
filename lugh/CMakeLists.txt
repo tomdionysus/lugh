@@ -7,12 +7,12 @@
 
 # lugh_client (P10): what a relying party links to verify Lugh's tokens and speak to a Lugh
 # cluster, exported as lugh::client. It depends on Dannan, Boost and OpenSSL and nothing of
-# the node's, and it carries Boost.JSON's definitions for every target that links it (the maintainer,
-# 2026-11-14), so they live in this library and not in an object library that would drop out.
+# the node's. Boost.JSON's compiled part is Dannan's, carried once in libdannan
+# (dannan/json/json.h); lugh_client uses Boost.JSON's headers and links dannan::dannan only, so a
+# process with Lugh and another project of the stack carries it once.
 add_library(lugh_client STATIC
     client/access_token.cpp
     client/api_client.cpp
-    client/boost_json.cpp
     client/dpop.cpp
     client/https.cpp
     client/id_token.cpp

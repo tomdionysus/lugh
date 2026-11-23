@@ -5,6 +5,16 @@ code. Newest first. The tags are on `main`.
 
 ## Unreleased
 
+Repin: Dannan 0.10.2 to 0.11.0, a new minor (libdannan0.11). From its release notes ("Adopting 0.11.0"):
+- Boost.JSON's compiled part is Dannan's, carried once in libdannan: `lugh/client/boost_json.cpp` is gone, so a process
+  linking `lugh_client` and another project of the stack (Lir's plugin, Lir asked) carries it once.
+- `Fault::cancelled` is handled where Lugh switches on a fault: undecided (`lugh::undecided`), the API answers
+  `503 cancelled`, `lugh_client` reads it back, and LDAP answers it as unavailable. Lugh cancels nothing itself yet.
+- The TSan build takes Dannan's suppressions (`DANNAN_TSAN_SUPPRESSIONS`), compiled into `lugh_tests`; Lugh's own copy
+  of one of them is gone.
+- Not taken: the node settings (`cluster.*`), the transfer buffers and the clock rules, which are P8's when `lugh-node`
+  is a Dannan node; the stream carrier and `Outcome`'s evidence, which Lugh has no use for yet.
+
 ### Added
 
 - `@lugh/admin-ui` (`lugh/ui`): the stack's admin UI shell, which Lir, Louhi, Mimir and Kvasir take for their own

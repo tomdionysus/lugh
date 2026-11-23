@@ -1,0 +1,13 @@
+//
+// Lugh - The Directory
+//
+// Copyright (C) 2026 Tom Cully <mail@tomcully.com>
+// Licensed under the GNU GPLv3 - see <https://www.gnu.org/licenses/gpl-3.0.html>
+//
+
+// Built into lugh_tests under -DLUGH_SANITIZE=thread only, from Dannan's file, the stack's one list
+// of TSan suppressions (DANNAN_TSAN_SUPPRESSIONS, read at configure time), so the binary runs as it
+// is with no TSAN_OPTIONS. What each suppresses, and why, is in that file.
+extern "C" const char* __tsan_default_suppressions() {
+  return R"lugh(@LUGH_TSAN_SUPPRESSIONS@)lugh";
+}

@@ -22,7 +22,9 @@ template <typename T = Nothing>
 using Outcome = dannan::contract::Outcome<T>;
 
 // Neither yes nor no: the request was not decided, because something failed, could not be
-// reached or did not answer in time. A caller says so, never that it was refused.
-constexpr bool undecided(Fault fault) noexcept { return fault == Fault::failed || fault == Fault::unavailable || fault == Fault::timed_out; }
+// reached, did not answer in time or was cancelled. A caller says so, never that it was refused.
+constexpr bool undecided(Fault fault) noexcept {
+  return fault == Fault::failed || fault == Fault::unavailable || fault == Fault::timed_out || fault == Fault::cancelled;
+}
 
 }  // namespace lugh
