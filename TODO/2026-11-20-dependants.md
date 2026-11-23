@@ -112,8 +112,9 @@ answers are recorded here, then reconciled into Lugh's items, which go back to e
 3. **App-password verification over the network.** An API route a service principal calls (a new scope, say
    `lugh:credentials.verify`), and `ApiClient::verify_app_password`. The constant work and the decoy are Lugh's
    (`Passwords::spend`); Lugh's own back-off applies beside the caller's. Kvasir.
-4. **Reaching any Lugh node.** `ApiClient` and TokenSource fail over across the issuers or base URLs they are given; Dannan's
-   DNS responder (the maintainer's Q3) makes the issuer name reach any node. Mimir, Kvasir, Louhi.
+4. **Reaching any Lugh node.** `ApiClient` and TokenSource fail over across the issuers or base URLs they are given; the
+   issuer's name reaching any healthy node is Manannan's, the cluster's DNS server (the maintainer, 2026-11-23: Dannan's DNS
+   responder, stack item 25, is dropped; Lugh's needs sent to the Manannan session). Mimir, Kvasir, Louhi.
 5. **Application scopes.** `mimir:connect` and Kvasir's `kvasir:` grammar are application scopes Lugh already grants as opaque
    words (RFC 6749 characters, at most `kMostScopeBytes`). Kvasir's grammar needs quoting for a '.' in a name; that is
    Kvasir's, for the maintainer.
