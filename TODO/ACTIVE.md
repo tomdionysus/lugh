@@ -4,8 +4,8 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here (2026-11-22)
 
-**Releases.** 0.2.0 (packaged), 0.3.0 (Dannan 0.10.0), 0.4.0 (the stack's config names) and 0.5.0 (onto the rest of
-Dannan 0.10.x; source only) are tagged on `main`; `CHANGELOG.md` says what each holds. Main and release tags are pushed
+**Releases.** 0.2.0 (packaged), 0.3.0 (Dannan 0.10.0), 0.4.0 (the stack's config names), 0.5.0 (onto the rest of
+Dannan 0.10.x) and 0.6.0 (Dannan 0.11.0 and `@lugh/admin-ui`; source only) are tagged on `main`; `CHANGELOG.md` says what each holds. Main and release tags are pushed
 once a release's gate is green, without asking (the maintainer, 2026-11-22).
 
 The dependants (Louhi, Kvasir, Mimir, Lir's plugin) were told of each change before it landed and at each tag; none
@@ -19,15 +19,16 @@ the install test; the .deb stays on the node. Putting it in the apt repository w
 **Onto Dannan 0.10.x: done in 0.5.0** (`COMPLETED.md`, 2026-11-22). Not taken: `agree::MemoryStore`, `each_held` and
 the agreement teardown fixes, which are P8's; the ack levels.
 
-**Next, not blocked** (the maintainer, 2026-11-22): `@lugh/admin-ui` is done (`COMPLETED.md`, 2026-11-22, on
-develop; the four told), and goes out in the next tag, which the four depend on by file path. Coverage next. P8 waits
-on Dannan and Dagda. Settled: the synchronous `Result` returns (the config loader, the
-record codecs) stay as they are, per CONTRIBUTING's errors rule: what happened returns its result.
-
-**At the move to Dannan 0.11.0** (Lir, 2026-11-22): Dannan carries Boost.JSON's compiled part in libdannan (its
-`json.cpp`, `boost/json/src.hpp`), so `lugh/client/boost_json.cpp` goes and lugh_client takes Dannan's, or a process
-linking both carries it twice. Lir's plugin (it links `lugh::client_topics`, fetched with `LUGH_BUILD_NODE=OFF`) needs
-that Lugh release before Lir moves its own pin to 0.11.0, so that release goes out soon after Dannan's tag.
+**Next, not blocked:**
+1. Louhi's neptune trial (the maintainer, relayed by Louhi, 2026-11-23): neptune's Lugh, 0.1.0 as a local install,
+   upgraded to 0.6.0 with `oauth.issuer` `https://corvus-neptune` and client secrets allowed; an `api` app with the
+   prefix `louhi`, then the trial's `service` client (`client_secret_basic`, client credentials, `louhi:louhi:run`
+   and `louhi:louhi:read`, audience `louhi`), its secret in a root-only file on neptune. Registering needs root at phr:
+   a script drives Chromium with a virtual authenticator, as the old end-to-end test did.
+2. Dannan 0.11.1, a patch: the pin moves, with its debug run.
+3. Coverage.
+P8 waits on Dannan and Dagda. Settled: the synchronous `Result` returns (the config loader, the record codecs) stay as
+they are, per CONTRIBUTING's errors rule: what happened returns its result.
 
 **Also waiting to be done, not blocked:**
 - `@lugh/admin-ui`'s later asks, each from one consumer alone (theirs to build unless another asks): Lir's payload

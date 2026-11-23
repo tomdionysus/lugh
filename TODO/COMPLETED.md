@@ -2,6 +2,20 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-23: Release 0.6.0
+
+Onto Dannan 0.11.0, ahead of coverage, as Lir's plugin waited on it (it links `lugh::client_topics` beside Lir on
+0.11.0): Boost.JSON's compiled part is Dannan's (`lugh/client/boost_json.cpp` gone), `Fault::cancelled` handled
+(undecided; the API's `503 cancelled`; LDAP's unavailable), and the TSan build takes Dannan's suppressions
+(`DANNAN_TSAN_SUPPRESSIONS`, compiled into `lugh_tests` at configure time; Lugh's copy of one gone). With it,
+`@lugh/admin-ui` (2026-11-22) and lir::mqtt 0.2.0. Dagda 0.3.2 builds on Dannan 0.11.0 unchanged, so the tests keep it.
+Gate at 4509771 (the tagged tree differs only in TODO and the lockfile's two version lines, checked by diff): debug on
+node-c (at 6fbd1fc, before the version lines), ASan on node-b, TSan on node-a, 903 of 903 each, no sanitizer report,
+Dannan 0.11.0, Dagda and Lir instrumented, Dannan's three suppressions in the binary; fuzzing on node-b, all 13
+targets 300 s each, 1.3 to 6.3 million runs each, nothing found; the npm workspace on node-b, typecheck, 24 and 19
+tests in Chromium, the dashboard's build. Dannan 0.11.1 came out during the gate: a patch whose fixes are inside a
+Dannan node, which Lugh does not run yet; the pin moves to it next, with its debug run.
+
 ## 2026-11-22: @lugh/admin-ui's components for the four
 
 What the four asked for (`2026-11-20-dependants.md`, "Components asked of the package"): `DataTable` with
