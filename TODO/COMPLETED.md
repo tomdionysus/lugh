@@ -2,6 +2,67 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-23: Release 0.6.0
+
+Onto Dannan 0.11.0, ahead of coverage, as Lir's plugin waited on it (it links `lugh::client_topics` beside Lir on
+0.11.0): Boost.JSON's compiled part is Dannan's (`lugh/client/boost_json.cpp` gone), `Fault::cancelled` handled
+(undecided; the API's `503 cancelled`; LDAP's unavailable), and the TSan build takes Dannan's suppressions
+(`DANNAN_TSAN_SUPPRESSIONS`, compiled into `lugh_tests` at configure time; Lugh's copy of one gone). With it,
+`@lugh/admin-ui` (2026-11-22) and lir::mqtt 0.2.0. Dagda 0.3.2 builds on Dannan 0.11.0 unchanged, so the tests keep it.
+Gate at 4509771 (the tagged tree differs only in TODO and the lockfile's two version lines, checked by diff): debug on
+node-c (at 6fbd1fc, before the version lines), ASan on node-b, TSan on node-a, 903 of 903 each, no sanitizer report,
+Dannan 0.11.0, Dagda and Lir instrumented, Dannan's three suppressions in the binary; fuzzing on node-b, all 13
+targets 300 s each, 1.3 to 6.3 million runs each, nothing found; the npm workspace on node-b, typecheck, 24 and 19
+tests in Chromium, the dashboard's build. Dannan 0.11.1 came out during the gate: a patch whose fixes are inside a
+Dannan node, which Lugh does not run yet; the pin moves to it next, with its debug run.
+
+## 2026-11-22: @lugh/admin-ui's components for the four
+
+What the four asked for (`2026-11-20-dependants.md`, "Components asked of the package"): `DataTable` with
+`useCursorPages` (Lir, Mimir, Kvasir: cursor or page, sortable, filterable), `DetailPanel` (Lir, Mimir: labelled,
+copyable), `useEvents` (Lir, Mimir: SSE, reopened after a back-off doubling to its longest, with jitter, never given
+up), `StatusPill` (Louhi, Mimir: colour from the service's map), and `SignIn` (all four: by password, by Lugh with the
+code flow and PKCE S256, the code and verifier handed to the service's back end; RFC 7636's own vector checks the
+challenge). Not taken, each asked by one alone: Lir's payload viewer, Mimir's number tile and editor, Louhi's JSON
+view. The package 9 to 24 tests; ten runs, all passed, on node-b.
+
+## 2026-11-22: @lugh/admin-ui, and the dashboard's tests in Vitest's browser mode
+
+The shared admin UI (`2026-11-20-dependants.md`), first two steps:
+- `lugh/ui`, package `@lugh/admin-ui`: the T.O.M.S styles, `AdminShell` (the layout, with the brand, sections,
+  account, status, sign-out and notice a service gives it), `NavBar`, `Messages`, `Confirm`/`useConfirm`, `useLoad`,
+  `useAct`, `useApi`, `when`, and `ApiClient` (a base path; the CSRF token once the service gives it; 401 and a 403's
+  code to the UI). Source, compiled by the consumer's Vite. The dashboard consumes it as an npm workspace (the
+  `package.json` at the top), keeping Lugh's own: its API, sections, the passkey step-up, the QR code.
+- Every test of both in Vitest's browser mode, Chromium through Playwright, and in GitHub CI (the `admin-ui` job:
+  install, typecheck, test, build).
+Five tests deleted, why: the dashboard's Playwright tests on a real `lugh-node` (P7) moved into Vitest's browser mode
+(the maintainer, asked twice, the second time knowing the cost). They became six component tests of the same story
+(`dashboard/app/dashboard.test.tsx`) against Lugh's API in memory (`app/test/fakeLugh.ts`): root at phr with the
+sections they administer and no step-up; a person added and their enrolment link made; a group made and the person put
+in it; root's passkey on their account and the audit log, its chain intact; the sign-out form with the CSRF token; the
+step-up offered below phr. What no longer runs: the dashboard on a real node, Lugh's sign-in pages and a virtual
+passkey in Chromium; the process tests (`node_process_*`) keep the pages. Counts: the package 9, the dashboard 19
+(the story 6, the API 9, the library 3, the QR code 1); ten runs of both, all passed, on node-b.
+
+## 2026-11-22: 0.5.0's Debian package, built locally
+
+The maintainer's word: built now, published later. On node-b, in `debian:trixie` containers (so nothing went on the
+node): Dannan 0.10.2's debs from its tag, then Lugh's from the tag 0.5.0 with `nocheck`, then the install test in a
+fresh container. `nocheck` because Dagda's tags (0.3.2, 0.3.3) need `libdannan-dev (<< 0.10)`, so no Dagda deb exists
+to test against until Dagda releases on Dannan 0.10.x; the suite passed on this tree in 0.5.0's gate. lintian: no
+tags. Installed with `libdannan0.10` 0.10.2: `lugh-node --version` says 0.5.0; the binary, config, dashboard, unit,
+sysusers file and `/var/lib/lugh` present; the `lugh` user made; the unit disabled; an old flag (`--port`) refused,
+naming it, exit 1; remove keeps `/etc/lugh`, purge deletes it. The debs stay on node-b (`/home/tom/lugh/pkg-050/out`):
+`lugh_0.5.0_arm64.deb`, its dbgsym, and Dannan's two. Into the apt repository only on the maintainer's word.
+
+## 2026-11-22: lir::mqtt 0.2.0
+
+The pin moved from 0.1.0 (Lir's word: the codec's API is unchanged). With installed dependencies, `find_package(lir)`
+now asks for the pin, not a version written out. Lir asked whether a Lir build that fetches Lugh gets one lir::mqtt:
+it does (`if NOT TARGET lir::mqtt` on both paths), told. Debug on node-a at 327ff16: 903 of 903 (a pin move: no
+sanitizers, the maintainer's rule).
+
 ## 2026-11-22: Release 0.5.0
 
 Onto the rest of Dannan 0.10.x: steps 1 to 7 (below), and two more in this release.

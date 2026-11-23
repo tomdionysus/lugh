@@ -135,8 +135,9 @@ CLAUDE.md, CONTRIBUTING.md   the rules (CLAUDE.md is gitignored globally)
 Lugh's own beside these: `config/`, the shipped configuration; `deploy/`, the systemd unit
 template and host preparation for a local install; `debian/` and `tools/build-deb.sh`,
 the Debian package (`docs/packaging.md`); `man/`, `lugh-node(8)`; `dashboard/`, the React
-dashboard (Vitest for its tests); `CHANGELOG.md`; and `CMakePresets.json`, which Dannan and
-Dagda do not have.
+dashboard, and `lugh/ui`, `@lugh/admin-ui`, the stack's admin UI shell the dashboard and the
+other services' admin UIs consume, one npm workspace from `package.json` at the top (Vitest for
+their tests); `CHANGELOG.md`; and `CMakePresets.json`, which Dannan and Dagda do not have.
 
 A file pair holds one component: a class and what serves only it. Names are
 `snake_case` files, `PascalCase` types, `_member`s, namespaces

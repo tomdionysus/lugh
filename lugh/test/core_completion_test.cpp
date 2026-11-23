@@ -30,11 +30,12 @@ TEST(Vocabulary, LughsNamesAreDannansTypes) {
   EXPECT_EQ(theirs.fault, dannan::contract::Fault::timed_out);
 }
 
-// Failed, unavailable and timed out leave a request undecided: the caller says it could not be
-// answered, never that it was refused or that the thing is absent.
-TEST(Vocabulary, OnlyFailedUnavailableAndTimedOutAreUndecided) {
+// Failed, unavailable, timed out and cancelled leave a request undecided: the caller says it could
+// not be answered, never that it was refused or that the thing is absent.
+TEST(Vocabulary, OnlyFailedUnavailableTimedOutAndCancelledAreUndecided) {
   using lugh::Fault;
-  for (const auto fault : {Fault::failed, Fault::unavailable, Fault::timed_out}) EXPECT_TRUE(lugh::undecided(fault)) << lugh::fault_name(fault);
+  for (const auto fault : {Fault::failed, Fault::unavailable, Fault::timed_out, Fault::cancelled})
+    EXPECT_TRUE(lugh::undecided(fault)) << lugh::fault_name(fault);
   for (const auto fault : {Fault::none, Fault::not_found, Fault::conflict, Fault::duplicate, Fault::invalid, Fault::refused})
     EXPECT_FALSE(lugh::undecided(fault)) << lugh::fault_name(fault);
 }

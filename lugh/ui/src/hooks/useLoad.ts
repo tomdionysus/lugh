@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { errorOf } from "../lib/API";
+import { errorOf } from "../lib/api";
 
-// One thing read from Lugh: the value once it arrives, the error if it did not, and reload() to
-// read it again after a change.
-export default function useLoad<T>(load: () => Promise<T>, deps: unknown[] = []) {
+// One thing read from the service: the value once it arrives, the error if it did not, and
+// reload() to read it again after a change.
+export function useLoad<T>(load: () => Promise<T>, deps: unknown[] = []) {
 	const [value, setValue] = useState<T | undefined>(undefined);
 	const [error, setError] = useState<string | undefined>(undefined);
 

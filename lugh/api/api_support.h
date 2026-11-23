@@ -46,6 +46,8 @@ inline void write_fault(const std::shared_ptr<http::HttpResponse>& response, Fau
     case Fault::timed_out:
       // Past a deadline a change may yet land, so this does not say nothing changed.
       return http::write_error(response, http::status::service_unavailable, "timed_out", "no answer within the deadline; a change may yet land");
+    case Fault::cancelled:
+      return http::write_error(response, http::status::service_unavailable, "cancelled", "the request was cancelled; a change may yet land");
     case Fault::none:
     case Fault::failed:
       break;

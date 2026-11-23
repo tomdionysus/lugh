@@ -144,7 +144,8 @@ tools/lugh_dev_cert.sh && tools/lugh_dev_init.sh
 CREDENTIALS_DIRECTORY=config/dev/credentials ./build/lugh-node --config config/config.yaml
 ```
 
-The dashboard is in `dashboard/` (`npm ci && npm run build`). [CONTRIBUTING.md](CONTRIBUTING.md)
+The dashboard is in `dashboard/`, on the stack's shared admin UI `@lugh/admin-ui` in `lugh/ui`;
+both are one npm workspace at the top (`npm ci && npm run build`). [CONTRIBUTING.md](CONTRIBUTING.md)
 has the conventions, the presets (`asan`, `tsan`, `fuzz`) and the tests.
 
 ## The stack
@@ -164,7 +165,7 @@ Lugh signs people in for [Louhi](https://github.com/tomdionysus/louhi),
 
 ## Status
 
-Version 0.5.0, on Dannan 0.10.2; the package is 0.2.0's until Dagda's next release. Built and
+Version 0.6.0, on Dannan 0.11.0; the package is 0.2.0's until Dagda's next release. Built and
 tested: the directory, sign-in with a second factor and WebAuthn, the
 audit chain, the management API and the dashboard, genesis, OAuth 2 and OpenID Connect, writable
 LDAP, `lugh_client`, and hardening: fuzzing, the sandbox, key rotation drills and a threat model

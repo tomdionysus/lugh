@@ -4,26 +4,35 @@ What is being worked on now and what comes next. When an item ships, move it to 
 
 ## Resume here (2026-11-22)
 
-**Releases.** 0.2.0 (packaged), 0.3.0 (Dannan 0.10.0), 0.4.0 (the stack's config names) and 0.5.0 (onto the rest of
-Dannan 0.10.x; source only) are tagged on `main`; `CHANGELOG.md` says what each holds. Main and release tags are pushed
+**Releases.** 0.2.0 (packaged), 0.3.0 (Dannan 0.10.0), 0.4.0 (the stack's config names), 0.5.0 (onto the rest of
+Dannan 0.10.x) and 0.6.0 (Dannan 0.11.0 and `@lugh/admin-ui`; source only) are tagged on `main`; `CHANGELOG.md` says what each holds. Main and release tags are pushed
 once a release's gate is green, without asking (the maintainer, 2026-11-22).
 
 The dependants (Louhi, Kvasir, Mimir, Lir's plugin) were told of each change before it landed and at each tag; none
 needs a change now.
 
-**The Debian package:** none since 0.2.0. It waits for Dagda's release on Dannan 0.10.x in the apt repository, because
-the package build runs the tests against Dagda's packages. Building it locally is fine; putting it in the apt repository
-waits on the maintainer's word.
+**The Debian package:** none in the apt repository since 0.2.0: that waits for Dagda's release on Dannan 0.10.x there,
+because the package build runs the tests against Dagda's packages. Meanwhile 0.5.0's is built locally on a build node
+(the maintainer, 2026-11-22), against Dannan 0.10.2's and Dagda's debs built from their tags there, then lintian and
+the install test; the .deb stays on the node. Putting it in the apt repository waits on the maintainer's word.
 
 **Onto Dannan 0.10.x: done in 0.5.0** (`COMPLETED.md`, 2026-11-22). Not taken: `agree::MemoryStore`, `each_held` and
 the agreement teardown fixes, which are P8's; the ack levels.
 
-**Next, not blocked:** `@lugh/admin-ui` (below), and coverage. P8 waits on Dannan and Dagda.
+**Next, not blocked:**
+1. Louhi's neptune trial (the maintainer, relayed by Louhi, 2026-11-23): neptune's Lugh, 0.1.0 as a local install,
+   upgraded to 0.6.0 with `oauth.issuer` `https://corvus-neptune` and client secrets allowed; an `api` app with the
+   prefix `louhi`, then the trial's `service` client (`client_secret_basic`, client credentials, `louhi:louhi:run`
+   and `louhi:louhi:read`, audience `louhi`), its secret in a root-only file on neptune. Registering needs root at phr:
+   a script drives Chromium with a virtual authenticator, as the old end-to-end test did.
+2. Dannan 0.11.1, a patch: the pin moves, with its debug run.
+3. Coverage.
+P8 waits on Dannan and Dagda. Settled: the synchronous `Result` returns (the config loader, the record codecs) stay as
+they are, per CONTRIBUTING's errors rule: what happened returns its result.
 
 **Also waiting to be done, not blocked:**
-- `@lugh/admin-ui`: the dashboard's shell carved into a package for Lir, Louhi, Mimir and Kvasir (`2026-11-20-dependants.md`,
-  "The shared admin UI"). npm, tested in GitHub CI, so no cluster time. The dashboard's 5 Playwright tests move into
-  Vitest's browser mode, one runner for the package and its consumers (the maintainer, 2026-11-22).
+- `@lugh/admin-ui`'s later asks, each from one consumer alone (theirs to build unless another asks): Lir's payload
+  viewer, Mimir's number tile with a sparkline and monospace editor, Louhi's read-only JSON view.
 - Coverage: the rest of the gap, file by file (`COMPLETED.md`, "Coverage closer to whole", lists what is left and why).
 
 **P8, the cluster on the stack** (`2026-11-13-p8-plan.md`). P8.0 is done. The rest waits on its dependencies, by the
@@ -61,7 +70,6 @@ no-duplication rule:
 - **Hashing on `sched::WorkerPool`**, at P8.1. Until then the hashing queue is unbounded, a known gap.
 - **Socket activation** for the listeners, deferred: `inherited_socket` checks LISTEN_PID, which a test cannot set.
 - **lugh_client as an installed package** (`find_package(lugh)`, asked by Kvasir), with a `lugh-dev` Debian package.
-- Small: whether the remaining synchronous `Result` returns (config loader, record codecs) should throw.
 
 ## Dependencies pinned (develop)
 
@@ -69,7 +77,7 @@ no-duplication rule:
 |---|---|---|
 | Dannan | 0.10.2 (`LUGH_DANNAN_REF`) | everything |
 | Dagda | 0.3.2 (`LUGH_DAGDA_REF`) | the tests only; the node does not link it until P8 |
-| Lir | 0.1.0 (`LUGH_LIR_REF`) | the tests and `lugh::client_topics` only |
+| Lir | 0.2.0 (`LUGH_LIR_REF`) | the tests and `lugh::client_topics` only |
 
 Each comes from the sibling checkout (`../dannan`, `../dagda`, `../lir`), cloned into the build tree. A relying party that
 fetches lugh_client alone (`LUGH_BUILD_NODE=OFF`) fetches Dannan and nothing else. The package build uses the installed

@@ -83,6 +83,35 @@ jobs:
         working-directory: lugh
         run: build/lugh_tests --gtest_brief=1
 
+  # The npm workspace: @lugh/admin-ui (lugh/ui), the stack's admin UI shell, and the dashboard on
+  # it. Node 20, as Debian 13 and the build nodes have it.
+  admin-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # Vitest's browser mode runs the tests in Chromium, through Playwright.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
   # A value used after it was moved, including an argument read in the same call that moves it:
   # C++ leaves the order unspecified, and GCC on x86-64 reverses it (2026-11-20, three records
   # stored empty). Lugh's own files; the deps' findings go to their owners.

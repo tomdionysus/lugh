@@ -24,6 +24,7 @@ Fault fault_of(unsigned status, const std::string& code) {
   if (code == "invalid" || code == "if_match_required") return Fault::invalid;
   if (code == "refused" || status == 401 || status == 403) return Fault::refused;
   if (code == "timed_out") return Fault::timed_out;
+  if (code == "cancelled") return Fault::cancelled;
   if (code == "unavailable" || status == 503) return Fault::unavailable;
   return Fault::failed;
 }

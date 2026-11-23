@@ -1,10 +1,8 @@
-import { createContext, useContext } from "react";
+import { useApi } from "@lugh/admin-ui";
 
-import { API } from "../lib/API";
+import type { API } from "../lib/API";
 
-// One API for the whole dashboard, given by the layout; a test gives its own.
-export const ApiContext = createContext<API>(new API());
-
+// Lugh's API, as the layout gave it (@lugh/admin-ui's ApiContext); a test gives its own.
 export default function useAPI() {
-	return useContext(ApiContext);
+	return useApi<API>();
 }

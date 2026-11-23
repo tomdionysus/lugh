@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.24)
 # The tag, `lugh-node --version`, the package and the README's Status carry this version. Bump
 # them together.
 project(lugh
-    VERSION 0.5.0
+    VERSION 0.6.0
     DESCRIPTION "Lugh"
     LANGUAGES CXX
 )
@@ -52,7 +52,7 @@ include(CheckPIESupported)
 
 # Boost 1.83 is Dannan's floor (Debian's, so the build nodes build with it), and Lugh's must be the one
 # Dannan is built with; Asio, Beast and JSON are all used header-only, and Boost.JSON's definitions
-# are compiled once, in lugh/client/boost_json.cpp.
+# are Dannan's, compiled once in libdannan (dannan/json/json.h).
 find_package(Boost 1.83 REQUIRED CONFIG)
 find_package(Threads REQUIRED)
 
@@ -64,21 +64,21 @@ find_package(OpenSSL 3.0 REQUIRED)
 # Dannan, the network layer Lugh hosts on, at a release tag, or at a commit while Lugh needs
 # something not yet tagged: from the sibling checkout, cloned into the build tree, so
 # building Lugh never touches ../dannan. Linked as dannan::dannan, the name an installed
-# Dannan exports too (find_package(dannan 0.10.0 CONFIG)). Now: 0.10.2, on 0.10.0's ABI; 0.10.0 adds the contract
-# vocabulary (completion, ack levels), the encodings, the random ID and SHA-1 that Lugh moves onto
-# next, and DANNAN_SANITIZE (libdannan.so.0.10).
+# Dannan exports too (find_package(dannan CONFIG)). Now: 0.11.0 (libdannan.so.0.11), which
+# carries Boost.JSON's compiled part (dannan/json/json.h: lugh_client no longer compiles its own) and
+# the stack's one TSan suppressions list (DANNAN_TSAN_SUPPRESSIONS).
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_REF "0.10.2")
+set(LUGH_DANNAN_REF "0.11.0")
 # Dagda, the store P8 moves Lugh onto, the same way: a release tag of the sibling checkout,
 # cloned into the build tree. Only the node needs it; lugh_client never does. Now: 0.3.2, slice 1
 # (the change notice) and Space::covers.
 set(LUGH_DAGDA_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dagda" CACHE PATH "Dagda's repository")
 set(LUGH_DAGDA_REF "0.3.2")
 # Lir's MQTT codec, the stack's one, for lugh::client_topics: only lir::mqtt is built
-# (LIR_BUILD_SERVER off). Now: 0.1.0, the rewritten codec's first release.
+# (LIR_BUILD_SERVER off). Now: 0.2.0, on Dannan 0.10.2 like Lugh; its codec's API is 0.1.0's.
 set(LUGH_LIR_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../lir" CACHE STRING "Lir's repository, a path or a URL")
-set(LUGH_LIR_REF "0.1.0")
+set(LUGH_LIR_REF "0.2.0")
 # A sanitizer instruments Dannan too: half an instrumented process reports nothing true.
 if (LUGH_SANITIZE STREQUAL "address")
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -117,7 +117,7 @@ if (LUGH_SYSTEM_DEPENDENCIES)
         find_package(dagda ${LUGH_DAGDA_REF} EXACT CONFIG REQUIRED)
     endif()
     if (LUGH_BUILD_TESTING AND NOT TARGET lir::mqtt)
-        find_package(lir 0.1.0 CONFIG QUIET)
+        find_package(lir ${LUGH_LIR_REF} CONFIG QUIET)
         if (NOT lir_FOUND)
             FetchContent_Declare(lir GIT_REPOSITORY "${LUGH_LIR_REPOSITORY}" GIT_TAG "${LUGH_LIR_REF}" EXCLUDE_FROM_ALL)
             set(LIR_BUILD_SERVER OFF CACHE BOOL "" FORCE)
@@ -300,7 +300,8 @@ install(DIRECTORY docs/ DESTINATION "${LUGH_DOCDIR}")
 # The unit, its paths the layout's.
 configure_file(deploy/lugh.service.in "${PROJECT_BINARY_DIR}/lugh.service" @ONLY)
 
-# The dashboard (P7), built first with `npm ci && npm run build` in dashboard/. Vite fingerprints
+# The dashboard (P7), built first with `npm ci && npm run build` at the top (the npm workspace of
+# dashboard/ and @lugh/admin-ui in lugh/ui). Vite fingerprints
 # its assets, so the installed copy is removed before the new one goes in; root's, read-only to
 # the service. Turn LUGH_INSTALL_DASHBOARD off to install without one.
 option(LUGH_INSTALL_DASHBOARD "Install the dashboard's build" ON)
@@ -308,7 +309,7 @@ set(LUGH_DASHBOARD_BUILD "${CMAKE_CURRENT_SOURCE_DIR}/dashboard/build/client")
 if (LUGH_INSTALL_DASHBOARD)
     install(CODE "
         if (NOT EXISTS \"${LUGH_DASHBOARD_BUILD}/index.html\")
-            message(FATAL_ERROR \"The dashboard is not built: run 'npm ci && npm run build' in dashboard/ first, or configure with -DLUGH_INSTALL_DASHBOARD=OFF\")
+            message(FATAL_ERROR \"The dashboard is not built: run 'npm ci && npm run build' at the top of the tree first, or configure with -DLUGH_INSTALL_DASHBOARD=OFF\")
         endif()
         file(REMOVE_RECURSE \"\$ENV{DESTDIR}${LUGH_SHAREDIR}/dashboard\")
     ")

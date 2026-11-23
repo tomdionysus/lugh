@@ -1,11 +1,9 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 
-import Confirm from "./Confirm";
-import NavBar from "./NavBar";
 import QrCode from "./QrCode";
 
+// Lugh's own components; the shared ones are tested in @lugh/admin-ui (lugh/ui).
 afterEach(cleanup);
 
 describe("QrCode", () => {
@@ -16,36 +14,5 @@ describe("QrCode", () => {
 		const path = container.querySelector("path")!.getAttribute("d")!;
 		expect(path).toBe("M4 4h1v1h-1zM5 5h1v1h-1z");
 		expect(screen.getByRole("img", { name: "code" })).toBeTruthy();
-	});
-});
-
-describe("Confirm", () => {
-	it("does the change only when confirmed, and cancels on Escape", () => {
-		const confirmed = vi.fn();
-		const cancelled = vi.fn();
-		render(
-			<Confirm title="Remove?" action="Remove" danger onConfirm={confirmed} onCancel={cancelled}>
-				<p>It goes for good.</p>
-			</Confirm>,
-		);
-		expect(screen.getByRole("dialog", { name: "Remove?" })).toBeTruthy();
-		fireEvent.keyDown(window, { key: "Escape" });
-		expect(cancelled).toHaveBeenCalledTimes(1);
-		expect(confirmed).not.toHaveBeenCalled();
-		fireEvent.click(screen.getByText("Remove"));
-		expect(confirmed).toHaveBeenCalledTimes(1);
-	});
-});
-
-describe("NavBar", () => {
-	it("shows only the sections the person may read", () => {
-		render(
-			<MemoryRouter>
-				<NavBar scopes={["lugh:audit.read"]} />
-			</MemoryRouter>,
-		);
-		expect(screen.getByText("Account")).toBeTruthy();
-		expect(screen.getByText("Audit")).toBeTruthy();
-		expect(screen.queryByText("Users")).toBeNull();
 	});
 });

@@ -124,7 +124,14 @@ target_link_libraries(lugh_tests PRIVATE ${LUGH_LDAP_LIBRARY} ${LUGH_LBER_LIBRAR
 if (LUGH_SANITIZE STREQUAL "address")
     target_sources(lugh_tests PRIVATE sanitizer_options.cpp)
 elseif (LUGH_SANITIZE STREQUAL "thread")
-    target_sources(lugh_tests PRIVATE tsan_suppressions.cpp)
+    # Dannan's list, the stack's one (Dannan 0.11.0 on), compiled in: no copy of it here.
+    if (NOT DANNAN_TSAN_SUPPRESSIONS OR NOT EXISTS "${DANNAN_TSAN_SUPPRESSIONS}")
+        message(FATAL_ERROR "A TSan build takes Dannan's suppressions (DANNAN_TSAN_SUPPRESSIONS), which Dannan 0.11.0 and later name")
+    endif()
+    file(READ "${DANNAN_TSAN_SUPPRESSIONS}" LUGH_TSAN_SUPPRESSIONS)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${DANNAN_TSAN_SUPPRESSIONS}")
+    configure_file(tsan_suppressions.cpp.in "${CMAKE_CURRENT_BINARY_DIR}/tsan_suppressions.cpp" @ONLY)
+    target_sources(lugh_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/tsan_suppressions.cpp")
 endif()
 # Tests write only inside the build tree (Dannan's TempDir).
 target_compile_definitions(lugh_tests PRIVATE DANNAN_TEST_TEMP_ROOT="${PROJECT_BINARY_DIR}/test-tmp")

@@ -1,12 +1,10 @@
 import { useState } from "react";
 
-import { useConfirm } from "../components/Confirm";
-import Messages from "../components/Messages";
-import useAct from "../hooks/useAct";
+import { Messages, useAct, useConfirm, useLoad, when } from "@lugh/admin-ui";
+
 import useAPI from "../hooks/useAPI";
-import useLoad from "../hooks/useLoad";
 import type { App } from "../lib/API";
-import { assurance, when } from "../lib/format";
+import { assurance } from "../lib/format";
 
 // The applications that sign people in through Lugh, or call it themselves: each one's settings,
 // which groups may use it, and its secret. Registering one asks only what every kind needs; the

@@ -18,8 +18,9 @@ target_link_libraries(app PRIVATE lugh::client)
 
 - **One Dannan.** Declared after the consumer's own Dannan, Lugh uses that `dannan::dannan` and fetches none of its own. The
   consumer's Dannan must be the minor the Lugh commit was tested on.
-- **Boost.JSON.** `lugh_client` compiles Boost.JSON's definitions (`boost/json/src.hpp`) itself. A program that links it must not
-  compile them again; its own Boost.JSON code resolves against the library's.
+- **Boost.JSON.** Its definitions are Dannan's, compiled once in libdannan (`dannan/json/json.h`, since Dannan 0.11.0); `lugh_client`
+  carries none of its own. A program that links it, and its own Boost.JSON code, links `dannan::dannan` and never compiles
+  `boost/json/src.hpp` or links Boost.JSON's library, or the process carries it twice.
 
 Public headers are included as `"lugh/client/<name>.h"`. Every call that waits takes a deadline, an executor and a `done`
 callback, posted to that executor exactly once and never called inline. Secrets (tokens, a client secret, a PKCE verifier) are

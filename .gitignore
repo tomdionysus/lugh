@@ -6,10 +6,13 @@
 /compile_commands.json
 /.cache/
 
-# The dashboard's dependencies and build output, produced at deploy time.
-/dashboard/node_modules/
+# The npm workspace's dependencies (at the root, and any a workspace keeps) and the dashboard's
+# build output, produced at deploy time.
+node_modules/
 /dashboard/build/
 /dashboard/.react-router/
+# Vitest's browser mode keeps a screenshot of each failure.
+__screenshots__/
 
 # The development certificate and key that tools/lugh_dev_cert.sh writes.
 /config/dev/

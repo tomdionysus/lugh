@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
-import Messages from "../components/Messages";
-import useAct from "../hooks/useAct";
+import { Messages, useAct, useLoad } from "@lugh/admin-ui";
+
 import useAPI from "../hooks/useAPI";
-import useLoad from "../hooks/useLoad";
 import type { NewUser } from "../lib/API";
 
 const EMPTY: NewUser = { kind: "person", name: "", email: "", display_name: "" };
