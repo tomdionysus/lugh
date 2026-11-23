@@ -23,7 +23,9 @@ the agreement teardown fixes, which are P8's; the ack levels.
 **Next, not blocked:**
 1. ~~Louhi's trial on node-c's Lugh~~ and ~~Dannan 0.11.1 with Dagda 0.4.0~~: done (`COMPLETED.md`, 2026-11-23).
 2. Coverage.
-3. The next release's Debian package, with its tests, against Dannan 0.11.1's and Dagda 0.4.0's debs.
+3. The next release's Debian package, with its tests, against Dannan 0.11.1's and Dagda 0.4.0's debs. Dagda 0.4.0's are in
+   the tomcully.com apt repository for arm64 (`libdagda0.4.0`, `libdagda-dev`, `dagda-tools`; amd64 waits on the
+   maintainer), so the arm64 build installs them from there.
 P8 waits on Dannan and Dagda. Settled: the synchronous `Result` returns (the config loader, the record codecs) stay as
 they are, per CONTRIBUTING's errors rule: what happened returns its result.
 
