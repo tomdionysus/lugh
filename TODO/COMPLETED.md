@@ -11,7 +11,9 @@ off again). Registered through the dashboard's API at phr, root's first sign-in 
 virtual authenticator (no other way in, by design): an `api` with the prefix `louhi`, and the trial's `service` client
 (`client_secret_basic`, client credentials, `louhi:louhi:run` and `louhi:louhi:read`, audience `louhi`), its secret in a
 root-only file on that node. A token by client credentials checked: Bearer, 300 s, both scopes, the audience and issuer
-right. On the way: a first run registered nothing (client secrets were not yet on), so the node's state went back to
+right. A second pass (the maintainer's word again): `louhi:louhi:register` added to the trial client, and an admin client
+(`louhi:admin` alone, audience `louhi`) for making the trial's project once, root signing in with the kept passkey;
+both tokens checked. Both clients go when the trial ends (Louhi says when). On the way: a first run registered nothing (client secrets were not yet on), so the node's state went back to
 its pre-upgrade copy and root's first sign-in was made again; root's passkey (the virtual authenticator's credential)
 and recovery codes are kept root-only on node-b.
 
