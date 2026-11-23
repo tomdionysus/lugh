@@ -11,10 +11,11 @@ once a release's gate is green, without asking (the maintainer, 2026-11-22).
 The dependants (Louhi, Kvasir, Mimir, Lir's plugin) were told of each change before it landed and at each tag; none
 needs a change now.
 
-**The Debian package:** none in the apt repository since 0.2.0: that waits for Dagda's release on Dannan 0.10.x there,
-because the package build runs the tests against Dagda's packages. Meanwhile 0.5.0's is built locally on a build node
-(the maintainer, 2026-11-22), against Dannan 0.10.2's and Dagda's debs built from their tags there, then lintian and
-the install test; the .deb stays on the node. Putting it in the apt repository waits on the maintainer's word.
+**The Debian package:** none in the apt repository since 0.2.0. Its wait is over (the coordinator, 2026-11-23): Dagda
+0.4.0 is tagged on Dannan 0.11.1, the pair the package build tests against. 0.5.0's was built locally with `nocheck`
+(`COMPLETED.md`, 2026-11-22); the next release's is built with its tests, against Dannan 0.11.1's and Dagda 0.4.0's
+debs (from the apt repository, or built from their tags in a container), then lintian and the install test. Putting
+it in the apt repository waits on the maintainer's word.
 
 **Onto Dannan 0.10.x: done in 0.5.0** (`COMPLETED.md`, 2026-11-22). Not taken: `agree::MemoryStore`, `each_held` and
 the agreement teardown fixes, which are P8's; the ack levels.
@@ -25,7 +26,7 @@ the agreement teardown fixes, which are P8's; the ack levels.
    prefix `louhi`, then the trial's `service` client (`client_secret_basic`, client credentials, `louhi:louhi:run`
    and `louhi:louhi:read`, audience `louhi`), its secret in a root-only file on neptune. Registering needs root at phr:
    a script drives Chromium with a virtual authenticator, as the old end-to-end test did.
-2. Dannan 0.11.1, a patch: the pin moves, with its debug run.
+2. Dannan 0.11.1 and Dagda 0.4.0 (for the tests): the pins move together, with their debug run.
 3. Coverage.
 P8 waits on Dannan and Dagda. Settled: the synchronous `Result` returns (the config loader, the record codecs) stay as
 they are, per CONTRIBUTING's errors rule: what happened returns its result.
@@ -75,8 +76,8 @@ no-duplication rule:
 
 | Dependency | Pin | Used by |
 |---|---|---|
-| Dannan | 0.10.2 (`LUGH_DANNAN_REF`) | everything |
-| Dagda | 0.3.2 (`LUGH_DAGDA_REF`) | the tests only; the node does not link it until P8 |
+| Dannan | 0.11.1 (`LUGH_DANNAN_REF`; 0.6.0 is on 0.11.0) | everything |
+| Dagda | 0.4.0 (`LUGH_DAGDA_REF`; 0.6.0's tests used 0.3.2) | the tests only; the node does not link it until P8 |
 | Lir | 0.2.0 (`LUGH_LIR_REF`) | the tests and `lugh::client_topics` only |
 
 Each comes from the sibling checkout (`../dannan`, `../dagda`, `../lir`), cloned into the build tree. A relying party that

@@ -64,17 +64,17 @@ find_package(OpenSSL 3.0 REQUIRED)
 # Dannan, the network layer Lugh hosts on, at a release tag, or at a commit while Lugh needs
 # something not yet tagged: from the sibling checkout, cloned into the build tree, so
 # building Lugh never touches ../dannan. Linked as dannan::dannan, the name an installed
-# Dannan exports too (find_package(dannan CONFIG)). Now: 0.11.0 (libdannan.so.0.11), which
+# Dannan exports too (find_package(dannan CONFIG)). Now: 0.11.1 (libdannan.so.0.11), which
 # carries Boost.JSON's compiled part (dannan/json/json.h: lugh_client no longer compiles its own) and
-# the stack's one TSan suppressions list (DANNAN_TSAN_SUPPRESSIONS).
+# the stack's one TSan suppressions list (DANNAN_TSAN_SUPPRESSIONS); Dagda 0.4.0 needs 0.11.1.
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_REF "0.11.0")
+set(LUGH_DANNAN_REF "0.11.1")
 # Dagda, the store P8 moves Lugh onto, the same way: a release tag of the sibling checkout,
-# cloned into the build tree. Only the node needs it; lugh_client never does. Now: 0.3.2, slice 1
-# (the change notice) and Space::covers.
+# cloned into the build tree. Only the node needs it; lugh_client never does. Now: 0.4.0, on Dannan
+# 0.11.1 (slice 1's change notice, Space::covers, and repair's memory fixes).
 set(LUGH_DAGDA_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dagda" CACHE PATH "Dagda's repository")
-set(LUGH_DAGDA_REF "0.3.2")
+set(LUGH_DAGDA_REF "0.4.0")
 # Lir's MQTT codec, the stack's one, for lugh::client_topics: only lir::mqtt is built
 # (LIR_BUILD_SERVER off). Now: 0.2.0, on Dannan 0.10.2 like Lugh; its codec's API is 0.1.0's.
 set(LUGH_LIR_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../lir" CACHE STRING "Lir's repository, a path or a URL")

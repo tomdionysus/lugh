@@ -3,6 +3,14 @@
 What each release added, changed and fixed, and what a project of the stack can now take from Lugh in place of its own
 code. Newest first. The tags are on `main`.
 
+## Unreleased
+
+Repin: Dannan 0.11.0 to 0.11.1, and Dagda 0.3.2 to 0.4.0 for the tests. From their release notes nothing in Lugh
+changes: Dannan 0.11.1 adds an ordered channel delivery (for Lir) and returns dropped payloads to a node's pool, inside a
+Dannan node, which Lugh does not run yet; Dagda 0.4.0 is 0.3.3's repair fix on Dannan 0.11.1, its contract unchanged,
+and it needs Dannan 0.11.1. The package builds against `libdannan-dev (>= 0.11.1)` and tests against Dagda 0.4's
+`libdagda-dev`.
+
 ## 0.6.0: onto Dannan 0.11.0, and @lugh/admin-ui (2026-11-23)
 
 A release for source dependants, as 0.3.0 to 0.5.0 were: Lir's plugin waits on it to move to Dannan 0.11.0, and Lir,
