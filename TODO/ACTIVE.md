@@ -21,13 +21,9 @@ it in the apt repository waits on the maintainer's word.
 the agreement teardown fixes, which are P8's; the ack levels.
 
 **Next, not blocked:**
-1. Louhi's neptune trial (the maintainer, relayed by Louhi, 2026-11-23): neptune's Lugh, 0.1.0 as a local install,
-   upgraded to 0.6.0 with `oauth.issuer` `https://corvus-neptune` and client secrets allowed; an `api` app with the
-   prefix `louhi`, then the trial's `service` client (`client_secret_basic`, client credentials, `louhi:louhi:run`
-   and `louhi:louhi:read`, audience `louhi`), its secret in a root-only file on neptune. Registering needs root at phr:
-   a script drives Chromium with a virtual authenticator, as the old end-to-end test did.
-2. Dannan 0.11.1 and Dagda 0.4.0 (for the tests): the pins move together, with their debug run.
-3. Coverage.
+1. ~~Louhi's trial on node-c's Lugh~~ and ~~Dannan 0.11.1 with Dagda 0.4.0~~: done (`COMPLETED.md`, 2026-11-23).
+2. Coverage.
+3. The next release's Debian package, with its tests, against Dannan 0.11.1's and Dagda 0.4.0's debs.
 P8 waits on Dannan and Dagda. Settled: the synchronous `Result` returns (the config loader, the record codecs) stay as
 they are, per CONTRIBUTING's errors rule: what happened returns its result.
 

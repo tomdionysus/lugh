@@ -2,6 +2,19 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-23: Louhi's trial on node-c's Lugh
+
+The maintainer's word: node-c's Lugh test service (a local install, 0.1.0 since 2026-11-16) upgraded to 0.6.0 for
+Louhi's trial, its issuer the host's own name (by a systemd drop-in) and client secrets allowed (in the installed
+config file: `oauth.allow_client_secrets` has no flag or variable, so a later install from the repository turns it
+off again). Registered through the dashboard's API at phr, root's first sign-in made by a script driving Chromium with a
+virtual authenticator (no other way in, by design): an `api` with the prefix `louhi`, and the trial's `service` client
+(`client_secret_basic`, client credentials, `louhi:louhi:run` and `louhi:louhi:read`, audience `louhi`), its secret in a
+root-only file on that node. A token by client credentials checked: Bearer, 300 s, both scopes, the audience and issuer
+right. On the way: a first run registered nothing (client secrets were not yet on), so the node's state went back to
+its pre-upgrade copy and root's first sign-in was made again; root's passkey (the virtual authenticator's credential)
+and recovery codes are kept root-only on node-b.
+
 ## 2026-11-23: Dannan 0.11.1 and Dagda 0.4.0
 
 The pins moved together (Dagda 0.4.0 needs Dannan 0.11.1; the coordinator pointed out it was tagged, and that the
