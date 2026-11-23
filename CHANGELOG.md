@@ -5,6 +5,13 @@ code. Newest first. The tags are on `main`.
 
 ## Unreleased
 
+Repin: Dannan 0.11.1 to 0.12.0, a new minor (libdannan0.12). From its release notes ("Adopting 0.12.0"), each its own
+step after this one: Lugh's health pushed as checks on the node's readiness (the hashing backlog, the caught-up spaces),
+and `lugh-node`'s main onto `supervise::run_node_program` (both P8.1, with the node itself); Lugh's rate limiter onto
+Dannan's keyed limits (`listen::RateLimiter`); Lugh's password hashing onto Dannan's stored password (`identity::make_password`
+and its PHC string), reading the hashes Lugh stored before. Not taken: the process runner (Lugh runs no processes).
+The tests' stepped clocks now notify, so a wait on them arms no timer.
+
 Repin: Dannan 0.11.0 to 0.11.1, and Dagda 0.3.2 to 0.4.0 for the tests. From their release notes nothing in Lugh
 changes: Dannan 0.11.1 adds an ordered channel delivery (for Lir) and returns dropped payloads to a node's pool, inside a
 Dannan node, which Lugh does not run yet; Dagda 0.4.0 is 0.3.3's repair fix on Dannan 0.11.1, its contract unchanged,

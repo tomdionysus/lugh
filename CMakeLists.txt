@@ -64,12 +64,12 @@ find_package(OpenSSL 3.0 REQUIRED)
 # Dannan, the network layer Lugh hosts on, at a release tag, or at a commit while Lugh needs
 # something not yet tagged: from the sibling checkout, cloned into the build tree, so
 # building Lugh never touches ../dannan. Linked as dannan::dannan, the name an installed
-# Dannan exports too (find_package(dannan CONFIG)). Now: 0.11.1 (libdannan.so.0.11), which
-# carries Boost.JSON's compiled part (dannan/json/json.h: lugh_client no longer compiles its own) and
-# the stack's one TSan suppressions list (DANNAN_TSAN_SUPPRESSIONS); Dagda 0.4.0 needs 0.11.1.
+# Dannan exports too (find_package(dannan CONFIG)). Now: 0.12.0 (libdannan.so.0.12): Boost.JSON's
+# compiled part (dannan/json/json.h), the stack's TSan suppressions (DANNAN_TSAN_SUPPRESSIONS), and
+# what P8.1 takes: health checks, the node-program helper, keyed limits and the stored password.
 set(LUGH_DANNAN_REPOSITORY "${CMAKE_CURRENT_SOURCE_DIR}/../dannan" CACHE PATH "Dannan's repository")
 # Not a cache variable: a moved pin must take effect without clearing the build tree.
-set(LUGH_DANNAN_REF "0.11.1")
+set(LUGH_DANNAN_REF "0.12.0")
 # Dagda, the store P8 moves Lugh onto, the same way: a release tag of the sibling checkout,
 # cloned into the build tree. Only the node needs it; lugh_client never does. Now: 0.4.0, on Dannan
 # 0.11.1 (slice 1's change notice, Space::covers, and repair's memory fixes).
