@@ -1,6 +1,6 @@
 {
   "name": "@lugh/admin-ui",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "The stack's admin UI shell: the T.O.M.S styles, the layout, the API client and hooks, from Lugh's dashboard",
   "license": "GPL-3.0-only",
   "private": true,

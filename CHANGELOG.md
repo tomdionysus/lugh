@@ -3,7 +3,10 @@
 What each release added, changed and fixed, and what a project of the stack can now take from Lugh in place of its own
 code. Newest first. The tags are on `main`.
 
-## Unreleased
+## 0.6.0: onto Dannan 0.11.0, and @lugh/admin-ui (2026-11-23)
+
+A release for source dependants, as 0.3.0 to 0.5.0 were: Lir's plugin waits on it to move to Dannan 0.11.0, and Lir,
+Louhi, Mimir and Kvasir take `@lugh/admin-ui` from it.
 
 Repin: Dannan 0.10.2 to 0.11.0, a new minor (libdannan0.11). From its release notes ("Adopting 0.11.0"):
 - Boost.JSON's compiled part is Dannan's, carried once in libdannan: `lugh/client/boost_json.cpp` is gone, so a process
