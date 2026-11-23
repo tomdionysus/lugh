@@ -37,12 +37,18 @@ they are, per CONTRIBUTING's errors rule: what happened returns its result.
 **P8, the cluster on the stack** (`2026-11-13-p8-plan.md`). P8.0 is done. The rest waits on its dependencies, by the
 no-duplication rule:
 - P8.1 (lugh-node a Dannan node) waits on Dannan's node-program helper and founding act (Dannan's plan, items 4 and 14).
-- P8.2 to P8.4 wait on Dagda's register map (D6), which replaces Lugh's own merge and codec.
+- P8.2 to P8.4 take Dagda's register map (D6), which replaces Lugh's own merge and codec. D6 is public on Dagda's
+  develop (00e0a9f, 2026-11-23; contract version 3, on Dannan 0.11.1), tagged with D5 in Dagda 0.5.0. They also need
+  P8.1, so they start after it, against D6 at a commit pin if 0.5.0 is not yet tagged.
 - P8.5 waits on Dagda's slice 2; P8.6 on the durable AcceptorStore and Dannan's register layer; P8.7 on D9.
 
 ## Waiting on others
 
-- **Dagda's register map, D6** (`../dagda/TODO/2026-11-20-register-map.md`). `lugh/scope` and `lugh/secrets` become
+- **Dagda's register map, D6**: public on develop (00e0a9f), no longer waited on; the tag is Dagda 0.5.0
+  (`../dagda/TODO/2026-11-20-register-map.md`, "Going public: 0.5.0"). `dagda::Context::registers()`: `open(name,
+  options, deadline)` (Lugh's never-reused keys: `TombstonePolicy::never()` with tombstone-wins; HLC stamps by default),
+  `commit(space, ops, deadline)` with `RegisterEvidence` (each key's new version, or the conflict and the register found),
+  `get`, `get_register`, `list`, `changed(before, after)`, `now()`. `lugh/scope` and `lugh/secrets` become
   register-map spaces, and `merge::winner` and `merge()` go (`UniqueIndex` stays). Lugh's review was taken whole
   (2026-11-20):
   - tombstone-wins with "never" (the maintainer's "removal over edit, never resurrected");
