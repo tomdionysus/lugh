@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-23: Dannan 0.11.1 and Dagda 0.4.0
+
+The pins moved together (Dagda 0.4.0 needs Dannan 0.11.1; the coordinator pointed out it was tagged, and that the
+plan's package wait and pin table were stale, both corrected). Nothing in Lugh changes: Dannan 0.11.1's fixes are inside
+a Dannan node, Dagda 0.4.0's contract is 0.3.2's. The package now builds against `libdannan-dev (>= 0.11.1)` and tests
+against Dagda 0.4's. Debug on node-a at 5b9743d: 903 of 903 (a pin move: no sanitizers).
+
 ## 2026-11-23: Release 0.6.0
 
 Onto Dannan 0.11.0, ahead of coverage, as Lir's plugin waited on it (it links `lugh::client_topics` beside Lir on
