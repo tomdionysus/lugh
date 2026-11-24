@@ -2,6 +2,26 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-24, on `feature/p8`: P8.1's first two commits
+
+1. **The settings take the node program's names** (`CHANGELOG.md`, "P8"): `https.listen.*`, `https.tls.*`, `cluster.state`,
+   `mtls.listen.port`, `mtls.tls.ca`, `ldap.listen.port`, `ldap.starttls.listen.port`, `node.io_threads`; no aliases (the
+   maintainer). `https.tls.ca` is refused. The installed `config.yaml`, the unit and the docs with them. Its first run
+   aborted the binary: the POSIX process test still named `ldap: { port }`, so no LDAPS listener started, and the test
+   read the absent answer unchecked; both fixed. 907 of 907.
+2. **`lugh-node` on Dannan's node-program helper**: the reader, `--help`, `--version`, the signals and the drain are
+   Dannan's; `init` its command word, `--passphrase` a setting of Lugh's; a cluster of one when no cluster is named (its
+   key made in the state directory at the first start, the node on loopback); the serving parts one shared object, drained
+   by `on_drain`, stopped by `on_stop`, reloaded by `on_reload`; `lugh.serving` on the node's readiness. A setting that
+   cannot be used exits 2, the stack's code (was 1). Debug on node-b at 6a7c4f9: 903 of 903.
+
+   **907 to 903, four tests gone with what is Dannan's now**: `node_cli_test.cpp`'s three (`Cli.TheSwitches`,
+   `Cli.EverythingElseGoesToTheReaderInOrder`, `Cli.UsageNamesEverySetting`) tested Lugh's own argument parser,
+   `lugh/node/cli.h`, deleted (the helper parses the command line; `NodeProcessCli`'s `--help` test now checks every
+   setting is described, as the usage test did); `Config.TheCommandWord` tested Lugh's command-word parsing, now the
+   helper's (tested in Dannan). The log level and format and the threads went from the other config tests for the same
+   reason, as Lir's log test went at its own move.
+
 ## 2026-11-24: Dannan 0.12.1
 
 The pin moved from 0.12.0, a patch with its ABI (the coordinator's ask, 2026-11-24: Louhi's move to 0.12 waits on Lugh and

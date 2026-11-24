@@ -5,7 +5,7 @@ What is being worked on now and what comes next. When an item ships, move it to 
 ## Resume here (2026-11-24)
 
 **Now: P8.1 on `feature/p8`** (the long-lived P8 branch, the maintainer, 2026-11-24; its settled decisions and its four
-commits are in `2026-11-13-p8-plan.md`, "P8.1, settled"). Commit 1, the settings' new names, is written. P8.1 is carried
+commits are in `2026-11-13-p8-plan.md`, "P8.1, settled"). Commits 1 (the settings' new names) and 2 (the main on the helper) are done; 3 (the keyring rooted in custody) is next. P8.1 is carried
 as far as it goes without Dagda's caught-up signal; its health check (the caught-up spaces) waits for it, which Dagda
 builds straight after its 0.5.0, ahead of the AcceptorStore, because P8.1 heads P8 (the maintainer's reprioritisation,
 2026-11-24). P8.2 to P8.4 follow on Dagda's D6 at a commit pin on Dagda's develop if 0.5.0 is not tagged. Louhi's move
