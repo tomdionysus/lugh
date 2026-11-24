@@ -342,7 +342,7 @@ TEST(NodeProcessLdapPosix, TheBackfillOnTheRealBinary) {
   ASSERT_EQ(node.made.status, 0) << node.made.err;
   const auto ldaps_port = dannan::test::free_port();
   const auto config = workspace.path("config.yaml");
-  write_file(config, "ldap: { port: " + std::to_string(ldaps_port) + ", base_dn: '" + kBase +
+  write_file(config, "ldap: { listen: { port: " + std::to_string(ldaps_port) + " }, base_dn: '" + kBase +
                          "', posix: { uid_range: 10000-19999, gid_range: 20000-29999, primary_group: administrators, shell: /bin/zsh } }\n" +
                          "oauth: { issuer: " + RootBrowser::kTestIssuer + " }\n");
   Serving serving(workspace, node.state, node.credentials, std::nullopt, {"--config", config.string()});
@@ -356,9 +356,13 @@ TEST(NodeProcessLdapPosix, TheBackfillOnTheRealBinary) {
   ASSERT_TRUE(made);
   ASSERT_EQ(made->status, 201u) << made->body;
   Client client(ldaps_port, Client::Mode::ldaps);
-  ASSERT_EQ(client.bind(kRoot, std::string(boost::json::parse(made->body).at("password").as_string()))->code, 0);
+  // Checked before it is read: an absent answer (no listener) is a failure here, not an abort that loses the run's output.
+  const auto bound = client.bind(kRoot, std::string(boost::json::parse(made->body).at("password").as_string()));
+  ASSERT_TRUE(bound) << "no answer on the LDAPS port\n" << serving.log();
+  ASSERT_EQ(bound->code, 0);
 
   const auto before = client.search(kRoot, 0);
+  ASSERT_TRUE(before);
   ASSERT_EQ(before->entries.size(), 1u);
   EXPECT_EQ(before->entries[0].attributes.count("uidNumber"), 0u);
 
