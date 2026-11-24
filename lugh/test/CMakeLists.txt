@@ -29,6 +29,7 @@ add_executable(lugh_tests
     authn_enrolment_links_test.cpp
     authn_factors_test.cpp
     authn_genesis_test.cpp
+    authn_password_hash_test.cpp
     authn_passwords_test.cpp
     authn_policy_test.cpp
     authn_totp_test.cpp

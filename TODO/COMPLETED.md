@@ -2,6 +2,21 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-24: the stored password is Dannan's
+
+`authn::PasswordHash` is Dannan 0.12.0's `identity::PasswordHash` (moved there from Lugh's), made by `make_password` and
+checked by its `verify_password`; `hash_password` keeps its Result for the callers. What stays Lugh's is how a record
+carries it, the same bytes as before (the three costs, then the salt and the hash as blobs), so every stored password,
+client secret, app password and recovery code still verifies. A salt of other than 16 bytes is now refused on read (Lugh
+only ever wrote 16). New, `authn_password_hash_test.cpp` (4): a record built by hand in the old layout verifies and
+writes back byte for byte; a new hash round-trips; what Lugh never wrote is refused. 903 to 907.
+
+Found by the feature's TSan run and fixed in its own commit: `KeySourceTest.AnUnknownKidPromptsAFetchAtMostOnceAGap`
+waited for the second key fetch to be asked rather than answered (site A was fresh already), so under TSan's slower turns
+it checked the rotated token before its key was in. It now waits for the rotated token to verify, then checks the fetch
+count. A test's race, not the key source's. Debug, ASan and TSan on node-a at 9094ae8: 907 of 907 each, no sanitizer
+report.
+
 ## 2026-11-24: Dannan 0.12.0
 
 The pin moved from 0.11.1 (a new minor, libdannan0.12). Dagda 0.4.0 still builds on it for the tests; the stepped
