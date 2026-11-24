@@ -11,6 +11,10 @@ builds straight after its 0.5.0, ahead of the AcceptorStore, because P8.1 heads 
 2026-11-24). P8.2 to P8.4 follow on Dagda's D6 at a commit pin on Dagda's develop if 0.5.0 is not tagged. Louhi's move
 to Dannan 0.12 waits on Lugh and Dagda both being on it: Lugh's `develop` is (0.12.1).
 
+**0.7.0, promised to Louhi** (2026-11-24): cut from `develop` when Dagda 0.5.0 is tagged (about 2026-11-27), on the
+latest Dannan 0.12.x, with the release gate and its Debian package. Louhi pins tags and moves onto Dannan 0.12 with Dagda
+0.5.0. It holds `develop`'s work, not P8's (the settings' new names stay on `feature/p8`).
+
 `develop` keeps releasing 0.x for the dependants meanwhile, and is merged into `feature/p8` after each change there (merged, not rebased: a pushed branch is never force-pushed).
 
 **Releases.** 0.2.0 (packaged), 0.3.0 (Dannan 0.10.0), 0.4.0 (the stack's config names), 0.5.0 (onto the rest of
