@@ -176,7 +176,7 @@ void Passwords::verify(std::string user_id, Secret password, Deadline deadline, 
           Checked out;
           const auto secret = held->reveal();
           out.right = verify_password(secret, hash);
-          if (out.right && !same_costs(hash.params, params)) {
+          if (out.right && !same_costs(hash.costs, params)) {
             if (auto hashed = hash_password(secret, params); hashed.ok) out.again = std::move(hashed.value);
           }
           return out;

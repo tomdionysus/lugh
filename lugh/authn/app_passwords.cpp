@@ -232,7 +232,8 @@ void AppPasswords::verify(std::string user_id, Secret password, std::string sour
         });
       };
       const bool eligible = usable && candidate && from_allowed(candidate->record);
-      const auto hash = candidate ? candidate->record.hash : PasswordHash{self->_params, Bytes(kPasswordSaltBytes, 0), SecureBuffer(kPasswordHashBytes, 0)};
+      // No candidate: a hash of zeros under the same costs, so a miss spends what a match does.
+      const auto hash = candidate ? candidate->record.hash : PasswordHash{self->_params, {}, {}};
       on_pool(
           self->_hashing,
           [typed, hash] {
