@@ -12,12 +12,13 @@
 
 using lugh::http::RateLimiter;
 using lugh::http::Throttle;
+using TimePoint = dannan::contract::TimePoint;
 using namespace std::chrono_literals;
 
 TEST(RateLimiter, AllowsTheBurstThenRefuses) {
   RateLimiter limiter;
   const RateLimiter::Policy policy{3, 60};
-  const auto now = RateLimiter::TimePoint{};
+  const auto now = TimePoint{};
 
   EXPECT_FALSE(limiter.take("k", policy, now));
   EXPECT_FALSE(limiter.take("k", policy, now));
@@ -31,7 +32,7 @@ TEST(RateLimiter, AllowsTheBurstThenRefuses) {
 TEST(RateLimiter, RefillsAtTheRate) {
   RateLimiter limiter;
   const RateLimiter::Policy policy{1, 6};  // one every ten seconds
-  const auto start = RateLimiter::TimePoint{};
+  const auto start = TimePoint{};
 
   EXPECT_FALSE(limiter.take("k", policy, start));
   EXPECT_EQ(*limiter.take("k", policy, start), 10s);
@@ -54,17 +55,16 @@ TEST(RateLimiter, ZeroIsUnlimited) {
   EXPECT_EQ(limiter.size(), 0u);
 }
 
-TEST(RateLimiter, PrunesFullBuckets) {
-  RateLimiter limiter(2);
+TEST(RateLimiter, NeverHoldsMoreThanItsBound) {
+  // Callers choose the keys, so a stream of made-up names (accounts, addresses) must not grow it.
+  RateLimiter limiter(4);
   const RateLimiter::Policy policy{1, 60};
-  const auto start = RateLimiter::TimePoint{};
-
-  limiter.take("a", policy, start);
-  limiter.take("b", policy, start);
-  limiter.take("c", policy, start);
-  limiter.take("d", policy, start + 1h);
-
-  EXPECT_EQ(limiter.size(), 1u);
+  for (int i = 0; i < 50; ++i) {
+    limiter.take("k" + std::to_string(i), policy, TimePoint{} + std::chrono::seconds(i % 3));
+    EXPECT_LE(limiter.size(), 4u);
+  }
+  // A key just taken is still held, and still limited.
+  EXPECT_TRUE(limiter.take("k49", policy, TimePoint{} + 1s));
 }
 
 TEST(Throttle, ReadsTheInjectedClock) {
