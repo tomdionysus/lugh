@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-24: Dannan 0.12.0
+
+The pin moved from 0.11.1 (a new minor, libdannan0.12). Dagda 0.4.0 still builds on it for the tests; the stepped
+clocks that now notify (`TimeSource::watch`) changed none of Lugh's tests. Debug on node-a at af351af: 903 of 903 (a pin
+move: no sanitizers). What it adds for Lugh, each its own step: the stored password (next), keyed limits, and for P8.1
+the health checks and the node-program helper.
+
 ## 2026-11-23: Louhi's trial on node-c's Lugh
 
 The maintainer's word: node-c's Lugh test service (a local install, 0.1.0 since 2026-11-16) upgraded to 0.6.0 for

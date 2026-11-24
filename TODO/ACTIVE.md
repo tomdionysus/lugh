@@ -20,13 +20,17 @@ it in the apt repository waits on the maintainer's word.
 **Onto Dannan 0.10.x: done in 0.5.0** (`COMPLETED.md`, 2026-11-22). Not taken: `agree::MemoryStore`, `each_held` and
 the agreement teardown fixes, which are P8's; the ack levels.
 
-**Next, not blocked:**
-1. ~~Louhi's trial on node-c's Lugh~~ and ~~Dannan 0.11.1 with Dagda 0.4.0~~: done (`COMPLETED.md`, 2026-11-23).
-2. Coverage.
-3. The next release's Debian package, with its tests, against Dannan 0.11.1's and Dagda 0.4.0's debs. Dagda 0.4.0's are in
-   the tomcully.com apt repository for arm64 (`libdagda0.4.0`, `libdagda-dev`, `dagda-tools`; amd64 waits on the
-   maintainer), so the arm64 build installs them from there.
-P8 waits on Dannan and Dagda. Settled: the synchronous `Result` returns (the config loader, the record codecs) stay as
+**Next, not blocked** (Dannan 0.12.0 pinned, 2026-11-24; its "Adopting 0.12.0", one step each):
+1. **The stored password**: `authn::PasswordHash` and its hashing become Dannan's `identity::PasswordHash`,
+   `make_password`, `verify_password` and `verify_decoy` (moved there from Lugh's). The fields are the same (the costs, a
+   16-byte salt, a 32-byte hash), so a record's bytes stay as they are and every stored hash still verifies.
+2. **Keyed limits**: Lugh's own rate limiting onto `listen::RateLimiter`.
+3. **P8.1** (`lugh-node` a Dannan node): `supervise::run_node_program` for the main, the health checks (hashing backlog,
+   caught-up), on Dannan 0.12.0; founding is Dannan's third minor, so `lugh-node init` stays Lugh's command word until then.
+4. Coverage.
+5. The next release's Debian package, with its tests, against Dannan's and Dagda 0.4.0's debs (Dagda's arm64 debs are in
+   the tomcully.com apt repository; Dannan 0.12.0's follow its CI).
+P8.2 on waits as below. Settled: the synchronous `Result` returns (the config loader, the record codecs) stay as
 they are, per CONTRIBUTING's errors rule: what happened returns its result.
 
 **Also waiting to be done, not blocked:**
@@ -36,7 +40,8 @@ they are, per CONTRIBUTING's errors rule: what happened returns its result.
 
 **P8, the cluster on the stack** (`2026-11-13-p8-plan.md`). P8.0 is done. The rest waits on its dependencies, by the
 no-duplication rule:
-- P8.1 (lugh-node a Dannan node) waits on Dannan's node-program helper and founding act (Dannan's plan, items 4 and 14).
+- P8.1 (lugh-node a Dannan node): no longer waits; Dannan 0.12.0 has the node-program helper. Founding (item 4) comes in
+  Dannan's third minor; until then `lugh-node init` stays Lugh's own command word (asked of Dannan, 2026-11-23).
 - P8.2 to P8.4 take Dagda's register map (D6), which replaces Lugh's own merge and codec. D6 is public on Dagda's
   develop (00e0a9f, 2026-11-23; contract version 3, on Dannan 0.11.1), tagged with D5 in Dagda 0.5.0. They also need
   P8.1, so they start after it, against D6 at a commit pin if 0.5.0 is not yet tagged.
@@ -80,7 +85,7 @@ no-duplication rule:
 
 | Dependency | Pin | Used by |
 |---|---|---|
-| Dannan | 0.11.1 (`LUGH_DANNAN_REF`; 0.6.0 is on 0.11.0) | everything |
+| Dannan | 0.12.0 (`LUGH_DANNAN_REF`; 0.6.0 is on 0.11.0) | everything |
 | Dagda | 0.4.0 (`LUGH_DAGDA_REF`; 0.6.0's tests used 0.3.2) | the tests only; the node does not link it until P8 |
 | Lir | 0.2.0 (`LUGH_LIR_REF`) | the tests and `lugh::client_topics` only |
 
