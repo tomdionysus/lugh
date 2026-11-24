@@ -2,6 +2,13 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-24: Dannan 0.12.1
+
+The pin moved from 0.12.0, a patch with its ABI (the coordinator's ask, 2026-11-24: Louhi's move to 0.12 waits on Lugh and
+Dagda both being on it). Its one fix is a call watchdog's first wait inside a Dannan node's calls, which Lugh does not make
+yet; it is also the first 0.12 with arm64 packages, which the package build needs. Debug on node-b at a0bf524: 907 of 907
+(a pin move: no sanitizers).
+
 ## 2026-11-24: the rate limiter is Dannan's
 
 `http::RateLimiter` is Dannan 0.12.0's `listen::RateLimiter` (moved there from Lugh's); `RateLimits` and `Throttle` stay
