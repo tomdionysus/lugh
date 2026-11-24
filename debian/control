@@ -10,7 +10,7 @@ Build-Depends:
  libboost-dev (>= 1.83),
  libssl-dev,
  libyaml-cpp-dev,
- libdannan-dev (>= 0.12.0),
+ libdannan-dev (>= 0.12.1),
  libdannan-dev (<< 0.13~),
  nodejs (>= 20),
  npm,

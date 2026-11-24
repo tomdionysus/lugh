@@ -28,6 +28,10 @@ a node's own configuration needs the same edit before the upgrade.
 
 ## Unreleased
 
+Repin: Dannan 0.12.0 to 0.12.1, a patch with 0.12.0's ABI. From its release notes nothing in Lugh changes: a call's
+watchdog counts from the call, inside a Dannan node's calls, which Lugh does not make yet; 0.12.1 is also the first
+0.12 with arm64 packages, which the package build needs. The package builds against `libdannan-dev (>= 0.12.1)`.
+
 Repin: Dannan 0.11.1 to 0.12.0, a new minor (libdannan0.12). From its release notes ("Adopting 0.12.0"), each its own
 step after this one: Lugh's health pushed as checks on the node's readiness (the hashing backlog, the caught-up spaces),
 and `lugh-node`'s main onto `supervise::run_node_program` (both P8.1, with the node itself); Lugh's rate limiter onto
