@@ -11,7 +11,7 @@ builds straight after its 0.5.0, ahead of the AcceptorStore, because P8.1 heads 
 2026-11-24). P8.2 to P8.4 follow on Dagda's D6 at a commit pin on Dagda's develop if 0.5.0 is not tagged. Louhi's move
 to Dannan 0.12 waits on Lugh and Dagda both being on it: Lugh's `develop` is (0.12.1).
 
-`develop` keeps releasing 0.x for the dependants meanwhile, and `feature/p8` is rebased on it after each change there.
+`develop` keeps releasing 0.x for the dependants meanwhile, and is merged into `feature/p8` after each change there (merged, not rebased: a pushed branch is never force-pushed).
 
 **Releases.** 0.2.0 (packaged), 0.3.0 (Dannan 0.10.0), 0.4.0 (the stack's config names), 0.5.0 (onto the rest of
 Dannan 0.10.x) and 0.6.0 (Dannan 0.11.0 and `@lugh/admin-ui`; source only) are tagged on `main`; `CHANGELOG.md` says what each holds. Main and release tags are pushed
