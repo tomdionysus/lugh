@@ -28,7 +28,7 @@ class MetadataRoutes {
     std::string issuer;
     // Whether client_secret_basic is offered (oauth.allow_client_secrets).
     bool allow_client_secrets = false;
-    // The mTLS listener's port (oauth.mtls_port); zero for none. With one, the metadata names
+    // The mTLS listener's port (mtls.listen.port); zero for none. With one, the metadata names
     // its endpoints there (RFC 8705 section 5) and offers tls_client_auth.
     std::uint16_t mtls_port = 0;
   };

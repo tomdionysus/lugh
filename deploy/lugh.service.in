@@ -20,10 +20,10 @@ Type=simple
 # installed dashboard (read once at start; root's, so read-only to this service).
 ExecStart=@LUGH_BINARY@ \
     --config @LUGH_CONFDIR@/config.yaml \
-    --server-port 443 \
-    --tls-certificate @LUGH_CONFDIR@/tls/cert.pem \
-    --tls-key @LUGH_CONFDIR@/tls/key.pem \
-    --state-directory /var/lib/lugh \
+    --https-listen-port 443 \
+    --https-tls-certificate @LUGH_CONFDIR@/tls/cert.pem \
+    --https-tls-key @LUGH_CONFDIR@/tls/key.pem \
+    --cluster-state /var/lib/lugh \
     --static-directory @LUGH_SHAREDIR@/dashboard
 
 # `systemctl reload lugh` (a certificate renewal's hook): the certificate files read again for

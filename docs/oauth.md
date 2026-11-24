@@ -13,8 +13,8 @@ sign-in pages and the API alone.
 |---|---|
 | `oauth.issuer` (`--oauth-issuer`, `LUGH_OAUTH_ISSUER`) | The issuer, an https URL with no query, fragment or trailing `/` |
 | `oauth.allow_client_secrets` | Whether an application may use `client_secret_basic`. Off by default |
-| `oauth.mtls_port` (`--oauth-mtls-port`, `LUGH_OAUTH_MTLS_PORT`) | A second listener that asks for client certificates, for `tls_client_auth` and tokens bound to a certificate. 0 for none |
-| `tls.client_ca` | The CA a client certificate must chain to for its subject to name an application |
+| `mtls.listen.port` (`--mtls-listen-port`, `LUGH_MTLS_LISTEN_PORT`) | A second listener that asks for client certificates, for `tls_client_auth` and tokens bound to a certificate. 0 for none |
+| `mtls.tls.ca` | The CA a client certificate must chain to for its subject to name an application |
 | `oauth.outbound_ca` | The roots an application's certificate must chain to when Lugh posts to it; the system's when not set. It changes the roots, never whether they are checked |
 
 ## The endpoints
@@ -60,7 +60,7 @@ Codes live 60 seconds, are redeemed once, and only on the node that made them.
 |---|---|
 | `none` | `spa` and `native`: public, with PKCE |
 | `private_key_jwt` | Any confidential client; a replayed assertion is refused |
-| `tls_client_auth` | Through `oauth.mtls_port`, by subject DN or thumbprint |
+| `tls_client_auth` | Through `mtls.listen.port`, by subject DN or thumbprint |
 | `client_secret_basic` | Only where `oauth.allow_client_secrets` is on |
 
 ## Tokens

@@ -10,8 +10,8 @@ why it is so are in `TODO/2026-11-04-ldap.md`.
 
 | Setting | Is |
 |---|---|
-| `ldap.port` | LDAPS, usually 636. Left out, that listener is not there |
-| `ldap.starttls_port` | A plaintext port that does nothing but StartTLS and the rootDSE, usually 389. Left out, that listener is not there |
+| `ldap.listen.port` | LDAPS, usually 636. Left out, that listener is not there |
+| `ldap.starttls.listen.port` | A plaintext port that does nothing but StartTLS and the rootDSE, usually 389. Left out, that listener is not there |
 | `ldap.base_dn` | The top of the tree, such as `dc=example,dc=com`. Required for either |
 | `ldap.most_pending` | Operations a connection may have queued before Lugh stops reading it. 8 by default |
 | `ldap.idle` | Seconds a connection may do nothing. 600 by default, since SSSD and mail servers hold one open |

@@ -26,8 +26,8 @@ void stops_on(int number, const std::string& name) {
   Workspace workspace;
   const auto state = workspace.path("state");
   const auto config = workspace.path("config.yaml");
-  write_file(config, "log: { level: info }\ntls: { certificate: \"" + workspace.certificate.string() + "\", key: \"" + workspace.key.string() +
-                         "\" }\nstate: { directory: \"" + state.string() + "\" }\n");
+  write_file(config, "log: { level: info }\nhttps: { tls: { certificate: \"" + workspace.certificate.string() + "\", key: \"" + workspace.key.string() +
+                         "\" } }\ncluster: { state: \"" + state.string() + "\" }\n");
 
   const auto credentials = workspace.path("credentials");
   std::filesystem::create_directories(credentials);
@@ -37,8 +37,8 @@ void stops_on(int number, const std::string& name) {
 
   const auto port = dannan::test::free_port();
   const auto log = workspace.path("serve.log");
-  dannan::test::ChildProcess node({kBinary, "--config", config.string(), "--server-address", "127.0.0.1", "--server-port", std::to_string(port)}, log,
-                                  {.environment = environment(credentials), .input = std::nullopt, .terminal = false});
+  dannan::test::ChildProcess node({kBinary, "--config", config.string(), "--https-listen-address", "127.0.0.1", "--https-listen-port", std::to_string(port)},
+                                  log, {.environment = environment(credentials), .input = std::nullopt, .terminal = false});
   ASSERT_TRUE(wait_until_up(node, port, std::chrono::seconds(10))) << read_file(log);
 
   const auto sent = Clock::now();

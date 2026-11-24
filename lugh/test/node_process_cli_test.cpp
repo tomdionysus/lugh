@@ -28,11 +28,8 @@ struct HeldPort {
 };
 
 std::vector<std::string> serving(const Workspace& workspace, const Initialised& node, std::uint16_t port) {
-  return {"--tls-certificate", workspace.certificate.string(),
-          "--tls-key",         workspace.key.string(),
-          "--state-directory", node.state.string(),
-          "--server-address",  "127.0.0.1",
-          "--server-port",     std::to_string(port)};
+  return {"--https-tls-certificate", workspace.certificate.string(), "--https-tls-key", workspace.key.string(), "--cluster-state",
+          node.state.string(),       "--https-listen-address",       "127.0.0.1",       "--https-listen-port",  std::to_string(port)};
 }
 
 }  // namespace
@@ -43,7 +40,7 @@ TEST(NodeProcessCli, HelpAndVersion) {
     const auto help = run(workspace, {flag});
     EXPECT_EQ(help.status, 0) << flag;
     EXPECT_EQ(help.out.rfind("Usage: lugh-node", 0), 0u) << help.out;
-    EXPECT_NE(help.out.find("--tls-certificate"), std::string::npos) << "the settings are described";
+    EXPECT_NE(help.out.find("--https-tls-certificate"), std::string::npos) << "the settings are described";
   }
   const auto version = run(workspace, {"--version"});
   EXPECT_EQ(version.status, 0);
@@ -73,13 +70,13 @@ TEST(NodeProcessCli, APortInUseStopsTheNode) {
 
   auto mtls = serving(workspace, node, dannan::test::free_port());
   const auto config = workspace.path("mtls.yaml");
-  write_file(config, "tls: { client_ca: " + workspace.certificate.string() + " }\n");
-  mtls.insert(mtls.end(), {"--config", config.string(), "--oauth-mtls-port", std::to_string(held.port())});
+  write_file(config, "mtls: { tls: { ca: " + workspace.certificate.string() + " } }\n");
+  mtls.insert(mtls.end(), {"--config", config.string(), "--mtls-listen-port", std::to_string(held.port())});
   const auto mtls_ran = run(workspace, mtls, {.environment = environment(node.credentials), .input = std::nullopt});
   EXPECT_EQ(mtls_ran.status, 1) << mtls_ran.err;
 
   const auto ldap_config = workspace.path("ldap.yaml");
-  write_file(ldap_config, "ldap: { port: " + std::to_string(held.port()) + ", base_dn: \"dc=example,dc=com\" }\n");
+  write_file(ldap_config, "ldap: { listen: { port: " + std::to_string(held.port()) + " }, base_dn: \"dc=example,dc=com\" }\n");
   auto ldap = serving(workspace, node, dannan::test::free_port());
   ldap.insert(ldap.end(), {"--config", ldap_config.string()});
   const auto ldap_ran = run(workspace, ldap, {.environment = environment(node.credentials), .input = std::nullopt});
@@ -92,9 +89,9 @@ TEST(NodeProcessCli, TheMtlsListenerServesTheSameRoutes) {
   Workspace workspace;
   const Initialised node(workspace);
   const auto config = workspace.path("mtls.yaml");
-  write_file(config, "tls: { client_ca: " + workspace.certificate.string() + " }\n");
+  write_file(config, "mtls: { tls: { ca: " + workspace.certificate.string() + " } }\n");
   const auto mtls_port = dannan::test::free_port();
-  Serving serving(workspace, node.state, node.credentials, std::nullopt, {"--config", config.string(), "--oauth-mtls-port", std::to_string(mtls_port)});
+  Serving serving(workspace, node.state, node.credentials, std::nullopt, {"--config", config.string(), "--mtls-listen-port", std::to_string(mtls_port)});
   ASSERT_TRUE(serving.up()) << serving.log();
   const auto health = request(mtls_port, boost::beast::http::verb::get, "/health");
   ASSERT_TRUE(health.has_value()) << serving.log();

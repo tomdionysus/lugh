@@ -24,6 +24,9 @@
 
 namespace lugh {
 
+// The HTTPS listener's port when none is given.
+inline constexpr std::uint16_t kHttpsPort = 8443;
+
 // Everything the service is told at start. Public fields, as blackraven-admin's Config: it
 // is data, filled once by ConfigLoader and read by main. The master key is not here and
 // never will be; it arrives as a systemd credential, or is typed.
@@ -38,7 +41,7 @@ struct Config {
   dannan::status::LogFormat log_format = dannan::status::LogFormat::text;
 
   std::string address = "0.0.0.0";
-  std::uint16_t port = 8443;
+  std::uint16_t port = kHttpsPort;
   unsigned threads = 2;
 
   // Both required to serve: there is no plaintext listener. `lugh-node init` needs neither.

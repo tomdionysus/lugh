@@ -82,8 +82,8 @@ TEST(NodeProcess, SighupReloadsTheCertificates) {
   Workspace workspace;
   const auto state = workspace.path("state");
   const auto config = workspace.path("config.yaml");
-  write_file(config, "log: { level: info }\ntls: { certificate: \"" + workspace.certificate.string() + "\", key: \"" + workspace.key.string() +
-                         "\" }\nstate: { directory: \"" + state.string() + "\" }\n");
+  write_file(config, "log: { level: info }\nhttps: { tls: { certificate: \"" + workspace.certificate.string() + "\", key: \"" + workspace.key.string() +
+                         "\" } }\ncluster: { state: \"" + state.string() + "\" }\n");
   const auto credentials = workspace.path("credentials");
   std::filesystem::create_directories(credentials);
   const auto made = run(workspace, {"init", "--config", config.string()});
@@ -92,8 +92,8 @@ TEST(NodeProcess, SighupReloadsTheCertificates) {
 
   const auto port = dannan::test::free_port();
   const auto log = workspace.path("serve.log");
-  dannan::test::ChildProcess node({kBinary, "--config", config.string(), "--server-address", "127.0.0.1", "--server-port", std::to_string(port)}, log,
-                                  {.environment = environment(credentials), .input = std::nullopt, .terminal = false});
+  dannan::test::ChildProcess node({kBinary, "--config", config.string(), "--https-listen-address", "127.0.0.1", "--https-listen-port", std::to_string(port)},
+                                  log, {.environment = environment(credentials), .input = std::nullopt, .terminal = false});
   ASSERT_TRUE(wait_until_up(node, port, std::chrono::seconds(10))) << read_file(log);
   const auto first = thumbprint_of_pem(read_file(workspace.certificate));
   ASSERT_EQ(presented(port), first);
@@ -133,8 +133,8 @@ TEST(NodeProcess, StartRefusesCertificatesThatWillNotServe) {
   const auto state = workspace.path("state");
   const auto key = workspace.path("key.pem");
   const auto config = workspace.path("config.yaml");
-  write_file(config, "log: { level: info }\ntls: { certificate: \"" + workspace.certificate.string() + "\", key: \"" + key.string() +
-                         "\" }\nstate: { directory: \"" + state.string() + "\" }\n");
+  write_file(config, "log: { level: info }\nhttps: { tls: { certificate: \"" + workspace.certificate.string() + "\", key: \"" + key.string() +
+                         "\" } }\ncluster: { state: \"" + state.string() + "\" }\n");
   write_file(key, read_file(workspace.key));
   const auto credentials = workspace.path("credentials");
   std::filesystem::create_directories(credentials);
@@ -143,7 +143,8 @@ TEST(NodeProcess, StartRefusesCertificatesThatWillNotServe) {
   write_file(credentials / kCredential, made.out);
 
   const auto serve = [&] {
-    return run(workspace, {"--config", config.string(), "--server-address", "127.0.0.1", "--server-port", std::to_string(dannan::test::free_port())},
+    return run(workspace,
+               {"--config", config.string(), "--https-listen-address", "127.0.0.1", "--https-listen-port", std::to_string(dannan::test::free_port())},
                {.environment = environment(credentials), .input = std::nullopt, .terminal = false});
   };
 

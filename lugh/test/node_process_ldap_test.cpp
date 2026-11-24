@@ -212,8 +212,8 @@ class NodeProcessLdap : public ::testing::Test {
     plain_port = dannan::test::free_port();
     const auto config = workspace.path("config.yaml");
     // An issuer, so root's first sign-in can enrol a passkey and administer at phr.
-    write_file(config, "ldap: { port: " + std::to_string(ldaps_port) + ", starttls_port: " + std::to_string(plain_port) + ", base_dn: '" + kBase +
-                           "' }\noauth: { issuer: " + RootBrowser::kTestIssuer + " }\n");
+    write_file(config, "ldap: { listen: { port: " + std::to_string(ldaps_port) + " }, starttls: { listen: { port: " + std::to_string(plain_port) +
+                           " } }, base_dn: '" + kBase + "' }\noauth: { issuer: " + RootBrowser::kTestIssuer + " }\n");
     serving.emplace(workspace, node.state, node.credentials, std::nullopt, std::vector<std::string>{"--config", config.string()});
     ASSERT_TRUE(serving->up()) << serving->log();
     root.port = serving->port();
@@ -382,7 +382,7 @@ TEST(NodeProcessLdapAnonymous, TheSetting) {
     ASSERT_EQ(node.made.status, 0) << node.made.err;
     const auto plain_port = dannan::test::free_port();
     const auto config = workspace.path("config.yaml");
-    write_file(config, "ldap: { starttls_port: " + std::to_string(plain_port) + ", base_dn: '" + kBase + "'" + setting + " }\n");
+    write_file(config, "ldap: { starttls: { listen: { port: " + std::to_string(plain_port) + " } }, base_dn: '" + kBase + "'" + setting + " }\n");
     Serving serving(workspace, node.state, node.credentials, std::nullopt, {"--config", config.string()});
     ASSERT_TRUE(serving.up()) << serving.log();
     Client client(plain_port, Client::Mode::plaintext);

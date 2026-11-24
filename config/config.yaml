@@ -19,25 +19,26 @@ log:
   # text for the journal, json for a shipper.
   format: text
 
-server:
-  # Every address. The unit sets port 443.
-  address: "0.0.0.0"
-  port: 8443
-  threads: 2
+https:
+  listen:
+    # Every address. The unit sets port 443.
+    address: "0.0.0.0"
+    port: 8443
+  tls:
+    # There is no plaintext listener: both are required. TLS 1.3 and nothing older. These
+    # are the development pair that tools/lugh_dev_cert.sh writes; the unit points at the
+    # installed ones.
+    certificate: "config/dev/cert.pem"
+    key: "config/dev/key.pem"
 
-tls:
-  # client_ca: the CA a client certificate must chain to for its subject to name an
-  # application; without it, only a certificate's thumbprint does.
-  # There is no plaintext listener: both are required. TLS 1.3 and nothing older. These
-  # are the development pair that tools/lugh_dev_cert.sh writes; the unit points at the
-  # installed ones.
-  certificate: "config/dev/cert.pem"
-  key: "config/dev/key.pem"
+node:
+  # The threads that serve every listener.
+  io_threads: 2
 
-state:
-  # The keyring and the store. The development directory, which
+cluster:
+  # The node's own: the keyring and the store. The development directory, which
   # tools/lugh_dev_init.sh fills; the unit points at /var/lib/lugh.
-  directory: "config/dev/state"
+  state: "config/dev/state"
 
 static:
   # The dashboard's built files, read once at start and served for every path Lugh's own do not
@@ -67,20 +68,30 @@ oauth:
   # The issuer: every token's iss, and the base of the metadata's URLs. The public https URL
   # clients reach Lugh at, without a trailing '/'. Left out, no metadata is served.
   issuer: "https://localhost:8443"
-  # A second listener that asks every connection for a client certificate (RFC 8705): for
-  # applications that authenticate with one (tls_client_auth) or whose tokens are bound to
-  # one. Left out, there is none. The main listener never asks, so a browser never sees a
-  # certificate picker.
-  # mtls_port: 8444
   # outbound_ca: the roots an application's certificate must chain to when Lugh posts a
   # back-channel logout to it; the system's when not set.
   # outbound_ca: /etc/lugh/outbound-roots.pem
 
+mtls:
+  # A second listener, on the https address and certificate pair, that asks every connection for a
+  # client certificate (RFC 8705): for applications that authenticate with one (tls_client_auth) or
+  # whose tokens are bound to one. Left out, there is none. The https listener never asks, so a
+  # browser never sees a certificate picker.
+  # listen:
+  #   port: 8444
+  # tls:
+  #   # The CA a client certificate must chain to for its subject to name an application;
+  #   # without it, only a certificate's thumbprint does.
+  #   ca: /etc/lugh/clients.pem
+
 ldap:
-  # LDAPS, and a plaintext port that does nothing but StartTLS and the rootDSE. Left out, that
-  # listener is not there. TLS is the same as the HTTPS listener's: 1.3 only.
-  # port: 636
-  # starttls_port: 389
+  # LDAPS, and a plaintext port that does nothing but StartTLS and the rootDSE, on the https
+  # address. Left out, that listener is not there. TLS is the https listener's pair: 1.3 only.
+  # listen:
+  #   port: 636
+  # starttls:
+  #   listen:
+  #     port: 389
   # The top of the tree; required for either. Lugh does not guess it.
   # base_dn: dc=example,dc=com
   # Operations a connection may have queued before Lugh stops reading it.

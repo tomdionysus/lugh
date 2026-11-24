@@ -78,7 +78,7 @@ a certificate and a keyring first.
    never on disk in clear:
 
    ```bash
-   sudo -u lugh lugh-node init --state-directory /var/lib/lugh \
+   sudo -u lugh lugh-node init --cluster-state /var/lib/lugh \
      | sudo systemd-creds encrypt --name=lugh-master-key - /etc/credstore.encrypted/lugh-master-key
    ```
 
@@ -113,8 +113,8 @@ The unit runs as `lugh` on port 443 with `CAP_NET_BIND_SERVICE` and nothing else
   dashboard with its exact redirect URIs, the groups that may use it and the roles it maps them
   to. Discovery is at `/.well-known/openid-configuration` once `oauth.issuer` is set
   ([docs/oauth.md](docs/oauth.md)).
-- **LDAP** for mail servers, NAS boxes, VPNs and PAM: set `ldap.port` (LDAPS) or
-  `ldap.starttls_port`, and `ldap.base_dn` ([docs/ldap.md](docs/ldap.md)).
+- **LDAP** for mail servers, NAS boxes, VPNs and PAM: set `ldap.listen.port` (LDAPS) or
+  `ldap.starttls.listen.port`, and `ldap.base_dn` ([docs/ldap.md](docs/ldap.md)).
 - **A C++ relying party** links `lugh_client` to verify Lugh's tokens offline and run the flows
   ([docs/client.md](docs/client.md)).
 

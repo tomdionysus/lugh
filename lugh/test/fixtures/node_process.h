@@ -125,7 +125,7 @@ inline Ran run(const Workspace& workspace, std::vector<std::string> args, dannan
 // `lugh-node init` for a state directory, with any further arguments.
 inline Ran init(const Workspace& workspace, const std::filesystem::path& state, std::vector<std::string> extra = {},
                 std::optional<std::string> input = std::nullopt) {
-  std::vector<std::string> args{"init", "--state-directory", state.string()};
+  std::vector<std::string> args{"init", "--cluster-state", state.string()};
   args.insert(args.end(), extra.begin(), extra.end());
   return run(workspace, args, {.environment = environment(), .input = std::move(input)});
 }
@@ -310,10 +310,17 @@ class Serving {
  private:
   static std::vector<std::string> command_line(const Workspace& workspace, const std::filesystem::path& state, std::uint16_t port,
                                                const std::vector<std::string>& arguments) {
-    std::vector<std::string> out{kBinary,         "--tls-certificate",    workspace.certificate.string(),
-                                 "--tls-key",     workspace.key.string(), "--state-directory",
-                                 state.string(),  "--server-address",     "127.0.0.1",
-                                 "--server-port", std::to_string(port)};
+    std::vector<std::string> out{kBinary,
+                                 "--https-tls-certificate",
+                                 workspace.certificate.string(),
+                                 "--https-tls-key",
+                                 workspace.key.string(),
+                                 "--cluster-state",
+                                 state.string(),
+                                 "--https-listen-address",
+                                 "127.0.0.1",
+                                 "--https-listen-port",
+                                 std::to_string(port)};
     out.insert(out.end(), arguments.begin(), arguments.end());
     return out;
   }

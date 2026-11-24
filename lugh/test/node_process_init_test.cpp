@@ -118,7 +118,7 @@ TEST(NodeProcessInit, WithACredential) {
 TEST(NodeProcessInit, RefusesATerminal) {
   Workspace workspace;
   const auto state = workspace.path("tty-state");
-  const auto ran = run(workspace, {"init", "--state-directory", state.string()}, {.environment = environment(), .input = std::nullopt, .terminal = true});
+  const auto ran = run(workspace, {"init", "--cluster-state", state.string()}, {.environment = environment(), .input = std::nullopt, .terminal = true});
   EXPECT_NE(ran.status, 0);
   EXPECT_NE(ran.out.find("terminal"), std::string::npos) << ran.out;
   EXPECT_FALSE(std::filesystem::exists(state / "keyring"));

@@ -3,6 +3,29 @@
 What each release added, changed and fixed, and what a project of the stack can now take from Lugh in place of its own
 code. Newest first. The tags are on `main`.
 
+## P8, on `feature/p8` (released when v2 is frozen)
+
+### Changed (breaking): the settings take the node program's names (P8.1)
+
+`lugh-node` becomes a Dannan node on Dannan's node-program helper, which names every program's listeners, threads and
+state alike. The old names are gone, not aliased (the maintainer, 2026-11-24). The flag and the variable are made from
+the whole dotted key, as before (`https.listen.port`: `--https-listen-port`, `LUGH_HTTPS_LISTEN_PORT`).
+
+| Was | Now |
+|---|---|
+| `server.address`, `server.port` | `https.listen.address`, `https.listen.port` |
+| `server.threads` | `node.io_threads` |
+| `tls.certificate`, `tls.key` | `https.tls.certificate`, `https.tls.key` |
+| `state.directory` | `cluster.state` |
+| `oauth.mtls_port` | `mtls.listen.port` |
+| `tls.client_ca` | `mtls.tls.ca` |
+| `ldap.port` | `ldap.listen.port` |
+| `ldap.starttls_port` | `ldap.starttls.listen.port` |
+
+The mTLS and LDAP listeners still listen on the https address with the https pair. `https.tls.ca` is refused: the https
+listener never asks for a client certificate. The installed `config.yaml` and the unit's command line use the new names;
+a node's own configuration needs the same edit before the upgrade.
+
 ## Unreleased
 
 Repin: Dannan 0.11.1 to 0.12.0, a new minor (libdannan0.12). From its release notes ("Adopting 0.12.0"), each its own

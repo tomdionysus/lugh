@@ -27,7 +27,7 @@ struct ClientCertificate {
   std::string thumbprint;
   // Its subject DN, as RFC 2253 writes it.
   std::string subject;
-  // Whether it chains to the configured client CA (tls.client_ca); a certificate that does not
+  // Whether it chains to the configured client CA (mtls.tls.ca); a certificate that does not
   // is still a key the client holds, good for a thumbprint, never for its subject.
   bool verified = false;
 };

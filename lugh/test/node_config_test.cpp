@@ -43,7 +43,7 @@ class Loader {
 // Every serve needs the TLS pair, so the tests about other settings give it on the command
 // line and are about what they are about.
 Arguments with_tls(Arguments more = {}) {
-  Arguments out{"--tls-certificate", "/etc/lugh/cert.pem", "--tls-key", "/etc/lugh/key.pem"};
+  Arguments out{"--https-tls-certificate", "/etc/lugh/cert.pem", "--https-tls-key", "/etc/lugh/key.pem"};
   out.insert(out.end(), more.begin(), more.end());
   return out;
 }
@@ -59,7 +59,7 @@ std::vector<std::string> networks(const Config& config) {
   return out;
 }
 
-const std::string kTls = "tls: { certificate: /c.pem, key: /k.pem }\n";
+const std::string kTls = "https: { tls: { certificate: /c.pem, key: /k.pem } }\n";
 
 }  // namespace
 
@@ -85,7 +85,7 @@ TEST(Config, TheTlsPairIsRequiredToServe) {
   EXPECT_FALSE(result.ok);
   EXPECT_NE(result.error.find("tls.certificate"), std::string::npos);
   EXPECT_NE(result.error.find("no plaintext"), std::string::npos);
-  EXPECT_FALSE(Loader().load({"--tls-certificate", "/c.pem"}).ok);
+  EXPECT_FALSE(Loader().load({"--https-tls-certificate", "/c.pem"}).ok);
 }
 
 TEST(Config, InitNeedsNoTlsPair) {
@@ -95,7 +95,7 @@ TEST(Config, InitNeedsNoTlsPair) {
 }
 
 TEST(Config, TheCommandWord) {
-  const auto after = Loader().load({"--state-directory=/var/lib/lugh", "init"}, true);
+  const auto after = Loader().load({"--cluster-state=/var/lib/lugh", "init"}, true);
   ASSERT_TRUE(after.ok) << after.error;
   EXPECT_EQ(after.value.command, Command::init);
 
@@ -119,17 +119,17 @@ TEST(Config, UnknownFlagsAndMissingValuesAreErrors) {
   const auto unknown = Loader().load(with_tls({"--prot", "80"}));
   EXPECT_FALSE(unknown.ok);
   EXPECT_NE(unknown.error.find("--prot"), std::string::npos);
-  EXPECT_FALSE(Loader().load(with_tls({"--server-port"})).ok);
+  EXPECT_FALSE(Loader().load(with_tls({"--https-listen-port"})).ok);
 }
 
 TEST(Config, ReadsEverySettingFromTheFile) {
   TempDirectory dir;
   const auto path = dir.write("config.yaml",
                               "log: { level: debug, format: json }\n"
-                              "server: { address: 127.0.0.1, port: 8099, threads: 4 }\n"
-                              "tls: { certificate: /srv/cert.pem, key: /srv/key.pem }\n"
+                              "https: { listen: { address: 127.0.0.1, port: 8099 }, tls: { certificate: /srv/cert.pem, key: /srv/key.pem } }\n"
+                              "node: { io_threads: 4 }\n"
                               "proxy: { trusted_networks: [10.255.0.0/16] }\n"
-                              "state: { directory: /srv/lugh }\n"
+                              "cluster: { state: /srv/lugh }\n"
                               "authn: { breached_passwords: /etc/lugh/breached.txt }\n");
   Loader load;
   const auto result = load.load({"--config", path.string()});
@@ -152,13 +152,14 @@ TEST(Config, ReadsEverySettingFromTheFile) {
 
 TEST(Config, TheLayersInOrder) {
   TempDirectory dir;
-  const auto path = dir.write("config.yaml", "server: { port: 8099 }\nlog: { level: warn }\nstate: { directory: /file/lugh }\n" + kTls);
-  dir.write("secrets.yaml", "server: { port: 8100 }\n");
+  const auto path = dir.write(
+      "config.yaml", "https: { listen: { port: 8099 }, tls: { certificate: /c.pem, key: /k.pem } }\nlog: { level: warn }\ncluster: { state: /file/lugh }\n");
+  dir.write("secrets.yaml", "https: { listen: { port: 8100 } }\n");
 
   EXPECT_EQ(Loader().load({"--config", path.string()}).value.port, 8100);
 
   const auto from_environment =
-      Loader({{"LUGH_SERVER_PORT", "8101"}, {"LUGH_LOG_LEVEL", "error"}, {"LUGH_TLS_KEY", "/env/key.pem"}, {"LUGH_STATE_DIRECTORY", "/env/lugh"}})
+      Loader({{"LUGH_HTTPS_LISTEN_PORT", "8101"}, {"LUGH_LOG_LEVEL", "error"}, {"LUGH_HTTPS_TLS_KEY", "/env/key.pem"}, {"LUGH_CLUSTER_STATE", "/env/lugh"}})
           .load({"--config", path.string()})
           .value;
   EXPECT_EQ(from_environment.port, 8101);
@@ -167,8 +168,8 @@ TEST(Config, TheLayersInOrder) {
   EXPECT_EQ(from_environment.tls_certificate, "/c.pem");
   EXPECT_EQ(from_environment.state_directory, "/env/lugh");
 
-  const auto from_cli = Loader({{"LUGH_SERVER_PORT", "8101"}, {"LUGH_STATE_DIRECTORY", "/env/lugh"}})
-                            .load(with_config(path.string(), {"--server-port", "443", "--state-directory", "/cli/lugh"}))
+  const auto from_cli = Loader({{"LUGH_HTTPS_LISTEN_PORT", "8101"}, {"LUGH_CLUSTER_STATE", "/env/lugh"}})
+                            .load(with_config(path.string(), {"--https-listen-port", "443", "--cluster-state", "/cli/lugh"}))
                             .value;
   EXPECT_EQ(from_cli.port, 443);
   EXPECT_EQ(from_cli.tls_certificate, "/etc/lugh/cert.pem");
@@ -177,13 +178,13 @@ TEST(Config, TheLayersInOrder) {
 
 TEST(Config, TheEnvironmentCanNameTheFile) {
   TempDirectory dir;
-  const auto path = dir.write("elsewhere.yaml", "server: { port: 8102 }\n");
+  const auto path = dir.write("elsewhere.yaml", "https: { listen: { port: 8102 } }\n");
   EXPECT_EQ(Loader({{"LUGH_CONFIG", path.string()}}).load(with_tls()).value.port, 8102);
 }
 
 TEST(Config, TheDefaultPathIsReadOnlyIfItExists) {
   TempDirectory dir;
-  const auto path = dir.write("config.yaml", "server: { port: 8103 }\n");
+  const auto path = dir.write("config.yaml", "https: { listen: { port: 8103 } }\n");
   EXPECT_EQ(Loader({}, path.string()).load(with_tls()).value.port, 8103);
 
   const auto absent = Loader({}, (dir.path() / "missing.yaml").string()).load(with_tls());
@@ -199,13 +200,13 @@ TEST(Config, ANamedFileThatIsMissingIsAnError) {
 
 TEST(Config, UnknownKeysAreWarnedNotRead) {
   TempDirectory dir;
-  const auto path = dir.write("config.yaml", "server: { prot: 80 }\n");
+  const auto path = dir.write("config.yaml", "https: { listen: { prot: 80 } }\n");
   Loader load;
   const auto result = load.load(with_config(path.string()));
   ASSERT_TRUE(result.ok) << result.error;
   EXPECT_EQ(result.value.port, 8443);
   ASSERT_EQ(load.warnings().size(), 1u);
-  EXPECT_NE(load.warnings()[0].find("server.prot"), std::string::npos);
+  EXPECT_NE(load.warnings()[0].find("https.listen.prot"), std::string::npos);
 }
 
 TEST(Config, BadValuesAreRefusedSayingWhereTheyCameFrom) {
@@ -216,13 +217,13 @@ TEST(Config, BadValuesAreRefusedSayingWhereTheyCameFrom) {
   EXPECT_NE(file_result.error.find("log.level"), std::string::npos);
   EXPECT_NE(file_result.error.find(path.string()), std::string::npos);
 
-  const auto env_result = Loader({{"LUGH_SERVER_PORT", "eighty"}}).load(with_tls());
+  const auto env_result = Loader({{"LUGH_HTTPS_LISTEN_PORT", "eighty"}}).load(with_tls());
   EXPECT_FALSE(env_result.ok);
-  EXPECT_NE(env_result.error.find("LUGH_SERVER_PORT"), std::string::npos);
+  EXPECT_NE(env_result.error.find("LUGH_HTTPS_LISTEN_PORT"), std::string::npos);
 
-  const auto cli_result = Loader().load(with_tls({"--server-address", "id.blackraven.co.nz"}));
+  const auto cli_result = Loader().load(with_tls({"--https-listen-address", "id.blackraven.co.nz"}));
   EXPECT_FALSE(cli_result.ok);
-  EXPECT_NE(cli_result.error.find("--server-address"), std::string::npos);
+  EXPECT_NE(cli_result.error.find("--https-listen-address"), std::string::npos);
   EXPECT_NE(cli_result.error.find("an IP address"), std::string::npos);
 
   const auto format = Loader().load(with_tls({"--log-format", "xml"}));
@@ -231,11 +232,11 @@ TEST(Config, BadValuesAreRefusedSayingWhereTheyCameFrom) {
 }
 
 TEST(Config, RefusesValuesOutOfRange) {
-  for (const auto* port : {"65536", "-1", "80x", "99999999999"}) EXPECT_FALSE(Loader().load(with_tls({"--server-port", port})).ok) << port;
+  for (const auto* port : {"65536", "-1", "80x", "99999999999"}) EXPECT_FALSE(Loader().load(with_tls({"--https-listen-port", port})).ok) << port;
 
   TempDirectory dir;
-  EXPECT_FALSE(Loader().load(with_config(dir.write("c.yaml", "server: { threads: 0 }\n").string())).ok);
-  EXPECT_FALSE(Loader().load(with_config(dir.write("d.yaml", "server: { threads: 65 }\n").string())).ok);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("c.yaml", "node: { io_threads: 0 }\n").string())).ok);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("d.yaml", "node: { io_threads: 65 }\n").string())).ok);
 }
 
 TEST(Config, ABadNetworkIsAnError) {
@@ -263,7 +264,7 @@ TEST(Config, AnEmptyFileIsDefaults) {
 
 TEST(Config, MalformedYamlIsAnError) {
   TempDirectory dir;
-  EXPECT_FALSE(Loader().load(with_config(dir.write("config.yaml", "server: [unclosed\n").string())).ok);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("config.yaml", "https: [unclosed\n").string())).ok);
 }
 
 TEST(Config, TheIssuerAndClientSecrets) {
@@ -294,7 +295,8 @@ TEST(Config, TheLdapListeners) {
   EXPECT_FALSE(none.ldap_anonymous_bind) << "off unless asked for";
 
   TempDirectory dir;
-  const auto path = dir.write("config.yaml", "ldap: { port: 636, starttls_port: 389, base_dn: 'dc=example,dc=com', most_pending: 4, idle: 60 }\n");
+  const auto path = dir.write(
+      "config.yaml", "ldap: { listen: { port: 636 }, starttls: { listen: { port: 389 } }, base_dn: 'dc=example,dc=com', most_pending: 4, idle: 60 }\n");
   const auto config = Loader().load(with_config(path.string())).value;
   EXPECT_EQ(config.ldap_port, 636);
   EXPECT_EQ(config.ldap_starttls_port, 389);
@@ -306,11 +308,11 @@ TEST(Config, TheLdapListeners) {
   EXPECT_FALSE(Loader().load(with_config(dir.write("bad.yaml", "ldap: { anonymous_bind: perhaps }\n").string())).ok);
 
   // A listener needs to know the top of the tree, and is told it properly.
-  EXPECT_FALSE(Loader().load(with_config(dir.write("a.yaml", "ldap: { port: 636 }\n").string())).ok);
-  EXPECT_FALSE(Loader().load(with_config(dir.write("b.yaml", "ldap: { starttls_port: 389 }\n").string())).ok);
-  EXPECT_FALSE(Loader().load(with_config(dir.write("c.yaml", "ldap: { port: 636, base_dn: 'not a dn' }\n").string())).ok);
-  EXPECT_FALSE(Loader().load(with_config(dir.write("d.yaml", "ldap: { port: 70000, base_dn: 'dc=x' }\n").string())).ok);
-  EXPECT_FALSE(Loader().load(with_config(dir.write("e.yaml", "ldap: { port: 636, base_dn: 'dc=x', most_pending: 0 }\n").string())).ok);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("a.yaml", "ldap: { listen: { port: 636 } }\n").string())).ok);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("b.yaml", "ldap: { starttls: { listen: { port: 389 } } }\n").string())).ok);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("c.yaml", "ldap: { listen: { port: 636 }, base_dn: 'not a dn' }\n").string())).ok);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("d.yaml", "ldap: { listen: { port: 70000 }, base_dn: 'dc=x' }\n").string())).ok);
+  EXPECT_FALSE(Loader().load(with_config(dir.write("e.yaml", "ldap: { listen: { port: 636 }, base_dn: 'dc=x', most_pending: 0 }\n").string())).ok);
 }
 
 TEST(Config, ThePosixNumbers) {
@@ -339,10 +341,15 @@ TEST(Config, ThePosixNumbers) {
 TEST(Config, TheMtlsListener) {
   EXPECT_EQ(Loader().load(with_tls()).value.mtls_port, 0);
   TempDirectory dir;
-  const auto path = dir.write("config.yaml", "oauth: { mtls_port: 8444, outbound_ca: /etc/lugh/outbound.pem }\ntls: { client_ca: /etc/lugh/clients.pem }\n");
+  const auto path =
+      dir.write("config.yaml", "oauth: { outbound_ca: /etc/lugh/outbound.pem }\nmtls: { listen: { port: 8444 }, tls: { ca: /etc/lugh/clients.pem } }\n");
   const auto config = Loader().load(with_config(path.string())).value;
   EXPECT_EQ(config.mtls_port, 8444);
   EXPECT_EQ(config.tls_client_ca, "/etc/lugh/clients.pem");
   EXPECT_EQ(config.outbound_ca, "/etc/lugh/outbound.pem");
-  EXPECT_FALSE(Loader().load(with_tls({"--oauth-mtls-port", "70000"})).ok);
+  EXPECT_FALSE(Loader().load(with_tls({"--mtls-listen-port", "70000"})).ok);
+  // The HTTPS listener never asks for a client certificate, so a CA for it is refused, not ignored.
+  const auto https_ca = Loader().load(with_config(dir.write("ca.yaml", "https: { tls: { ca: /etc/lugh/clients.pem } }\n").string()));
+  EXPECT_FALSE(https_ca.ok);
+  EXPECT_NE(https_ca.error.find("mtls.tls.ca"), std::string::npos) << https_ca.error;
 }

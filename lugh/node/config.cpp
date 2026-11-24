@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "dannan/supervise/node_program.h"
 #include "lugh/ldap/dn.h"
 #include "lugh/oauth/metadata_routes.h"
 
@@ -43,22 +44,18 @@ std::vector<dannan::config::Setting> ConfigLoader::settings() {
   return {
       {"log.level", Kind::value, "--log-level", "LUGH_LOG_LEVEL", kLevels},
       {"log.format", Kind::value, "--log-format", "LUGH_LOG_FORMAT", kFormats},
-      {"server.address", Kind::value, "--server-address", "LUGH_SERVER_ADDRESS", "an IP address"},
-      {"server.port", Kind::value, "--server-port", "LUGH_SERVER_PORT", "a port, 0 to 65535"},
-      {"server.threads", Kind::value, "", "", "a number of threads, 1 to 64"},
-      {"tls.certificate", Kind::value, "--tls-certificate", "LUGH_TLS_CERTIFICATE", "a path"},
-      {"tls.key", Kind::value, "--tls-key", "LUGH_TLS_KEY", "a path"},
+      {"node.io_threads", Kind::value, "--node-io-threads", "LUGH_NODE_IO_THREADS", "a number of threads, 1 to 64"},
       {"proxy.trusted_networks", Kind::list, "", "", "networks, as 10.0.0.0/8"},
-      {"state.directory", Kind::value, "--state-directory", "LUGH_STATE_DIRECTORY", "a path"},
+      {"cluster.state", Kind::value, "--cluster-state", "LUGH_CLUSTER_STATE", "a path"},
       {"static.directory", Kind::value, "--static-directory", "LUGH_STATIC_DIRECTORY", "a path"},
       {"authn.breached_passwords", Kind::value, "", "", "a path"},
       {"oauth.allow_client_secrets", Kind::toggle, "", "", "true or false"},
       {"oauth.issuer", Kind::value, "--oauth-issuer", "LUGH_OAUTH_ISSUER", "an https URL without a query, fragment or trailing '/'"},
-      {"oauth.mtls_port", Kind::value, "--oauth-mtls-port", "LUGH_OAUTH_MTLS_PORT", "a port, 1 to 65535, or 0 for none"},
-      {"tls.client_ca", Kind::value, "", "", "a path"},
+      {"mtls.listen.port", Kind::value, "--mtls-listen-port", "LUGH_MTLS_LISTEN_PORT", "a port, 1 to 65535, or 0 for none"},
+      {"mtls.tls.ca", Kind::value, "", "", "a path"},
       {"oauth.outbound_ca", Kind::value, "", "", "a path"},
-      {"ldap.port", Kind::value, "", "", "a port, 1 to 65535, or 0 for none"},
-      {"ldap.starttls_port", Kind::value, "", "", "a port, 1 to 65535, or 0 for none"},
+      {"ldap.listen.port", Kind::value, "--ldap-listen-port", "LUGH_LDAP_LISTEN_PORT", "a port, 1 to 65535, or 0 for none"},
+      {"ldap.starttls.listen.port", Kind::value, "--ldap-starttls-listen-port", "LUGH_LDAP_STARTTLS_LISTEN_PORT", "a port, 1 to 65535, or 0 for none"},
       {"ldap.base_dn", Kind::value, "", "", "a distinguished name"},
       {"ldap.most_pending", Kind::value, "", "", "a number of operations, 1 to 256"},
       {"ldap.idle", Kind::value, "", "", "a number of seconds, 1 to 86400"},
@@ -71,12 +68,21 @@ std::vector<dannan::config::Setting> ConfigLoader::settings() {
   };
 }
 
-std::string ConfigLoader::describe() {
+namespace {
+
+// Lugh's settings and its HTTPS listener's, named as every program in the stack names a listener's
+// (https.listen.address, https.listen.port, https.tls.certificate, https.tls.key, https.tls.ca).
+dannan::config::Reader lugh_reader() {
   dannan::config::Reader reader;
-  reader.settings = settings();
+  reader.settings = ConfigLoader::settings();
   reader.config_variable = "LUGH_CONFIG";
-  return reader.describe();
+  dannan::supervise::add_listener_settings(reader, "LUGH", "https", kHttpsPort);
+  return reader;
 }
+
+}  // namespace
+
+std::string ConfigLoader::describe() { return lugh_reader().describe(); }
 
 ConfigLoader::ConfigLoader(std::shared_ptr<const system::Environment> environment, std::string default_path)
     : _environment(std::move(environment)), _default_path(std::move(default_path)) {}
@@ -84,9 +90,7 @@ ConfigLoader::ConfigLoader(std::shared_ptr<const system::Environment> environmen
 Result<Config> ConfigLoader::load(const cli::Options& options) {
   _warnings.clear();
 
-  dannan::config::Reader reader;
-  reader.settings = settings();
-  reader.config_variable = "LUGH_CONFIG";
+  auto reader = lugh_reader();
   reader.default_path = _default_path;
   reader.environment = _environment.get();
 
@@ -111,17 +115,22 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
             parsed<dannan::status::LogFormat>(read, "log.format", kFormats, [](const std::string& text) { return dannan::status::parse_log_format(text); }))
       config.log_format = *format;
 
-    if (const auto address = read.text("server.address")) {
+    const auto https = dannan::supervise::listener_settings(read, "https", kHttpsPort);
+    if (!https.address.empty()) {
       boost::system::error_code ec;
-      boost::asio::ip::make_address(*address, ec);
-      if (ec) throw read.refuse("server.address", "an IP address");
-      config.address = *address;
+      boost::asio::ip::make_address(https.address, ec);
+      if (ec) throw read.refuse("https.listen.address", "an IP address");
+      config.address = https.address;
     }
-    if (const auto port = read.number("server.port", 0, 65535)) config.port = static_cast<std::uint16_t>(*port);
-    if (const auto threads = read.number("server.threads", 1, 64)) config.threads = static_cast<unsigned>(*threads);
-    if (const auto certificate = read.path_of("tls.certificate")) config.tls_certificate = *certificate;
-    if (const auto key = read.path_of("tls.key")) config.tls_key = *key;
-    if (const auto directory = read.path_of("state.directory")) config.state_directory = *directory;
+    config.port = https.port;
+    if (https.tls) {
+      // The HTTPS listener never asks for a client certificate, so a browser is never shown a picker.
+      if (!https.tls->client_ca.empty()) throw read.refuse("https.tls.ca", "unset: the mTLS listener's is mtls.tls.ca");
+      config.tls_certificate = https.tls->chain.string();
+      config.tls_key = https.tls->key.string();
+    }
+    if (const auto threads = read.number("node.io_threads", 1, 64)) config.threads = static_cast<unsigned>(*threads);
+    if (const auto directory = read.path_of("cluster.state")) config.state_directory = *directory;
     if (const auto directory = read.path_of("static.directory")) config.static_directory = *directory;
     if (const auto breached = read.text("authn.breached_passwords")) config.breached_passwords = *breached;
     if (const auto secrets = read.toggle("oauth.allow_client_secrets")) config.allow_client_secrets = *secrets;
@@ -130,11 +139,11 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
       config.issuer = *issuer;
     }
 
-    if (const auto port = read.number("oauth.mtls_port", 0, 65535)) config.mtls_port = static_cast<std::uint16_t>(*port);
-    if (const auto ca = read.path_of("tls.client_ca")) config.tls_client_ca = *ca;
+    if (const auto port = read.number("mtls.listen.port", 0, 65535)) config.mtls_port = static_cast<std::uint16_t>(*port);
+    if (const auto ca = read.path_of("mtls.tls.ca")) config.tls_client_ca = *ca;
     if (const auto ca = read.path_of("oauth.outbound_ca")) config.outbound_ca = *ca;
-    if (const auto port = read.number("ldap.port", 0, 65535)) config.ldap_port = static_cast<std::uint16_t>(*port);
-    if (const auto port = read.number("ldap.starttls_port", 0, 65535)) config.ldap_starttls_port = static_cast<std::uint16_t>(*port);
+    if (const auto port = read.number("ldap.listen.port", 0, 65535)) config.ldap_port = static_cast<std::uint16_t>(*port);
+    if (const auto port = read.number("ldap.starttls.listen.port", 0, 65535)) config.ldap_starttls_port = static_cast<std::uint16_t>(*port);
     if (const auto base = read.text("ldap.base_dn")) {
       const auto parsed = ldap::parse_dn(*base);
       if (!parsed || parsed->empty()) throw read.refuse("ldap.base_dn", "a distinguished name");
@@ -178,7 +187,7 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
 
     // No layer may leave these out when serving: there is nothing to fall back to.
     if (config.command == cli::Command::serve && (config.tls_certificate.empty() || config.tls_key.empty())) {
-      return Result<Config>::failure("tls.certificate and tls.key must both be set: Lugh has no plaintext listener");
+      return Result<Config>::failure("https.tls.certificate and https.tls.key must both be set: Lugh has no plaintext listener");
     }
     return Result<Config>::success(std::move(config));
   } catch (const ConfigError& e) {
