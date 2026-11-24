@@ -217,8 +217,11 @@ TEST_F(KeySourceTest, AnUnknownKidPromptsAFetchAtMostOnceAGap) {
   serve(rotated);
   time.advance(settings.missing_gap);
   EXPECT_EQ(std::get<std::string>(verifier.verify_access(rotated.token())), "no key with its kid");
-  ASSERT_TRUE(pump([&] { return https.asked[a.jwks_url()] == 2 && fresh(a); }));
-  EXPECT_TRUE(std::holds_alternative<AccessToken>(verifier.verify_access(rotated.token())));
+  // Until the new keys are in, not until the fetch is asked for: site A was fresh already, and the
+  // answer lands a turn after the request is counted (it failed under TSan's slower turns).
+  ASSERT_TRUE(pump([&] { return std::holds_alternative<AccessToken>(verifier.verify_access(rotated.token())); }));
+  EXPECT_EQ(https.asked[a.jwks_url()], 2);
+  EXPECT_TRUE(fresh(a));
 
   // A stream of forged kids within the gap costs nothing more.
   const Site forged{kSiteA, "zz"};
