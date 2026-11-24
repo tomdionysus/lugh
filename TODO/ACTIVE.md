@@ -22,7 +22,7 @@ the agreement teardown fixes, which are P8's; the ack levels.
 
 **Next, not blocked** (Dannan 0.12.0 pinned, 2026-11-24; its "Adopting 0.12.0", one step each):
 1. ~~The stored password~~: Dannan's since 2026-11-24 (`COMPLETED.md`).
-2. **Keyed limits**: Lugh's own rate limiting onto `listen::RateLimiter`.
+2. ~~Keyed limits~~: Dannan's since 2026-11-24 (`COMPLETED.md`).
 3. **P8.1** (`lugh-node` a Dannan node): `supervise::run_node_program` for the main, the health checks (hashing backlog,
    caught-up), on Dannan 0.12.0; founding is Dannan's third minor, so `lugh-node init` stays Lugh's command word until then.
 4. Coverage.

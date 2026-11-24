@@ -2,6 +2,15 @@
 
 What shipped, newest first, with the date and why.
 
+## 2026-11-24: the rate limiter is Dannan's
+
+`http::RateLimiter` is Dannan 0.12.0's `listen::RateLimiter` (moved there from Lugh's); `RateLimits` and `Throttle` stay
+Lugh's. One change of behaviour: Dannan's bound on the keys is hard (100000 by default; full buckets go first, then the
+least recently touched), where Lugh's only pruned full buckets above 10000. `RateLimiter.PrunesFullBuckets` tested Lugh's
+prune, which is gone; it became `NeverHoldsMoreThanItsBound`, the property Lugh relies on (callers choose the keys), and
+which keys go is Dannan's to test. 907, unchanged. Debug, ASan and TSan on node-a at d49c1ad: 907 of 907 each, no
+sanitizer report.
+
 ## 2026-11-24: the stored password is Dannan's
 
 `authn::PasswordHash` is Dannan 0.12.0's `identity::PasswordHash` (moved there from Lugh's), made by `make_password` and
