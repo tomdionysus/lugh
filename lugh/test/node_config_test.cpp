@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "dannan/config/node_settings.h"
 #include "lugh/node/config.h"
 #include "lugh/test/fixtures/map_environment.h"
 #include "lugh/test/fixtures/temp_directory.h"
@@ -14,30 +15,42 @@
 using lugh::Config;
 using lugh::ConfigLoader;
 using lugh::Result;
-using lugh::cli::Command;
-using lugh::cli::Options;
+using Purpose = lugh::ConfigLoader::Purpose;
 using Arguments = std::vector<std::string>;
 
 namespace {
 
-// The settings are read by Dannan's reader, whose own layering is tested in Dannan; these
-// say what Lugh's settings are and how Lugh checks them.
+// The settings are read by Dannan's reader, inside its node-program helper, whose layering, log,
+// threads and command words are tested in Dannan; these say what Lugh's settings are and how Lugh
+// checks them. The reader here is the helper's as Lugh's settings meet it: the cluster's, which
+// carry the state directory, and Lugh's.
 class Loader {
  public:
   explicit Loader(std::map<std::string, std::string> environment = {}, std::string default_path = "")
-      : _loader(std::make_shared<MapEnvironment>(std::move(environment)), std::move(default_path)) {}
+      : _environment(std::move(environment)), _default_path(std::move(default_path)) {}
 
-  Result<Config> load(Arguments arguments, bool passphrase = false) {
-    Options options;
-    options.arguments = std::move(arguments);
-    options.passphrase = passphrase;
-    return _loader.load(options);
+  Result<Config> load(Arguments arguments, Purpose purpose = Purpose::serve) {
+    dannan::config::Reader reader;
+    dannan::config::add_node_settings(reader, "LUGH");
+    ConfigLoader::add_settings(reader);
+    reader.config_variable = "LUGH_CONFIG";
+    reader.default_path = _default_path;
+    reader.environment = &_environment;
+    try {
+      const auto read = reader.read(arguments);
+      _warnings = read.warnings;
+      return ConfigLoader::read(read, purpose);
+    } catch (const dannan::config::ConfigError& refused) {
+      return Result<Config>::failure(refused.what());
+    }
   }
 
-  const std::vector<std::string>& warnings() const { return _loader.warnings(); }
+  const std::vector<std::string>& warnings() const { return _warnings; }
 
  private:
-  ConfigLoader _loader;
+  MapEnvironment _environment;
+  std::string _default_path;
+  std::vector<std::string> _warnings;
 };
 
 // Every serve needs the TLS pair, so the tests about other settings give it on the command
@@ -68,13 +81,10 @@ TEST(Config, DefaultsWithNoFileAnywhere) {
   ASSERT_TRUE(result.ok) << result.error;
 
   const auto& config = result.value;
-  EXPECT_EQ(config.command, Command::serve);
   EXPECT_TRUE(config.path.empty());
+  EXPECT_FALSE(config.passphrase);
   EXPECT_EQ(config.address, "0.0.0.0");
   EXPECT_EQ(config.port, 8443);
-  EXPECT_EQ(config.threads, 2u);
-  EXPECT_EQ(config.log_level, dannan::status::LogLevel::info);
-  EXPECT_EQ(config.log_format, dannan::status::LogFormat::text);
   EXPECT_EQ(config.state_directory, "/var/lib/lugh");
   EXPECT_EQ(config.breached_passwords, "");
   EXPECT_TRUE(config.trusted_proxies.empty());
@@ -89,30 +99,20 @@ TEST(Config, TheTlsPairIsRequiredToServe) {
 }
 
 TEST(Config, InitNeedsNoTlsPair) {
-  const auto result = Loader().load({"init"});
+  const auto result = Loader().load({"init"}, Purpose::init);
   ASSERT_TRUE(result.ok) << result.error;
-  EXPECT_EQ(result.value.command, Command::init);
-}
-
-TEST(Config, TheCommandWord) {
-  const auto after = Loader().load({"--cluster-state=/var/lib/lugh", "init"}, true);
-  ASSERT_TRUE(after.ok) << after.error;
-  EXPECT_EQ(after.value.command, Command::init);
-
-  const auto unknown = Loader().load(with_tls({"serve"}));
-  EXPECT_FALSE(unknown.ok);
-  EXPECT_EQ(unknown.error, "unknown command: serve");
-
-  const auto stray = Loader().load({"init", "now"});
-  EXPECT_FALSE(stray.ok);
-  EXPECT_EQ(stray.error, "unexpected argument: now");
-  EXPECT_FALSE(Loader().load({"init", "init"}).ok);
+  EXPECT_FALSE(result.value.passphrase);
 }
 
 TEST(Config, PassphraseIsForInitOnly) {
-  const auto result = Loader().load(with_tls(), true);
-  EXPECT_FALSE(result.ok);
-  EXPECT_EQ(result.error, "--passphrase is for init");
+  const auto serving = Loader().load(with_tls({"--passphrase"}));
+  EXPECT_FALSE(serving.ok);
+  EXPECT_EQ(serving.error, "--passphrase is for init");
+
+  const auto init = Loader().load({"init", "--cluster-state=/srv/lugh", "--passphrase"}, Purpose::init);
+  ASSERT_TRUE(init.ok) << init.error;
+  EXPECT_TRUE(init.value.passphrase);
+  EXPECT_EQ(init.value.state_directory, "/srv/lugh");
 }
 
 TEST(Config, UnknownFlagsAndMissingValuesAreErrors) {
@@ -125,9 +125,7 @@ TEST(Config, UnknownFlagsAndMissingValuesAreErrors) {
 TEST(Config, ReadsEverySettingFromTheFile) {
   TempDirectory dir;
   const auto path = dir.write("config.yaml",
-                              "log: { level: debug, format: json }\n"
                               "https: { listen: { address: 127.0.0.1, port: 8099 }, tls: { certificate: /srv/cert.pem, key: /srv/key.pem } }\n"
-                              "node: { io_threads: 4 }\n"
                               "proxy: { trusted_networks: [10.255.0.0/16] }\n"
                               "cluster: { state: /srv/lugh }\n"
                               "authn: { breached_passwords: /etc/lugh/breached.txt }\n");
@@ -137,11 +135,8 @@ TEST(Config, ReadsEverySettingFromTheFile) {
 
   const auto& config = result.value;
   EXPECT_EQ(config.path, path.string());
-  EXPECT_EQ(config.log_level, dannan::status::LogLevel::debug);
-  EXPECT_EQ(config.log_format, dannan::status::LogFormat::json);
   EXPECT_EQ(config.address, "127.0.0.1");
   EXPECT_EQ(config.port, 8099);
-  EXPECT_EQ(config.threads, 4u);
   EXPECT_EQ(config.tls_certificate, "/srv/cert.pem");
   EXPECT_EQ(config.tls_key, "/srv/key.pem");
   EXPECT_EQ(networks(config), (std::vector<std::string>{"10.255.0.0/16"}));
@@ -152,18 +147,15 @@ TEST(Config, ReadsEverySettingFromTheFile) {
 
 TEST(Config, TheLayersInOrder) {
   TempDirectory dir;
-  const auto path = dir.write(
-      "config.yaml", "https: { listen: { port: 8099 }, tls: { certificate: /c.pem, key: /k.pem } }\nlog: { level: warn }\ncluster: { state: /file/lugh }\n");
+  const auto path = dir.write("config.yaml", "https: { listen: { port: 8099 }, tls: { certificate: /c.pem, key: /k.pem } }\ncluster: { state: /file/lugh }\n");
   dir.write("secrets.yaml", "https: { listen: { port: 8100 } }\n");
 
   EXPECT_EQ(Loader().load({"--config", path.string()}).value.port, 8100);
 
-  const auto from_environment =
-      Loader({{"LUGH_HTTPS_LISTEN_PORT", "8101"}, {"LUGH_LOG_LEVEL", "error"}, {"LUGH_HTTPS_TLS_KEY", "/env/key.pem"}, {"LUGH_CLUSTER_STATE", "/env/lugh"}})
-          .load({"--config", path.string()})
-          .value;
+  const auto from_environment = Loader({{"LUGH_HTTPS_LISTEN_PORT", "8101"}, {"LUGH_HTTPS_TLS_KEY", "/env/key.pem"}, {"LUGH_CLUSTER_STATE", "/env/lugh"}})
+                                    .load({"--config", path.string()})
+                                    .value;
   EXPECT_EQ(from_environment.port, 8101);
-  EXPECT_EQ(from_environment.log_level, dannan::status::LogLevel::error);
   EXPECT_EQ(from_environment.tls_key, "/env/key.pem");
   EXPECT_EQ(from_environment.tls_certificate, "/c.pem");
   EXPECT_EQ(from_environment.state_directory, "/env/lugh");
@@ -211,10 +203,10 @@ TEST(Config, UnknownKeysAreWarnedNotRead) {
 
 TEST(Config, BadValuesAreRefusedSayingWhereTheyCameFrom) {
   TempDirectory dir;
-  const auto path = dir.write("config.yaml", "log: { level: loud }\n");
+  const auto path = dir.write("config.yaml", "oauth: { issuer: \"http://id.example.com\" }\n");
   const auto file_result = Loader().load(with_config(path.string()));
   EXPECT_FALSE(file_result.ok);
-  EXPECT_NE(file_result.error.find("log.level"), std::string::npos);
+  EXPECT_NE(file_result.error.find("oauth.issuer"), std::string::npos);
   EXPECT_NE(file_result.error.find(path.string()), std::string::npos);
 
   const auto env_result = Loader({{"LUGH_HTTPS_LISTEN_PORT", "eighty"}}).load(with_tls());
@@ -225,18 +217,11 @@ TEST(Config, BadValuesAreRefusedSayingWhereTheyCameFrom) {
   EXPECT_FALSE(cli_result.ok);
   EXPECT_NE(cli_result.error.find("--https-listen-address"), std::string::npos);
   EXPECT_NE(cli_result.error.find("an IP address"), std::string::npos);
-
-  const auto format = Loader().load(with_tls({"--log-format", "xml"}));
-  EXPECT_FALSE(format.ok);
-  EXPECT_NE(format.error.find("text or json"), std::string::npos);
 }
 
 TEST(Config, RefusesValuesOutOfRange) {
   for (const auto* port : {"65536", "-1", "80x", "99999999999"}) EXPECT_FALSE(Loader().load(with_tls({"--https-listen-port", port})).ok) << port;
-
-  TempDirectory dir;
-  EXPECT_FALSE(Loader().load(with_config(dir.write("c.yaml", "node: { io_threads: 0 }\n").string())).ok);
-  EXPECT_FALSE(Loader().load(with_config(dir.write("d.yaml", "node: { io_threads: 65 }\n").string())).ok);
+  for (const auto* port : {"65536", "-1"}) EXPECT_FALSE(Loader().load(with_tls({"--mtls-listen-port", port})).ok) << port;
 }
 
 TEST(Config, ABadNetworkIsAnError) {

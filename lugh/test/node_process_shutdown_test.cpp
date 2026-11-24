@@ -49,7 +49,8 @@ void stops_on(int number, const std::string& name) {
 
   ASSERT_TRUE(status.has_value()) << name << ": still running 5 s after the signal\n" << text;
   EXPECT_EQ(*status, 0) << text;
-  EXPECT_NE(text.find("Stopping on " + name), std::string::npos) << text;
+  // The signal is Dannan's helper's to take; Lugh says it is stopping when its drain begins.
+  EXPECT_NE(text.find("Stopping"), std::string::npos) << text;
   EXPECT_NE(text.find("Stopped"), std::string::npos) << text;
   ::testing::Test::RecordProperty("stopped_ms", static_cast<int>(took.count()));
 }

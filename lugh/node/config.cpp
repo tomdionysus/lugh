@@ -23,30 +23,12 @@ namespace {
 using dannan::config::ConfigError;
 using Kind = dannan::config::Setting::Kind;
 
-constexpr const char* kLevels = "all, debug, info, warn or error";
-constexpr const char* kFormats = "text or json";
-
-// Dannan's spellings, so every node in the stack takes the same ones.
-template <typename T, typename Parse>
-std::optional<T> parsed(const dannan::config::Settings& settings, const std::string& key, const std::string& what, Parse parse) {
-  const auto text = settings.text(key);
-  if (!text) return std::nullopt;
-  try {
-    return parse(*text);
-  } catch (const std::invalid_argument&) {
-    throw settings.refuse(key, what);
-  }
-}
-
 }  // namespace
 
 std::vector<dannan::config::Setting> ConfigLoader::settings() {
   return {
-      {"log.level", Kind::value, "--log-level", "LUGH_LOG_LEVEL", kLevels},
-      {"log.format", Kind::value, "--log-format", "LUGH_LOG_FORMAT", kFormats},
-      {"node.io_threads", Kind::value, "--node-io-threads", "LUGH_NODE_IO_THREADS", "a number of threads, 1 to 64"},
+      {"passphrase", Kind::toggle, "--passphrase", "", "for init: a passphrase typed at each start, in place of a systemd credential"},
       {"proxy.trusted_networks", Kind::list, "", "", "networks, as 10.0.0.0/8"},
-      {"cluster.state", Kind::value, "--cluster-state", "LUGH_CLUSTER_STATE", "a path"},
       {"static.directory", Kind::value, "--static-directory", "LUGH_STATIC_DIRECTORY", "a path"},
       {"authn.breached_passwords", Kind::value, "", "", "a path"},
       {"oauth.allow_client_secrets", Kind::toggle, "", "", "true or false"},
@@ -68,52 +50,17 @@ std::vector<dannan::config::Setting> ConfigLoader::settings() {
   };
 }
 
-namespace {
-
-// Lugh's settings and its HTTPS listener's, named as every program in the stack names a listener's
-// (https.listen.address, https.listen.port, https.tls.certificate, https.tls.key, https.tls.ca).
-dannan::config::Reader lugh_reader() {
-  dannan::config::Reader reader;
-  reader.settings = ConfigLoader::settings();
-  reader.config_variable = "LUGH_CONFIG";
+void ConfigLoader::add_settings(dannan::config::Reader& reader) {
+  for (auto& setting : settings()) reader.settings.push_back(std::move(setting));
   dannan::supervise::add_listener_settings(reader, "LUGH", "https", kHttpsPort);
-  return reader;
 }
 
-}  // namespace
-
-std::string ConfigLoader::describe() { return lugh_reader().describe(); }
-
-ConfigLoader::ConfigLoader(std::shared_ptr<const system::Environment> environment, std::string default_path)
-    : _environment(std::move(environment)), _default_path(std::move(default_path)) {}
-
-Result<Config> ConfigLoader::load(const cli::Options& options) {
-  _warnings.clear();
-
-  auto reader = lugh_reader();
-  reader.default_path = _default_path;
-  reader.environment = _environment.get();
-
+Result<Config> ConfigLoader::read(const dannan::config::Settings& read, Purpose purpose) {
   try {
-    const auto read = reader.read(options.arguments);
-    _warnings = read.warnings;
-
     Config config;
     config.path = read.path;
-
-    if (read.positional.size() > 1) return Result<Config>::failure("unexpected argument: " + read.positional[1]);
-    if (!read.positional.empty()) {
-      if (read.positional[0] != "init") return Result<Config>::failure("unknown command: " + read.positional[0]);
-      config.command = cli::Command::init;
-    }
-    if (options.passphrase && config.command != cli::Command::init) return Result<Config>::failure("--passphrase is for init");
-
-    if (const auto level =
-            parsed<dannan::status::LogLevel>(read, "log.level", kLevels, [](const std::string& text) { return dannan::status::parse_log_level(text); }))
-      config.log_level = *level;
-    if (const auto format =
-            parsed<dannan::status::LogFormat>(read, "log.format", kFormats, [](const std::string& text) { return dannan::status::parse_log_format(text); }))
-      config.log_format = *format;
+    config.passphrase = read.toggle("passphrase").value_or(false);
+    if (config.passphrase && purpose != Purpose::init) return Result<Config>::failure("--passphrase is for init");
 
     const auto https = dannan::supervise::listener_settings(read, "https", kHttpsPort);
     if (!https.address.empty()) {
@@ -129,7 +76,7 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
       config.tls_certificate = https.tls->chain.string();
       config.tls_key = https.tls->key.string();
     }
-    if (const auto threads = read.number("node.io_threads", 1, 64)) config.threads = static_cast<unsigned>(*threads);
+    // The helper's setting, the node's state directory: Lugh's keyring and store are in it too.
     if (const auto directory = read.path_of("cluster.state")) config.state_directory = *directory;
     if (const auto directory = read.path_of("static.directory")) config.static_directory = *directory;
     if (const auto breached = read.text("authn.breached_passwords")) config.breached_passwords = *breached;
@@ -186,7 +133,7 @@ Result<Config> ConfigLoader::load(const cli::Options& options) {
     }
 
     // No layer may leave these out when serving: there is nothing to fall back to.
-    if (config.command == cli::Command::serve && (config.tls_certificate.empty() || config.tls_key.empty())) {
+    if (purpose == Purpose::serve && (config.tls_certificate.empty() || config.tls_key.empty())) {
       return Result<Config>::failure("https.tls.certificate and https.tls.key must both be set: Lugh has no plaintext listener");
     }
     return Result<Config>::success(std::move(config));

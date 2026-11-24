@@ -15,11 +15,8 @@
 #include <vector>
 
 #include "dannan/config/config.h"
-#include "dannan/status/log.h"
 #include "lugh/core/status.h"
 #include "lugh/network/prefix.h"
-#include "lugh/node/cli.h"
-#include "lugh/system/environment.h"
 #include "lugh/version.h"
 
 namespace lugh {
@@ -27,22 +24,19 @@ namespace lugh {
 // The HTTPS listener's port when none is given.
 inline constexpr std::uint16_t kHttpsPort = 8443;
 
-// Everything the service is told at start. Public fields, as blackraven-admin's Config: it
-// is data, filled once by ConfigLoader and read by main. The master key is not here and
-// never will be; it arrives as a systemd credential, or is typed.
+// Everything Lugh is told at start, beside what the node-program helper reads for the node itself
+// (its log, its threads, the cluster). Public fields: it is data, filled once by ConfigLoader and
+// read by main. The master key is not here and never will be; it arrives as a systemd credential,
+// or is typed.
 struct Config {
-  // The command word: none is serve.
-  cli::Command command = cli::Command::serve;
-
   // The file read, empty when the defaults alone were used.
   std::string path;
 
-  dannan::status::LogLevel log_level = dannan::status::LogLevel::info;
-  dannan::status::LogFormat log_format = dannan::status::LogFormat::text;
+  // init only: a passphrase typed at each start, in place of a systemd credential.
+  bool passphrase = false;
 
   std::string address = "0.0.0.0";
   std::uint16_t port = kHttpsPort;
-  unsigned threads = 2;
 
   // Both required to serve: there is no plaintext listener. `lugh-node init` needs neither.
   std::string tls_certificate;
@@ -102,34 +96,27 @@ struct Config {
   std::vector<network::Prefix> trusted_proxies;
 };
 
-// Lugh's settings, read by Dannan's settings reader (dannan/config/config.h, the one reader
-// for every node binary in the stack) and then checked and typed here: the addresses,
-// networks and levels are Lugh's to understand.
+// Lugh's settings. Dannan's node-program helper reads them with its own (cluster.*, log.* and
+// node.*: dannan/supervise/node_program.h), in its one order of layers (the defaults, the file,
+// secrets.yaml beside it, the environment, the command line), and parses the command line, --help
+// and --version. What is Lugh's is which settings there are and how they are checked and typed: the
+// addresses, the networks, the issuer, the LDAP tree.
 class ConfigLoader {
  public:
   static constexpr const char* kInstalledPath = LUGH_INSTALLED_CONFIG;
 
-  // default_path is read when neither --config nor $LUGH_CONFIG names a file, and only if
-  // it exists; empty reads nothing.
-  ConfigLoader(std::shared_ptr<const system::Environment> environment, std::string default_path);
+  // What the settings are read for: serving needs the TLS pair; init needs neither, and alone
+  // takes --passphrase.
+  enum class Purpose { serve, init };
 
-  // The defaults, then the file, then secrets.yaml beside it, then the environment, then
-  // the command line, each overriding the one before. A value that cannot be used is an
-  // error, never a silent default, in the same words from any layer.
-  Result<Config> load(const cli::Options& options);
-
-  // Keys present in a file that nothing reads: a misspelling, most likely. For the log.
-  const std::vector<std::string>& warnings() const { return _warnings; }
-
-  // Every setting, as the reader takes it.
+  // Lugh's own settings, as the reader takes them, the HTTPS listener's apart.
   static std::vector<dannan::config::Setting> settings();
-  // The flags, settings and variables, for the usage text.
-  static std::string describe();
+  // Adds Lugh's settings, the HTTPS listener's with them, to the helper's reader.
+  static void add_settings(dannan::config::Reader& reader);
 
- private:
-  std::shared_ptr<const system::Environment> _environment;
-  std::string _default_path;
-  std::vector<std::string> _warnings;
+  // Lugh's settings, checked and typed. A value that cannot be used is a failure naming the
+  // setting and where it came from, never a silent default.
+  static Result<Config> read(const dannan::config::Settings& settings, Purpose purpose);
 };
 
 }  // namespace lugh

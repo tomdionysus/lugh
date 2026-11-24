@@ -80,7 +80,6 @@ add_executable(lugh_tests
     oauth_request_test.cpp
     scopes_grants_test.cpp
     scopes_scope_test.cpp
-    node_cli_test.cpp
     node_config_test.cpp
     node_ioc_check_test.cpp
     node_process_api_test.cpp

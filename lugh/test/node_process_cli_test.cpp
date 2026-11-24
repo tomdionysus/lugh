@@ -36,15 +36,17 @@ std::vector<std::string> serving(const Workspace& workspace, const Initialised& 
 
 TEST(NodeProcessCli, HelpAndVersion) {
   Workspace workspace;
-  for (const auto* flag : {"--help", "-h"}) {
-    const auto help = run(workspace, {flag});
-    EXPECT_EQ(help.status, 0) << flag;
-    EXPECT_EQ(help.out.rfind("Usage: lugh-node", 0), 0u) << help.out;
-    EXPECT_NE(help.out.find("--https-tls-certificate"), std::string::npos) << "the settings are described";
+  // Dannan's node-program helper answers both: every setting, Lugh's beside the node's, and the
+  // version with Dannan's.
+  const auto help = run(workspace, {"--help"});
+  EXPECT_EQ(help.status, 0);
+  for (const auto* named : {"--https-tls-certificate", "--https-listen-port", "--cluster-state", "--passphrase", "--oauth-issuer", "--mtls-listen-port",
+                            "--ldap-listen-port", "--log-level", "LUGH_HTTPS_LISTEN_PORT", "https.listen.port"}) {
+    EXPECT_NE(help.out.find(named), std::string::npos) << named << " is described\n" << help.out;
   }
   const auto version = run(workspace, {"--version"});
   EXPECT_EQ(version.status, 0);
-  EXPECT_EQ(version.out, std::string(LUGH_VERSION) + "\n");
+  EXPECT_EQ(version.out.rfind(std::string("lugh-node ") + LUGH_VERSION + " (dannan ", 0), 0u) << version.out;
 }
 
 // A configuration that does not load: the node says which file and why, and stops.
@@ -56,7 +58,7 @@ TEST(NodeProcessCli, AConfigurationThatDoesNotLoadStopsTheNode) {
   auto args = serving(workspace, node, dannan::test::free_port());
   args.insert(args.end(), {"--config", config.string()});
   const auto ran = run(workspace, args, {.environment = environment(node.credentials), .input = std::nullopt});
-  EXPECT_EQ(ran.status, 1);
+  EXPECT_EQ(ran.status, 2) << "a setting that cannot be used: the stack's exit code";
   EXPECT_NE(ran.err.find(config.string()), std::string::npos) << ran.err;
 }
 
